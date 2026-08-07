@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gates-validity-layer"
+version = "0.1.0"
+description = "G.A.T.E.S. — a portable validity layer that prevents autonomous research agents from reporting results they never measured"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = []  # stdlib only, on purpose: it must drop into any scaffold's env
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[tool.setuptools.packages.find]
+include = ["gates*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
