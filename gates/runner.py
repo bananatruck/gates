@@ -23,6 +23,7 @@ import signal
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .errors import HarnessError
@@ -35,6 +36,22 @@ DEFAULT_TIMEOUT_S = 900
 
 def code_sha256(source: str) -> str:
     return hashlib.sha256(source.encode("utf-8")).hexdigest()
+
+
+def make_run_id(code_hash: str, started_at: str, artifact_dir: str) -> str:
+    """A short identifier for one execution.
+
+    Derived from what makes the run unique rather than randomly generated, so a
+    third party holding the artifacts can recompute it and confirm the values in
+    the registry belong to this run and not another one.
+    """
+    material = f"{code_hash}|{started_at}|{artifact_dir}"
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
+
+
+def make_trace_id(run_id: str, key: str, lineno: int | None) -> str:
+    """Binds one recorded value to one run and one call site."""
+    return hashlib.sha256(f"{run_id}|{key}|{lineno}".encode("utf-8")).hexdigest()[:16]
 
 
 def run_experiment(
@@ -76,6 +93,8 @@ def run_experiment(
     argv = [python or sys.executable, HARNESS_PATH, str(code_path), str(artifact_dir)]
 
     timed_out = False
+    started_at = _utc_now()
+    run_id = make_run_id(code_sha256(source), started_at, str(artifact_dir))
     started = time.monotonic()
     # Writing to files rather than PIPE: an experiment that outproduces the pipe
     # buffer would otherwise deadlock, which is exactly what a long run does.
@@ -113,9 +132,15 @@ def run_experiment(
         stderr_bytes=_size(stderr_path),
         truncated=False,  # by construction: nothing here slices the output
         results_json_path=str(results_path) if results_path.exists() else None,
+        run_id=run_id,
+        argv=list(argv),
+        started_at=started_at,
+        finished_at=_utc_now(),
     )
 
     _load_results(results_path, record)
+    for key, metric in record.metrics.items():
+        metric.trace_id = make_trace_id(run_id, key, metric.lineno)
     return record
 
 
@@ -141,8 +166,11 @@ def _load_results(results_path: Path, record: ExecutionRecord) -> None:
             lineno=raw.get("lineno"),
             source_line=raw.get("source_line", ""),
             call_count=raw.get("call_count", 1),
+            observations=list(raw.get("observations") or []),
+            observations_truncated=bool(raw.get("observations_truncated")),
         )
 
+    record.code_sha256 = payload.get("code_sha256")
     record.metadata = payload.get("metadata") or {}
     record.initial_namespace = payload.get("initial_namespace") or []
     record.environment = payload.get("environment") or {}
@@ -169,6 +197,10 @@ def _kill_tree(proc: subprocess.Popen) -> None:
         os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
     except (ProcessLookupError, PermissionError):
         proc.kill()
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
 
 
 def _size(path: Path) -> int:

@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .. import (
+    REGISTRY_FILENAME,
     Gate1Config,
     GateFailure,
     GateReport,
@@ -51,7 +52,14 @@ Pass the VARIABLE holding the measured value. A number typed directly into the
 call is rejected: record_result("exp1.K2.test_acc", 0.816) fails the gate,
 because a typed number is not a measurement.
 
-Use record_metadata("seed", seed) for provenance that is not a result.
+Record the seed with record_metadata("seed", seed), along with any other
+provenance that is not itself a result. A run with no declared seed cannot be
+re-executed to confirm its own numbers, and the report has to say so.
+
+If you record the same key more than once - once per epoch, for instance - the
+registry keeps the LAST call, and every call is retained so the difference is
+visible. Record the value you intend the paper to report, at the point it is
+final. Do not record a running best and describe it as a final result.
 
 Your code is checked before and after it runs. Unbound names, uncaught
 exceptions, non-zero exit codes, missing declared keys and hardcoded values all
@@ -159,8 +167,14 @@ def make_context(
     require_metrics: bool = True,
     num_classes: int | None = None,
     reward_model: str | None = None,
+    task_ref: str | None = None,
 ) -> GateContext:
-    """Build the gate context for one solver phase."""
+    """Build the gate context for one solver phase.
+
+    ``task_ref`` is the plan or task text the experiment implements. Passing it
+    closes the first link of each value's provenance chain; omitting it leaves
+    that link recorded as unresolved rather than assumed.
+    """
     artifact_root = os.path.join(research_dir, "gate_artifacts")
     config = Gate1Config(
         max_attempts=max_attempts,
@@ -170,6 +184,7 @@ def make_context(
         num_classes=num_classes,
         artifact_root=artifact_root,
         cwd=os.getcwd(),  # figures must land where papersolver looks for them
+        task_ref=task_ref,
     )
     return GateContext(
         config=config,
@@ -207,6 +222,7 @@ def build_evidence_bundle(report: GateReport, budget: int = STDOUT_BUDGET_CHARS)
         return f"[GATE 1 REJECTED THIS RUN]\n\n{render_feedback(report)}"
 
     metrics = report.metrics()
+    execution_ = report.execution
     lines = [
         f"VERIFIED RESULTS — Gate 1 PASS (attempt {report.attempt})",
         "",
@@ -215,6 +231,11 @@ def build_evidence_bundle(report: GateReport, budget: int = STDOUT_BUDGET_CHARS)
         "These are the only numbers that may be reported.",
         "",
     ]
+    if execution_ and execution_.run_id:
+        lines += [
+            f"  run {execution_.run_id}   code {(report.code_sha256 or '')[:12]}",
+            "",
+        ]
     if metrics:
         width = max(len(k) for k in metrics)
         for key in sorted(metrics):
@@ -234,6 +255,13 @@ def build_evidence_bundle(report: GateReport, budget: int = STDOUT_BUDGET_CHARS)
     if warnings:
         lines += ["", "WARNINGS — these must be stated in the report, not omitted"]
         lines += [f"  [{c.id}] {c.message}" for c in warnings]
+
+    if report.artifact_dir:
+        lines += [
+            "",
+            "PROVENANCE",
+            f"  registry: {os.path.join(report.artifact_dir, REGISTRY_FILENAME)}",
+        ]
 
     if execution:
         stdout = execution.stdout_text()

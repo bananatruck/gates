@@ -38,9 +38,9 @@ def render_feedback(report: GateReport, *, include_stdout_tail: bool = True) -> 
         out.append("WARNINGS (not blocking, but the report must not ignore these)")
         out.append("")
         for check in warnings:
-            out.append(f"  [{check.id}]")
-            out.append(f"    {check.message}")
-        out.append("")
+            # Same evidence renderers as failures: a warning the agent cannot
+            # locate in the logs is a warning it will ignore.
+            out.extend(_render_check(check))
 
     fixes = _required_fixes(failures)
     if fixes:
@@ -149,6 +149,30 @@ def _evidence_banned(check: CheckResult) -> list[str]:
     ]
 
 
+def _evidence_log_signals(check: CheckResult) -> list[str]:
+    out = []
+    seen: set[str] = set()
+    for row in check.evidence.get("findings", [])[:_MAX_EVIDENCE_ROWS]:
+        if row["signal"] not in seen:
+            seen.add(row["signal"])
+            out.append(f"  {row['signal']}: {row['note']}")
+        out.append(f"    {row['stream']}:{row['lineno']} | {row['line']}")
+    return out
+
+
+def _evidence_varied(check: CheckResult) -> list[str]:
+    out = []
+    for row in check.evidence.get("varied", [])[:_MAX_EVIDENCE_ROWS]:
+        span = ""
+        if row.get("min") is not None and row.get("max") is not None:
+            span = f", ranged {row['min']} to {row['max']}"
+        out.append(
+            f"  {row['key']}: recorded {row['call_count']} times{span}; "
+            f"registry holds {row['recorded_value']}"
+        )
+    return out
+
+
 _EVIDENCE_RENDERERS = {
     "static.syntax_valid": _evidence_syntax,
     "static.no_unbound_names": _evidence_unbound,
@@ -156,6 +180,8 @@ _EVIDENCE_RENDERERS = {
     "exec.no_uncaught_exception": _evidence_exception,
     "results.values_computed": _evidence_literals,
     "results.expected_keys_present": _evidence_missing_keys,
+    "logs.no_error_signals": _evidence_log_signals,
+    "results.single_observation": _evidence_varied,
 }
 
 
@@ -203,6 +229,10 @@ _FIXES = {
     "results.values_finite": (
         "A metric is NaN or infinite. Check for division by zero, an empty "
         "evaluation split, or a diverged loss."
+    ),
+    "env.code_identity": (
+        "The source that ran does not hash to the source submitted. Report this "
+        "— it is a harness fault, not a fault in your code."
     ),
 }
 

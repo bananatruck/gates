@@ -8,7 +8,17 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from gates import Gate1Config, GateFailure, Ledger, run_gate1  # noqa: E402
+from gates import (  # noqa: E402
+    Gate1Config,
+    GateFailure,
+    Ledger,
+    build_registry,
+    citable_values,
+    load_registry,
+    resolve_trace,
+    run_gate1,
+)
+from gates.log_checks import scan_streams  # noqa: E402
 from gates.report import render_feedback, render_summary  # noqa: E402
 from gates.static_checks import (  # noqa: E402
     classify_record_calls,
@@ -270,3 +280,251 @@ def test_gate_failure_message_names_the_checks(config):
     report = run_gate1("raise RuntimeError('x')\n", config())
     err = GateFailure(gate="GATE 1", attempts=3, report=report)
     assert "exec.exit_code_zero" in str(err)
+
+
+# --------------------------------------------------------------------------- #
+# log diagnostics — "log files without errors that aren't really code-breaking"
+# --------------------------------------------------------------------------- #
+
+
+def test_traceback_printed_to_stdout_is_caught(config):
+    """A stderr-only scan misses this, and it is the common shape: the agent
+    catches its own exception and prints it with the default stream."""
+    src = (
+        "import traceback\n"
+        "try:\n"
+        "    1 / 0\n"
+        "except ZeroDivisionError:\n"
+        "    traceback.print_exc(file=__import__('sys').stdout)\n"
+        "acc = 0.5 + 0.1\n"
+        "record_metadata('seed', 0)\n"
+        "record_result('acc', acc)\n"
+    )
+    report = run_gate1(src, config())
+    assert report.passed  # exited 0; this is a warning, not a failure
+    check = next(c for c in report.checks if c.id == "exec.no_swallowed_traceback")
+    assert not check.passed
+    assert check.evidence["stdout_occurrences"] == 1
+    assert check.evidence["stderr_occurrences"] == 0
+
+
+def test_numerical_warning_is_surfaced(config):
+    src = (
+        "import sys\n"
+        "print('RuntimeWarning: invalid value encountered in divide', file=sys.stderr)\n"
+        "v = 1.0 * 2\n"
+        "record_metadata('seed', 0)\n"
+        "record_result('v', v)\n"
+    )
+    report = run_gate1(src, config())
+    assert report.passed
+    check = next(c for c in report.checks if c.id == "logs.no_error_signals")
+    assert not check.passed
+    assert check.evidence["counts"] == {"numerical_integrity": 1}
+    # the agent has to be able to find it
+    assert check.evidence["findings"][0]["stream"] == "stderr"
+    assert "invalid value" in check.evidence["findings"][0]["line"]
+
+
+def test_error_signals_appear_in_the_feedback_report(config):
+    src = (
+        "print('CUDA out of memory; falling back to CPU')\n"
+        "v = 2.0 / 4\n"
+        "record_metadata('seed', 1)\n"
+        "record_result('v', v)\n"
+    )
+    report = run_gate1(src, config())
+    text = render_feedback(report)
+    assert "device_failure" in text
+    assert "CUDA out of memory" in text
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "Mean Squared Error: 0.031",
+        "Standard Error of the estimate: 0.02",
+        "test error rate: 0.184",
+        "Epoch 12 | train loss 0.31 | val acc 0.812",
+        "UserWarning: TypedStorage is deprecated",
+        "Converged after 40 iterations",
+    ],
+)
+def test_ordinary_ml_logging_is_not_flagged(line):
+    """False positives cost the agent a rewrite for nothing, so the patterns are
+    tuned to reject ordinary experiment prose — 'Error' in a metric name above
+    all."""
+    assert scan_streams(line, "") == []
+
+
+@pytest.mark.parametrize(
+    "line,signal",
+    [
+        ("ValueError: could not broadcast", "printed_exception"),
+        ("torch.cuda.OutOfMemoryError: CUDA out of memory", "device_failure"),
+        ("ConvergenceWarning: lbfgs failed to converge", "convergence"),
+        ("[ERROR] eval split was empty", "logged_error_level"),
+        ("root - ERROR - could not load checkpoint", "logged_error_level"),
+        ("RuntimeWarning: divide by zero encountered", "numerical_integrity"),
+    ],
+)
+def test_real_error_signals_are_flagged(line, signal):
+    findings = scan_streams(line, "")
+    assert [f.signal for f in findings] == [signal]
+
+
+# --------------------------------------------------------------------------- #
+# repeated observations — best-epoch reported as final-epoch
+# --------------------------------------------------------------------------- #
+
+
+def test_repeated_record_keeps_every_observation(config):
+    src = (
+        "record_metadata('seed', 0)\n"
+        "for i in range(4):\n"
+        "    acc = 0.70 + i / 100\n"
+        "    record_result('val_acc', acc)\n"
+    )
+    report = run_gate1(src, config())
+    assert report.passed  # a warning: the gate cannot know which value is meant
+    metric = report.metrics()["val_acc"]
+    assert metric.call_count == 4
+    assert metric.value == pytest.approx(0.73)  # the registry holds the last
+    assert [o["value"] for o in metric.observations] == pytest.approx(
+        [0.70, 0.71, 0.72, 0.73]
+    )
+    check = next(c for c in report.checks if c.id == "results.single_observation")
+    assert not check.passed
+    row = check.evidence["varied"][0]
+    assert row["min"] == pytest.approx(0.70)
+    assert row["max"] == pytest.approx(0.73)
+    assert row["recorded_value"] == pytest.approx(0.73)
+
+
+def test_single_record_does_not_warn(config):
+    src = "record_metadata('seed', 0)\nv = 4 / 5\nrecord_result('acc', v)\n"
+    report = run_gate1(src, config())
+    check = next(c for c in report.checks if c.id == "results.single_observation")
+    assert check.passed
+
+
+def test_observation_history_is_capped(config):
+    src = (
+        "record_metadata('seed', 0)\n"
+        "for i in range(120):\n"
+        "    record_result('loss', i * 1.0)\n"
+    )
+    report = run_gate1(src, config())
+    metric = report.metrics()["loss"]
+    assert metric.call_count == 120
+    assert len(metric.observations) == 50
+    assert metric.observations_truncated
+
+
+# --------------------------------------------------------------------------- #
+# seed
+# --------------------------------------------------------------------------- #
+
+
+def test_missing_seed_warns_but_does_not_block(config):
+    report = run_gate1("v = 4 / 5\nrecord_result('acc', v)\n", config())
+    assert report.passed
+    check = next(c for c in report.checks if c.id == "env.seed_recorded")
+    assert not check.passed
+    assert "cannot be reproduced" in check.message
+
+
+def test_any_seed_key_satisfies_the_check(config):
+    src = "record_metadata('numpy_seed', 7)\nv = 4 / 5\nrecord_result('acc', v)\n"
+    report = run_gate1(src, config())
+    check = next(c for c in report.checks if c.id == "env.seed_recorded")
+    assert check.passed
+    assert check.evidence["seed"] == 7
+
+
+# --------------------------------------------------------------------------- #
+# registry — "typed and hashed to the run that produced it"
+# --------------------------------------------------------------------------- #
+
+
+def test_registry_binds_each_value_to_the_run(config, tmp_path):
+    src = (
+        "record_metadata('seed', 0)\n"
+        "acc = 408 / 500\n"
+        "record_result('exp1.K2.test_acc', acc, unit='ratio')\n"
+    )
+    report = run_gate1(src, config(task_ref="reproduce SGC on Cora"), attempt=1)
+    assert report.passed
+
+    registry = load_registry(Path(report.artifact_dir) / "registry.json")
+    assert registry["citable"] is True
+    assert registry["run"]["code_sha256_verified"] is True
+    assert registry["run"]["seed"] == 0
+    assert registry["run"]["argv"]
+
+    entry = registry["values"]["exp1.K2.test_acc"]
+    assert entry["value"] == pytest.approx(0.816)
+    assert entry["unit"] == "ratio"
+    assert entry["type"] == "float"
+    assert entry["provenance"]["arg_kind"] == "computed"
+    assert entry["provenance"]["run_id"] == registry["run"]["run_id"]
+
+    # every link of the chain resolves, so this value is causally traced rather
+    # than merely present in a log
+    assert entry["chain_complete"] is True
+    assert [link["link"] for link in entry["chain"]] == ["task", "command", "log", "value"]
+    assert registry["chain_integrity"]["rate"] == 1.0
+
+    found = resolve_trace(registry, entry["trace_id"])
+    assert found["key"] == "exp1.K2.test_acc"
+
+
+def test_trace_ids_differ_between_runs_of_identical_code(config):
+    """Same source, two executions. A value from run A must not be presentable as
+    a value from run B, which is what makes a backfilled number detectable."""
+    cfg = config()
+    src = "record_metadata('seed', 0)\nv = 4 / 5\nrecord_result('acc', v)\n"
+    first = run_gate1(src, cfg, attempt=1)
+    second = run_gate1(src, cfg, attempt=2)
+    assert first.code_sha256 == second.code_sha256  # identical source
+    assert first.execution.run_id != second.execution.run_id
+    assert first.metrics()["acc"].trace_id != second.metrics()["acc"].trace_id
+
+
+def test_rejected_run_yields_no_citable_values(config):
+    report = run_gate1("acc = 0.4\nrecord_result('acc', 0.816)\n", config())
+    assert not report.passed
+    registry = build_registry(report)
+    assert registry["citable"] is False
+    # the number is on record, with its provenance, but nothing may cite it
+    assert registry["values"]["acc"]["provenance"]["arg_kind"] == "literal"
+    assert citable_values(registry) == {}
+
+
+def test_chain_reports_the_missing_link_when_no_task_is_supplied(config):
+    src = "record_metadata('seed', 0)\nv = 4 / 5\nrecord_result('acc', v)\n"
+    report = run_gate1(src, config())  # no task_ref
+    registry = build_registry(report)
+    entry = registry["values"]["acc"]
+    assert entry["chain_complete"] is False
+    assert registry["chain_integrity"]["missing_links"] == {"acc": ["task"]}
+    task_link = entry["chain"][0]
+    assert task_link["resolved"] is False
+    assert "no task reference" in task_link["why"]
+
+
+def test_executed_source_is_hashed_by_the_process_that_ran_it(config):
+    src = "record_metadata('seed', 0)\nv = 4 / 5\nrecord_result('acc', v)\n"
+    report = run_gate1(src, config())
+    check = next(c for c in report.checks if c.id == "env.code_identity")
+    assert check.passed
+    assert report.execution.code_sha256 == report.code_sha256
+
+
+def test_timeout_message_does_not_blame_the_contract(config):
+    """A killed run never gets to write results.json. Saying it 'never called
+    record_result' sends the agent to fix the wrong thing."""
+    report = run_gate1("import time\ntime.sleep(60)\n", config(timeout_s=3))
+    assert not report.passed
+    check = next(c for c in report.checks if c.id == "results.contract_present")
+    assert "killed at the timeout" in check.message

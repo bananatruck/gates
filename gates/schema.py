@@ -13,7 +13,7 @@ from dataclasses import dataclass, field, asdict
 from enum import Enum
 from typing import Any, Iterable
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 
 #: Names the harness injects into the experiment's global namespace. Anything
 #: else present before execution means the namespace was not clean.
@@ -69,6 +69,10 @@ class MetricRecord:
 
     ``arg_kind`` is filled in by static analysis of the call site, not by the
     harness: a value that appears as a source literal was typed, not measured.
+
+    ``trace_id`` binds the value to one execution. It is what separates a claim
+    that traces back through an unbroken chain from a claim whose number merely
+    matches something that appears in a log.
     """
 
     key: str
@@ -78,12 +82,34 @@ class MetricRecord:
     source_line: str = ""
     call_count: int = 1
     arg_kind: str = "unknown"  # "computed" | "literal" | "unknown"
+    #: Every ``record_result`` call for this key, oldest first, capped by the
+    #: harness. Retained because the last value is not necessarily the reported
+    #: one.
+    observations: list[dict[str, Any]] = field(default_factory=list)
+    observations_truncated: bool = False
+    trace_id: str | None = None
 
     @property
     def is_finite(self) -> bool:
         if isinstance(self.value, bool) or not isinstance(self.value, (int, float)):
             return True
         return math.isfinite(self.value)
+
+    def numeric_observations(self) -> list[float]:
+        out = []
+        for obs in self.observations:
+            v = obs.get("value")
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                continue
+            if math.isfinite(v):
+                out.append(float(v))
+        return out
+
+    @property
+    def varied(self) -> bool:
+        """Recorded more than once, with the value changing between calls."""
+        seen = [obs.get("value") for obs in self.observations]
+        return len(seen) > 1 and len(set(map(repr, seen))) > 1
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -132,10 +158,30 @@ class ExecutionRecord:
     environment: dict[str, Any] = field(default_factory=dict)
     results_json_path: str | None = None
     harness_error: str | None = None
+    #: Identifier for this execution. Every recorded value derives its trace id
+    #: from it, so a value can be attributed to one run and no other.
+    run_id: str = ""
+    #: The exact command the runner issued — the "executed command" link of the
+    #: provenance chain.
+    argv: list[str] = field(default_factory=list)
+    started_at: str = ""
+    finished_at: str = ""
+    #: sha256 of the source as read by the child process that ran it.
+    code_sha256: str | None = None
 
     @property
     def clean_exit(self) -> bool:
         return self.exit_code == 0 and not self.timed_out and self.exception is None
+
+    def seed(self) -> Any:
+        """The seed the experiment declared, if it declared one."""
+        for name in ("seed", "random_seed", "torch_seed", "numpy_seed"):
+            if name in self.metadata:
+                return self.metadata[name]
+        for key, value in self.metadata.items():
+            if str(key).lower().endswith("seed"):
+                return value
+        return None
 
     def stdout_text(self, limit: int | None = None) -> str:
         return _read(self.stdout_path, limit)
@@ -145,6 +191,11 @@ class ExecutionRecord:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "run_id": self.run_id,
+            "argv": self.argv,
+            "started_at": self.started_at,
+            "finished_at": self.finished_at,
+            "code_sha256": self.code_sha256,
             "exit_code": self.exit_code,
             "timed_out": self.timed_out,
             "duration_s": round(self.duration_s, 3),

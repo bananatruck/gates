@@ -233,6 +233,15 @@ experiment.
 | R1.8 | Unbound names are detected **statically, before execution** | A 45-minute run should not be spent to discover a `NameError` |
 | R1.9 | Gate verdict is computed with **no LLM in the path** | The runtime already knows whether the run succeeded |
 | R1.10 | Every attempt is logged to `divergence.jsonl` with both the gate verdict and the reward score | The disagreement between them is a headline result of the paper |
+| R1.11 | Both captured streams are scanned for **errors the run continued past**, reported and never blocking | The spoken spec: "log files without errors that don't seem really code-breaking". A clean exit code cannot see a caught exception, a divide-by-zero NaN, or a CUDA fallback |
+| R1.12 | Every recorded value is **bound to one execution** by a trace id, and the executed source is hashed by the process that ran it | Deck slide 11: "typed and hashed to the run that produced it". Without the second half, the binding is an assumption |
+| R1.13 | Each value carries its **provenance chain link by link**, with unresolved links reported rather than omitted | ARGUS Sub-Topic C: a value that merely matches a log is a worse signal than a numeric discrepancy, so the two must be distinguishable |
+| R1.14 | **Every** `record_result` call is retained, not only the last | ARGUS Sub-Topic B's observed failure mode: a best-epoch number reported as a final-epoch one is invisible if earlier calls are discarded |
+| R1.15 | A run that declares **no seed** is reported as unreproducible | Execution-grounded verification — re-running the code to check the claim — is impossible without it |
+
+Full traceability from each source document's requirements to the check and test that satisfy
+them is maintained separately in [`GATE1_REQUIREMENTS.md`](GATE1_REQUIREMENTS.md), including the
+one requirement that is only partially met (P5, undisclosed replicate drops).
 
 ### 3.2 Checks
 
@@ -249,9 +258,13 @@ Runtime:
 | ID | Check | Severity |
 |---|---|---|
 | `exec.exit_code_zero` | Subprocess exited 0 | FAIL |
-| `exec.no_uncaught_exception` | Harness recorded no escaping exception; `stderr` carries no `Traceback` | FAIL |
+| `exec.no_uncaught_exception` | Harness recorded no escaping exception | FAIL |
 | `exec.completed_within_budget` | Not killed by timeout | FAIL |
 | `env.clean_namespace` | Harness asserts the initial global namespace contained only harness-provided names | FAIL |
+| `env.code_identity` | The source hashed by the child process matches the source the parent wrote | FAIL |
+| `exec.no_swallowed_traceback` | No `Traceback` in **either** stream from a run that still exited 0 | WARN |
+| `logs.no_error_signals` | No numerical-integrity warning, device failure, non-convergence, printed exception or `ERROR`-level log | WARN |
+| `env.seed_recorded` | The experiment declared a seed | WARN |
 
 Results contract:
 
@@ -261,10 +274,21 @@ Results contract:
 | `results.expected_keys_present` | Every key the plan declared is present (strict mode) | FAIL |
 | `results.values_computed` | No metric value is an `ast.Constant` at its record call site | FAIL |
 | `results.values_finite` | No `NaN`, no `±inf` | FAIL |
+| `results.single_observation` | No key was recorded repeatedly with a changing value | WARN |
 | `results.non_degenerate` | Flags exact `0.0`, exact `1.0`, and exact chance level when class count is known | WARN |
 
 `results.non_degenerate` is the check that answers AutoResearchClaw's stated limitation — a
 registry alone passes real zeros. We surface them rather than silently accepting them.
+
+`logs.no_error_signals` is the WARN tier the spoken spec asks for: errors present in the logs that
+did not break the run. Its pattern set is tuned for precision, because a false positive costs the
+agent a rewrite for nothing — `ValueError:` is flagged and `Mean Squared Error:` is not, and both
+directions are held by test. Its recall is explicitly unbounded, and that limitation is stated
+rather than hidden.
+
+`results.single_observation` exists because the harness now retains every `record_result` call.
+The gate cannot know which of an epoch loop's values the paper intends, so it reports the span and
+requires the report to disambiguate.
 
 Provenance (recorded, not gated):
 
@@ -471,14 +495,19 @@ gates/                        (standalone repo, pip-installable, zero runtime de
   pyproject.toml
   README.md
   docs/PLAN.md                this document
+  docs/GATE1_SUMMARY.md       what Gate 1 does and why
+  docs/GATE1_REQUIREMENTS.md  each source requirement → check → test
   gates/
-    __init__.py               public API: run_gate1, Gate1Config, GateFailure
+    __init__.py               public API: run_gate1, Gate1Config, GateFailure, registry helpers
     errors.py                 GateFailure and friends
     schema.py                 results.json contract, MetricRecord, GateReport, CheckResult
     static_checks.py          symtable scope analysis, literal detection, banned calls
+    log_checks.py             error signals in the captured streams
     harness.py                runs in the child process; injects record_result, dumps results.json
-    runner.py                 sandboxed subprocess execution, process-group kill, full capture
+    runner.py                 sandboxed subprocess execution, process-group kill, full capture,
+                              run and trace identifiers
     gate1.py                  the checks and the verdict
+    registry.py               the citable value registry and its provenance chains
     report.py                 feedback report rendering (text + JSON)
     ledger.py                 divergence.jsonl
     adapters/

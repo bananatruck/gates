@@ -4,8 +4,9 @@
 single question with no model in the loop: *did this code actually run to completion, and were
 the numbers it reports produced by this run rather than inherited, hardcoded, or invented?*
 
-Status: **implemented, tested, wired into Agent-Researcher.** 41 gate tests, 10 integration
-tests.
+Status: **implemented, tested, wired into Agent-Researcher.** 67 gate tests, 10 integration
+tests. Requirement-by-requirement traceability against the project documents is in
+[`GATE1_REQUIREMENTS.md`](GATE1_REQUIREMENTS.md).
 
 ---
 
@@ -77,11 +78,22 @@ static tier declines to claim.
 | `exec.no_uncaught_exception` | an exception escaped |
 | `exec.completed_within_budget` | the process group was killed on timeout |
 | `env.clean_namespace` | anything was inherited before execution |
+| `env.code_identity` | the source that ran does not hash to the source submitted |
 | `exec.no_swallowed_traceback` *(warn)* | the code caught an error, printed it, and continued |
+| `logs.no_error_signals` *(warn)* | the logs report trouble the run continued past |
+| `env.seed_recorded` *(warn)* | no seed was declared, so the run cannot be re-executed |
 
 `env.clean_namespace` is what makes "the variables are real" a property of the runtime rather
 than a hope: the harness snapshots the initial globals and Gate 1 asserts they contain only
 harness-provided names.
+
+`logs.no_error_signals` is the check for errors a clean exit code cannot see. A run that exits 0
+can still have caught its own exception and printed it, divided by zero into a NaN, or fallen back
+to CPU after a CUDA failure — each of which changes what the surrounding numbers mean. Both
+streams are scanned, because `except Exception as e: print(e)` puts the evidence on stdout where
+a stderr-only check never looks. Patterns are tuned for precision over recall, since a false
+positive costs the agent a rewrite for nothing: `ValueError:` is flagged, `Mean Squared Error:`
+is not.
 
 ### Results contract
 
@@ -98,6 +110,7 @@ record_result("exp1.K2.test_acc", test_acc, unit="ratio")
 | `results.expected_keys_present` | a key the plan declared is missing |
 | `results.values_computed` | a recorded value is a source literal |
 | `results.values_finite` | a value is NaN or infinite |
+| `results.single_observation` *(warn)* | a key was recorded repeatedly with a changing value |
 | `results.non_degenerate` *(warn)* | exact zero, perfect score, or chance level |
 
 **`results.values_computed` is the strongest claim here.** `record_result` captures its own call
@@ -109,6 +122,41 @@ No reviewed prior art claims this check.
 `results.non_degenerate` answers the limitation AutoResearchClaw (arXiv 2605.20025) reports for
 value registries: a registry passes zero-valued results because the zeros are genuine
 measurements. We surface them and never block, because a legitimate zero exists.
+
+`results.single_observation` addresses a failure mode observed directly in these agents:
+reporting a best-epoch number as though it were the final-epoch one. `record_result` retains
+every call rather than only the last, so a key written once per epoch arrives with its whole
+trajectory. The gate cannot know which value the paper intends, so it records the span — *ranged
+0.76 to 0.816; registry holds 0.816* — and requires the report to say which it means.
+
+### The registry
+
+Gate 1's output artifact, and the only thing Gate 3 may cite from:
+
+```json
+"exp1.K2.test_acc": {
+  "trace_id": "e65a3068ca27f7a8",
+  "value": 0.816, "unit": "ratio", "type": "float",
+  "provenance": { "run_id": "39f39c717a371a30", "code_sha256": "61d35bbf…",
+                  "lineno": 25, "arg_kind": "computed", "call_count": 1 },
+  "chain": [ {"link": "task",    "resolved": true},
+             {"link": "command", "resolved": true},
+             {"link": "log",     "resolved": true},
+             {"link": "value",   "resolved": true} ],
+  "chain_complete": true
+}
+```
+
+The chain is what separates a *traced* number from a number that merely appears somewhere in a
+log — the distinction that makes the layer resistant to an agent which has learned only to keep
+its numbers mutually consistent. Each link is marked resolved or not, so an unresolved chain is
+reported rather than papered over, and `chain_integrity` gives the rate across all values.
+
+`env.code_identity` is what makes "hashed to the run that produced it" checkable rather than
+assumed: the parent hashes the source it wrote, the child process hashes the source it actually
+ran, and the gate asserts they match. A rejected run still gets a registry — recorded as
+`"citable": false`, so a downstream consumer that forgets to check the verdict still cannot cite
+it.
 
 ---
 
@@ -180,7 +228,8 @@ Per attempt, under `<research_dir>/gate_artifacts/gate1/attempt_NN/`:
 |---|---|
 | `experiment.py` | exactly what ran |
 | `stdout.txt` / `stderr.txt` | complete, untruncated, separated |
-| `results.json` | declared metrics with call-site provenance, plus environment |
+| `results.json` | declared metrics with call-site provenance and full observation history, plus environment |
+| `registry.json` | the citable value registry: typed values, trace ids, provenance chains, chain-integrity rate |
 | `gate1_report.json` | verdict and every check, with evidence |
 
 Plus one line per attempt in `divergence.jsonl`, pairing the gate verdict with the reward score.
@@ -225,3 +274,9 @@ environment the host already has.
 Gate 2 (source ↔ result coherence) and Gate 3 (report validity) are specified in
 [`PLAN.md`](PLAN.md) and not implemented. Gate 1 does not check whether results are *plausible*
 given the literature, only whether they were *measured*.
+
+One requirement is **partial** and marked so rather than rounded up: dropping a failed replicate
+from an averaged metric without disclosure is visible when each replicate is recorded, but a mean
+computed inside the experiment over a silently shortened list arrives as one value that Gate 1
+cannot see behind. Closing it needs a replicate contract checked against the plan's declared seed
+count, which is Gate 2's to own. See `GATE1_REQUIREMENTS.md` P5.

@@ -13,7 +13,8 @@ import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import static_checks
+from . import log_checks, static_checks
+from .registry import write_registry
 from .runner import DEFAULT_TIMEOUT_S, code_sha256, run_experiment
 from .schema import (
     HARNESS_INJECTED_NAMES,
@@ -27,7 +28,9 @@ from .schema import (
 
 GATE_NAME = "GATE 1 — EXECUTION VALIDITY"
 
-_TRACEBACK_MARKER = "Traceback (most recent call last)"
+#: Streams are read up to this many characters for log diagnostics. A run that
+#: prints more than this has its head scanned; the full capture stays on disk.
+_LOG_SCAN_CHARS = 2_000_000
 
 
 @dataclass
@@ -51,6 +54,14 @@ class Gate1Config:
     #: Extra names the harness is known to inject, for scaffolds that add their
     #: own runtime helpers.
     extra_bound_names: frozenset[str] = field(default_factory=frozenset)
+    #: The task or plan text this experiment implements. Hashed into the registry
+    #: as the first link of the provenance chain; without it that link is
+    #: reported unresolved rather than assumed.
+    task_ref: str | None = None
+    #: When False, an experiment that declares no seed still passes silently.
+    #: Left on by default: a run with no seed cannot be re-executed to check its
+    #: own numbers.
+    require_seed: bool = True
 
     def attempt_dir(self, attempt: int) -> Path:
         return Path(self.artifact_root) / "gate1" / f"attempt_{attempt:02d}"
@@ -97,13 +108,19 @@ def run_gate1(source: str, config: Gate1Config, attempt: int = 1) -> GateReport:
     )
     _annotate_provenance(source, execution)
 
+    stdout = execution.stdout_text(limit=_LOG_SCAN_CHARS)
+    stderr = execution.stderr_text(limit=_LOG_SCAN_CHARS)
+
     checks.extend(
         [
             _check_within_budget(execution, config),
             _check_exit_code(execution),
             _check_no_uncaught_exception(execution),
-            _check_no_swallowed_traceback(execution),
+            _check_code_identity(execution, report.code_sha256),
+            _check_no_swallowed_traceback(execution, stdout, stderr),
+            _check_log_error_signals(stdout, stderr),
             _check_clean_namespace(execution),
+            _check_seed_recorded(execution, config),
             _check_contract_present(execution, config),
         ]
     )
@@ -113,6 +130,7 @@ def run_gate1(source: str, config: Gate1Config, attempt: int = 1) -> GateReport:
                 _check_expected_keys(execution, config),
                 _check_values_computed(execution),
                 _check_values_finite(execution),
+                _check_single_observation(execution),
                 _check_non_degenerate(execution, config),
             ]
         )
@@ -123,6 +141,9 @@ def run_gate1(source: str, config: Gate1Config, attempt: int = 1) -> GateReport:
     report.execution = execution
     report.verdict = decide(checks)
     _write_report(report, artifact_dir)
+    # Written for passing and failing runs alike; the file records which it was,
+    # and a rejected registry reports itself as not citable.
+    write_registry(report, artifact_dir, task_ref=config.task_ref)
     return report
 
 
@@ -258,33 +279,150 @@ def _check_no_uncaught_exception(execution: ExecutionRecord) -> CheckResult:
     )
 
 
-def _check_no_swallowed_traceback(execution: ExecutionRecord) -> CheckResult:
-    """A traceback on stderr from a run that still exited 0.
+def _check_code_identity(execution: ExecutionRecord, expected_sha: str | None) -> CheckResult:
+    """The source that ran is the source we hashed.
+
+    Without this, "hashed to the run that produced it" is an assumption. With it,
+    a value's attribution to a code version is checkable by a third party holding
+    only the artifacts.
+    """
+    actual = execution.code_sha256
+    if actual is None:
+        return CheckResult(
+            id="env.code_identity",
+            passed=False,
+            severity=Severity.FAIL,
+            message="the harness did not report a hash of the source it executed",
+            evidence={"expected": expected_sha},
+        )
+    ok = actual == expected_sha
+    return CheckResult(
+        id="env.code_identity",
+        passed=ok,
+        severity=Severity.FAIL,
+        message=(
+            f"executed source matches the recorded hash ({actual[:12]})"
+            if ok
+            else "the source that ran does not match the source that was submitted"
+        ),
+        evidence={"expected": expected_sha, "as_executed": actual},
+    )
+
+
+def _check_no_swallowed_traceback(
+    execution: ExecutionRecord, stdout: str, stderr: str
+) -> CheckResult:
+    """A traceback in the logs from a run that still exited 0.
 
     The experiment caught its own error and carried on. Not fatal — this is the
     "errors that aren't really code-breaking" case — but the writer must not
     present the surrounding numbers as if nothing happened.
+
+    Both streams are scanned. ``except Exception as e: print(e)`` and
+    ``traceback.print_exc(file=sys.stdout)`` are the common shapes, and both put
+    the evidence on stdout where a stderr-only check never sees it.
     """
-    stderr = execution.stderr_text(limit=200_000)
-    hit = _TRACEBACK_MARKER in stderr
-    if not hit or execution.exception is not None:
+    out_hits, err_hits = log_checks.count_tracebacks(stdout, stderr)
+    total = out_hits + err_hits
+    if not total or execution.exception is not None:
         return CheckResult(
             id="exec.no_swallowed_traceback",
             passed=True,
             severity=Severity.WARN,
-            message="no caught-and-ignored traceback on stderr",
+            message="no caught-and-ignored traceback in the logs",
         )
-    lines = [ln for ln in stderr.splitlines() if ln.strip()]
+    streams = ", ".join(
+        s for s, n in (("stdout", out_hits), ("stderr", err_hits)) if n
+    )
     return CheckResult(
         id="exec.no_swallowed_traceback",
         passed=False,
         severity=Severity.WARN,
-        message="the experiment caught an exception, printed it, and continued",
+        message=(
+            f"the experiment caught {total} exception(s), printed the traceback "
+            f"to {streams}, and continued"
+        ),
         evidence={
-            "occurrences": stderr.count(_TRACEBACK_MARKER),
-            "last_line": lines[-1] if lines else "",
+            "stdout_occurrences": out_hits,
+            "stderr_occurrences": err_hits,
+            "stdout_path": execution.stdout_path,
             "stderr_path": execution.stderr_path,
         },
+    )
+
+
+def _check_log_error_signals(stdout: str, stderr: str) -> CheckResult:
+    """Trouble the run reported in its own output and then carried on past.
+
+    These do not break the process, so no exit code records them — but a metric
+    computed after ``invalid value encountered`` or after a CUDA fallback does
+    not mean what it appears to mean.
+    """
+    findings = log_checks.scan_streams(stdout, stderr)
+    if not findings:
+        return CheckResult(
+            id="logs.no_error_signals",
+            passed=True,
+            severity=Severity.WARN,
+            message="no error, warning or device-failure signals in the logs",
+        )
+    by_signal: dict[str, int] = {}
+    for f in findings:
+        by_signal[f.signal] = by_signal.get(f.signal, 0) + 1
+    summary = ", ".join(f"{name} ×{n}" for name, n in sorted(by_signal.items()))
+    return CheckResult(
+        id="logs.no_error_signals",
+        passed=False,
+        severity=Severity.WARN,
+        message=f"the logs report trouble the run continued past: {summary}",
+        evidence={
+            "counts": by_signal,
+            "findings": [
+                {
+                    "signal": f.signal,
+                    "note": f.note,
+                    "stream": f.stream,
+                    "lineno": f.lineno,
+                    "line": f.line,
+                }
+                for f in findings
+            ],
+        },
+    )
+
+
+def _check_seed_recorded(execution: ExecutionRecord, config: Gate1Config) -> CheckResult:
+    """A run with no declared seed cannot be re-executed to check its own numbers.
+
+    Warn, never block: an experiment can be legitimately deterministic. But
+    execution-grounded verification — re-running the code to confirm the claim —
+    needs the seed, so its absence is a limitation the report has to carry.
+    """
+    seed = execution.seed()
+    if seed is not None:
+        return CheckResult(
+            id="env.seed_recorded",
+            passed=True,
+            severity=Severity.WARN,
+            message=f"seed recorded ({seed})",
+            evidence={"seed": seed},
+        )
+    if not config.require_seed:
+        return CheckResult(
+            id="env.seed_recorded",
+            passed=True,
+            severity=Severity.INFO,
+            message="no seed recorded (not required in this mode)",
+        )
+    return CheckResult(
+        id="env.seed_recorded",
+        passed=False,
+        severity=Severity.WARN,
+        message=(
+            "no seed was declared, so this run cannot be reproduced and its "
+            "numbers cannot be checked by re-execution"
+        ),
+        evidence={"metadata_keys": sorted(execution.metadata)},
     )
 
 
@@ -340,11 +478,12 @@ def _check_contract_present(execution: ExecutionRecord, config: Gate1Config) -> 
             severity=Severity.INFO,
             message="no metrics recorded (contract not required in this mode)",
         )
-    reason = (
-        "the run crashed before any record_result() call completed"
-        if execution.exception
-        else "the experiment never called record_result()"
-    )
+    if execution.timed_out:
+        reason = "the run was killed at the timeout before its results were written"
+    elif execution.exception:
+        reason = "the run crashed before any record_result() call completed"
+    else:
+        reason = "the experiment never called record_result()"
     return CheckResult(
         id="results.contract_present",
         passed=False,
@@ -420,6 +559,50 @@ def _check_values_finite(execution: ExecutionRecord) -> CheckResult:
             else f"non-finite value(s): {', '.join(f'{m.key}={m.value}' for m in bad)}"
         ),
         evidence={"keys": [m.key for m in bad]},
+    )
+
+
+def _check_single_observation(execution: ExecutionRecord) -> CheckResult:
+    """A key recorded repeatedly with a changing value.
+
+    The registry keeps the last call, but a key written once per epoch has as
+    many candidate values as it has epochs — and reporting the best one as though
+    it were the final one is a documented failure mode of these agents. The gate
+    cannot know which value the paper will use, so it records the spread and
+    requires the report to say which it means.
+    """
+    varied = [m for m in execution.metrics.values() if m.varied]
+    if not varied:
+        return CheckResult(
+            id="results.single_observation",
+            passed=True,
+            severity=Severity.WARN,
+            message="every recorded key has one unambiguous value",
+        )
+    rows = []
+    for m in varied:
+        numeric = m.numeric_observations()
+        rows.append(
+            {
+                "key": m.key,
+                "call_count": m.call_count,
+                "recorded_value": m.value,
+                "first": m.observations[0].get("value") if m.observations else None,
+                "min": min(numeric) if numeric else None,
+                "max": max(numeric) if numeric else None,
+                "truncated": m.observations_truncated,
+            }
+        )
+    return CheckResult(
+        id="results.single_observation",
+        passed=False,
+        severity=Severity.WARN,
+        message=(
+            "recorded more than once with a changing value: "
+            + "; ".join(f"{r['key']} ({r['call_count']} calls)" for r in rows)
+            + " — the registry holds the last call, not the best one"
+        ),
+        evidence={"varied": rows},
     )
 
 

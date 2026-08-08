@@ -20,6 +20,7 @@ Two properties matter and are provided by construction:
 from __future__ import annotations
 
 import builtins
+import hashlib
 import json
 import linecache
 import os
@@ -27,7 +28,13 @@ import platform
 import sys
 import traceback
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
+
+#: Per-key cap on retained observations. A key recorded once per epoch for 500
+#: epochs must not turn results.json into the training log; the count and the
+#: truncation flag survive, so the "which epoch is this" question is still
+#: answerable.
+_MAX_OBSERVATIONS = 50
 
 _METRICS: "dict[str, dict]" = {}
 _METADATA: "dict[str, object]" = {}
@@ -35,7 +42,13 @@ _CODE_PATH = ""
 
 
 def _record_result(key, value, unit=None):
-    """Declare a result. The parent gate verifies it was computed, not typed."""
+    """Declare a result. The parent gate verifies it was computed, not typed.
+
+    Every call is retained, not just the last. A key recorded once per epoch and
+    then reported as a single number is the "best-epoch passed off as
+    final-epoch" failure mode, and it is invisible unless the earlier
+    observations are kept.
+    """
     if not isinstance(key, str) or not key:
         raise ValueError("record_result: key must be a non-empty string")
     frame = sys._getframe(1)
@@ -43,14 +56,22 @@ def _record_result(key, value, unit=None):
     filename = frame.f_code.co_filename
     source_line = linecache.getline(filename, lineno).rstrip()
 
+    jsonable = _jsonable(value)
     existing = _METRICS.get(key)
+    call_count = (existing["call_count"] + 1) if existing else 1
+    observations = existing["observations"] if existing else []
+    if len(observations) < _MAX_OBSERVATIONS:
+        observations.append({"value": jsonable, "lineno": lineno})
+
     _METRICS[key] = {
         "key": key,
-        "value": _jsonable(value),
+        "value": jsonable,
         "unit": unit,
         "lineno": lineno,
         "source_line": source_line,
-        "call_count": (existing["call_count"] + 1) if existing else 1,
+        "call_count": call_count,
+        "observations": observations,
+        "observations_truncated": call_count > len(observations),
     }
     return value
 
@@ -131,6 +152,10 @@ def main(argv):
 
     with open(_CODE_PATH, "r", encoding="utf-8") as f:
         source = f.read()
+    # Hashed here, by the process that actually executes it. The parent hashes
+    # what it wrote; a mismatch means the file changed between write and run,
+    # which breaks the link from a recorded value to the code that produced it.
+    code_sha256 = hashlib.sha256(source.encode("utf-8")).hexdigest()
 
     # A fresh namespace containing only what we put in it. This is the check
     # that `exec_globals = globals()` made impossible upstream.
@@ -173,6 +198,7 @@ def main(argv):
     payload = {
         "schema_version": SCHEMA_VERSION,
         "code_path": _CODE_PATH,
+        "code_sha256": code_sha256,
         "metrics": _METRICS,
         "metadata": _METADATA,
         "initial_namespace": initial_namespace,

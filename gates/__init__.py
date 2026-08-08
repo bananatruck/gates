@@ -18,8 +18,17 @@ implementation against Agent-Researcher / Agent Laboratory.
 from .errors import GateError, GateFailure, HarnessError
 from .gate1 import GATE_NAME as GATE1_NAME, Gate1Config, run_gate1
 from .ledger import Ledger
+from .registry import (
+    REGISTRY_FILENAME,
+    build_registry,
+    chain_integrity,
+    citable_values,
+    load_registry,
+    resolve_trace,
+    write_registry,
+)
 from .report import render_feedback, render_summary
-from .runner import code_sha256, run_experiment
+from .runner import code_sha256, make_run_id, make_trace_id, run_experiment
 from .schema import (
     SCHEMA_VERSION,
     CheckResult,
@@ -31,6 +40,7 @@ from .schema import (
 )
 
 __all__ = [
+    "REGISTRY_FILENAME",
     "SCHEMA_VERSION",
     "CheckResult",
     "ExecutionRecord",
@@ -44,9 +54,17 @@ __all__ = [
     "MetricRecord",
     "Severity",
     "Verdict",
+    "build_registry",
+    "chain_integrity",
+    "citable_values",
     "code_sha256",
+    "load_registry",
+    "make_run_id",
+    "make_trace_id",
     "render_feedback",
     "render_summary",
+    "resolve_trace",
     "run_experiment",
     "run_gate1",
+    "write_registry",
 ]
