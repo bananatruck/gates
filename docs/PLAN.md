@@ -351,6 +351,30 @@ STDOUT: 14,208 bytes captured in full (artifacts/attempt_02/stdout.txt)
 Note what is *not* in the report: no score, no praise, no model opinion. Only facts the runtime
 established.
 
+#### One model seam, shared by all three gates
+
+The layer described below is not Gate 1's private arrangement. Gates 2 and 3 each
+need a model for the part of their work that has no mechanically checkable fact —
+Gate 2's semantic coherence, Gate 3's claim entailment — and both are subject to
+the same rule: the model is consulted only outside the verdict, and its output is
+reported as a rate rather than claimed as a guarantee.
+
+So there is one seam, `Gate1Config.consult_model` today and a shared config field
+as Gates 2 and 3 land, carrying one injected `(prompt, system) -> str` callable.
+A host wires it once. The decided default deployment is **a locally run
+`qwen3:8b`** for all three gates, with the hosted API as the fallback:
+
+| | |
+|---|---|
+| what runs it | Ollama, `qwen3-8b-local` in the model registry |
+| why local is affordable here | the gates are ~⅓ of a phase's calls but ~⅙ of its tokens, and their prompts are short structured requests |
+| why it is safe | no gate's verdict consults a model; a wrong answer degrades a report, never a decision |
+| default | the hosted API — local mode is opt-in via `--gate-backend` or `GATE_BACKEND` |
+
+Running the gates on a small local model is also a claim the paper can make on
+its own: the validity layer costs no API budget to operate, which is what lets it
+be applied to every attempt rather than sampled.
+
 #### The report is generated, and that is why Gate 1 has an LLM layer
 
 The example above is what the feedback report must be, and no template produces it. "Bind
