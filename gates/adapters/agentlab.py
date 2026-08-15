@@ -168,6 +168,7 @@ def make_context(
     num_classes: int | None = None,
     reward_model: str | None = None,
     task_ref: str | None = None,
+    consult_model: Any = None,
 ) -> GateContext:
     """Build the gate context for one solver phase.
 
@@ -185,6 +186,10 @@ def make_context(
         artifact_root=artifact_root,
         cwd=os.getcwd(),  # figures must land where papersolver looks for them
         task_ref=task_ref,
+        # The LLM layer. In this scaffold the caller passes a closure over
+        # inference.query_model; absent one, the gate issues the same verdict and
+        # falls back to the deterministic feedback template.
+        consult_model=consult_model,
     )
     return GateContext(
         config=config,

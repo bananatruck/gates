@@ -133,10 +133,48 @@ class LoopOutcome:
     fell_back: bool = False
     ledger_path: str | None = None
     artifact_root: str | None = None
+    #: Whether the upstream-channel reconstruction ran. When it did not, the
+    #: scenario's `expect_upstream_blind_turns` describes something that was
+    #: never measured, and asserting on it would report a mismatch that is an
+    #: artefact of the switch rather than a finding.
+    counterfactual: bool = True
 
     @property
     def executions(self) -> list[ExecutionOutcome]:
         return [e for t in self.turns for e in t.executions]
+
+    @property
+    def model_cost(self) -> dict[str, Any]:
+        """What the LLM layer spent across the whole loop.
+
+        The gate's standing claim is that a verdict costs zero model calls and
+        that rejection is cheap. The layer does not change the first and must not
+        wreck the second, so the total is reported per loop and held to a ceiling
+        by test rather than assumed to be small.
+        """
+        totals = {
+            "calls": 0,
+            "failures": 0,
+            "latency_s": 0.0,
+            "prompt_chars": 0,
+            "completion_chars": 0,
+        }
+        for execution in self.executions:
+            spent = execution.report.model
+            if not spent:
+                continue
+            for key in totals:
+                totals[key] += spent.get(key, 0)
+        totals["latency_s"] = round(totals["latency_s"], 3)
+        totals["degraded"] = any(
+            e.report.model_degraded for e in self.executions
+        )
+        totals["calls_per_execution"] = (
+            round(totals["calls"] / len(self.executions), 2)
+            if self.executions
+            else 0.0
+        )
+        return totals
 
     @property
     def turns_used(self) -> int:
@@ -166,6 +204,7 @@ def run_loop(
     counterfactual: bool = True,
     timeout_s: int = 60,
     observer: Observer | None = None,
+    consult_model: Any = None,
 ) -> LoopOutcome:
     """Play one scenario against the real gate and return what happened."""
     workdir = Path(workdir)
@@ -179,11 +218,13 @@ def run_loop(
         expected_keys=scenario.expected_keys,
         num_classes=scenario.num_classes,
         task_ref=scenario.summary,
+        consult_model=consult_model,
     )
     outcome = LoopOutcome(
         scenario=scenario.name,
         artifact_root=context.config.artifact_root,
         ledger_path=str(context.ledger.path) if context.ledger else None,
+        counterfactual=counterfactual,
     )
     emit = observer or (lambda event, payload: None)
     emit("loop_start", {"scenario": scenario, "context": context})
@@ -350,7 +391,7 @@ def check_expectations(scenario: Scenario, outcome: LoopOutcome) -> list[str]:
                     f"got [{', '.join(sorted(execution.warned_check_ids))}]"
                 )
 
-    if scenario.expect_upstream_blind_turns:
+    if scenario.expect_upstream_blind_turns and outcome.counterfactual:
         actual = outcome.upstream_blind_turns
         expected = scenario.expect_upstream_blind_turns
         if actual != expected:

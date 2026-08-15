@@ -162,10 +162,17 @@ def summarise(rows: list[tuple[Scenario, LoopOutcome, list[str]]]) -> str:
         1 for _, o, _ in rows for t in o.turns if not t.passed
     )
     out.append("")
-    out.append(
-        f"  Gate 1 rejected {total_rejected} engineer turn(s); upstream's "
-        f"1,000-character detector would have accepted {total_blind} of them."
-    )
+    if all(o.counterfactual for _, o, _ in rows):
+        out.append(
+            f"  Gate 1 rejected {total_rejected} engineer turn(s); upstream's "
+            f"1,000-character detector would have accepted {total_blind} of them."
+        )
+    else:
+        out.append(
+            f"  Gate 1 rejected {total_rejected} engineer turn(s). The upstream "
+            f"channel was not reconstructed, so how many it would have accepted "
+            f"is unmeasured — not zero."
+        )
     out.append("")
     return "\n".join(out)
 
