@@ -413,28 +413,48 @@ def _slide_cost(prs, run):
     """Where the money goes, and what the gate adds to it."""
     s = blank(prs)
     header(s, "cost", "Gate 1's marginal cost on the paid API is zero")
-    usage = run.get("usage") or {}
-    rows = [["role", "calls", "prompt tok", "completion tok", "of which reasoning", "billed"]]
+    # Summed across every run on disk, not one rendered run: a per-call cost
+    # claim made from a single run is an anecdote, and the runs differ in how
+    # many rewrites they needed, which is exactly what the gate changes.
+    usage: dict[str, dict] = {}
+    n_runs = 0
+    for path in sorted(Path(RUNS_ROOT).glob("*/ablation.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        n_runs += 1
+        for role, u in (data.get("usage") or {}).items():
+            acc = usage.setdefault(
+                role, {"calls": 0, "prompt": 0, "completion": 0, "reasoning": 0}
+            )
+            for field in acc:
+                acc[field] += u.get(field, 0)
+    if not usage:
+        usage = run.get("usage") or {}
+        n_runs = 1
+    rows = [[f"role (summed over {n_runs} runs)", "calls", "prompt tok",
+             "completion tok", "of which reasoning", "billed"]]
     for role, u in sorted(usage.items()):
         rows.append([role, u["calls"], f"{u['prompt']:,}", f"{u['completion']:,}",
                      f"{u['reasoning']:,}",
                      "paid API" if role == "engineer" else "local — free"])
     if len(rows) == 1:
         rows.append(["(no accounting)", "", "", "", "", ""])
-    _table(s, Inches(0.6), Inches(1.8), Inches(12.1), rows,
-           [Inches(2.0), Inches(1.3), Inches(2.2), Inches(2.4), Inches(2.4), Inches(1.8)],
-           size=12, rh=Inches(0.5))
+    _table(s, Inches(0.6), Inches(1.7), Inches(12.1), rows,
+           [Inches(2.9), Inches(1.1), Inches(2.1), Inches(2.3), Inches(2.3), Inches(1.4)],
+           size=12, rh=Inches(0.48))
     eng, gate = usage.get("engineer", {}), usage.get("gate", {})
     if eng.get("calls") and gate.get("calls"):
         ep = eng["completion"] / eng["calls"]
         gp = gate["completion"] / gate["calls"]
-        stat(s, Inches(0.6), Inches(4.6), Inches(3.8), f"{ep/gp:.0f}x",
+        stat(s, Inches(0.6), Inches(3.9), Inches(3.8), f"{ep/gp:.0f}x",
              "one engineer call vs one gate call, in completion tokens", ORANGE)
-        stat(s, Inches(4.7), Inches(4.6), Inches(3.8), f"{gate['completion']:,}",
+        stat(s, Inches(4.7), Inches(3.9), Inches(3.8), f"{gate['completion']:,}",
              "gate tokens — all local, none billed", BLUE)
-        stat(s, Inches(8.8), Inches(4.6), Inches(3.9), f"{eng['reasoning']:,}",
+        stat(s, Inches(8.8), Inches(3.9), Inches(3.9), f"{eng['reasoning']:,}",
              "engineer reasoning tokens: billed, never seen in the output", ORANGE)
-    text(s, Inches(0.6), Inches(6.3), Inches(12.1), Inches(0.9),
+    text(s, Inches(0.6), Inches(5.6), Inches(12.1), Inches(1.4),
          [("What Gate 1 changes on the bill is rewrites: each rejection buys "
            "another engineer call. A rejection that names the real fault is a "
            "rewrite the agent does not waste — which is why the shadowed-contract "
@@ -474,66 +494,147 @@ def _slide_logs(prs, run):
 # --------------------------------------------------------------------------- #
 
 
+def _live_verdicts() -> list[tuple[str, str, int, str]]:
+    """Gate 1's verdicts in the full Agent Laboratory workflow, from disk.
+
+    The ablation rig exercises the solver phase only. This reads the gate
+    artifacts left by the complete workflow -- literature review through paper
+    writing -- because that is the run the archived paper can be compared to.
+    """
+    root = Path("/home/kesh/AgentLaboratory-Gemini/research_dir/gate_artifacts/gate1")
+    out = []
+    for attempt in sorted(root.glob("attempt_*")):
+        report, registry = attempt / "gate1_report.json", attempt / "registry.json"
+        if not report.exists():
+            continue
+        try:
+            r = json.loads(report.read_text())
+            n = len(json.loads(registry.read_text()).get("values", {}))
+        except (json.JSONDecodeError, FileNotFoundError):
+            continue
+        failed = [c["id"] for c in r.get("checks", []) if not c["passed"]
+                  and c["severity"] == "FAIL"]
+        out.append((attempt.name.replace("attempt_", "attempt "),
+                    r.get("verdict", "?"), n, ", ".join(failed) or "—"))
+    return out
+
+
 def build(bench, run):
+    """Ten slides, in the order the argument actually runs.
+
+    The previous deck had twenty and buried the comparison in the middle of
+    them. What a reader needs is the published rate, our two arms against it,
+    and the evidence that our numbers are measurements -- everything else is
+    supporting material that belongs in the report.
+    """
     prs = deck()
 
-    # 1 — title
+    # ---- 1. title -------------------------------------------------------- #
     s = blank(prs)
-    text(s, Inches(0.9), Inches(2.3), Inches(11.5), Inches(1.2),
+    text(s, Inches(0.9), Inches(2.2), Inches(11.5), Inches(1.2),
          [("G.A.T.E.S. — Gate 1", 46, True, INK)])
-    text(s, Inches(0.9), Inches(3.5), Inches(11.5), Inches(1.0),
+    text(s, Inches(0.9), Inches(3.4), Inches(11.5), Inches(1.0),
          [("Execution validity for autonomous research agents", 20, False, INK2)])
-    text(s, Inches(0.9), Inches(4.15), Inches(11.5), Inches(1.0),
-         [("Checks · metrics · runs · measured impact on Agent Laboratory",
-           15, False, MUTED)])
+    text(s, Inches(0.9), Inches(4.05), Inches(11.5), Inches(1.0),
+         [("Measured impact on Agent Laboratory, against the published "
+           "fabrication rates", 15, False, MUTED)])
     text(s, Inches(0.9), Inches(6.3), Inches(11.5), Inches(0.5),
-         [(f"{date.today().isoformat()}   ·   247 gate tests, 63 integration tests"
-           "   ·   every figure a recorded measurement or a cited number",
-           11, False, MUTED)])
+         [(f"{date.today().isoformat()}   ·   266 tests   ·   engineer "
+           "deepseek-v4-flash, gates local qwen3:8b   ·   every figure a "
+           "recorded measurement or a cited number", 11, False, MUTED)])
 
-    # 2 — the run and what each arm produced
-    if run:
-        _slide_run(prs, run)
-        _slide_all_runs(prs)
-        _slide_accuracy(prs, run)
-        _slide_report_accuracy(prs)
-        _slide_papers(prs)
-        _slide_checks_fired(prs, run)
-        _slide_logs(prs, run)
-        _slide_taxonomy(prs, run)
-        _slide_cost(prs, run)
-
-    # 3 — the defect
+    # ---- 2. the problem -------------------------------------------------- #
     s = blank(prs)
-    header(s, "the problem", "One line produced both the silent failure and the fabrication")
-    panel(s, Inches(0.6), Inches(1.7), Inches(12.1), Inches(1.5))
-    text(s, Inches(0.9), Inches(1.85), Inches(11.5), Inches(1.2),
+    header(s, "the problem", "A crashed run scored 1.0 and became a published paper")
+    panel(s, Inches(0.6), Inches(1.6), Inches(12.1), Inches(1.35))
+    text(s, Inches(0.9), Inches(1.75), Inches(11.5), Inches(1.1),
          [("return output_capture.getvalue()[:MAX_LEN]      # MAX_LEN = 1000",
            15, True, INK),
-          ("the crash marker is appended AFTER the program's own output — so it "
-           "falls off the end of the same slice", 12, False, INK2)])
-    bullets(s, Inches(0.6), Inches(3.5), Inches(12),
-            ["The writing agent received 1,000 characters as the entire experimental record",
-             "The only crash test was a substring search for a marker that was no longer there",
-             "Execution ran in a never-cleared namespace, in a thread the timeout could not kill"])
-    stat(s, Inches(0.6), Inches(5.5), Inches(3.0), "1.0",
-         "reward score on a run raising NameError every attempt", ORANGE)
-    stat(s, Inches(3.9), Inches(5.5), Inches(3.0), "81.60%",
-         "test accuracy reported — never measured", ORANGE)
-    stat(s, Inches(7.2), Inches(5.5), Inches(3.0), "13.61×",
-         "speedup reported — never measured", ORANGE)
-    stat(s, Inches(10.5), Inches(5.5), Inches(2.2), "n=1",
-         "archived runs usable of 7", MUTED)
+          ("The crash marker is appended AFTER the program's own output — so on "
+           "any run that prints more than 1,000 characters it falls off the same "
+           "slice, and the solver's only crash test never fires.", 12, False, INK2)])
+    stat(s, Inches(0.6), Inches(3.3), Inches(2.85), "1.0",
+         "reward score, run raising NameError on every attempt", ORANGE)
+    stat(s, Inches(3.7), Inches(3.3), Inches(2.85), "65",
+         "numeric claims in the paper it produced", ORANGE)
+    stat(s, Inches(6.8), Inches(3.3), Inches(2.85), "0",
+         "of them traceable to any execution", ORANGE)
+    stat(s, Inches(9.9), Inches(3.3), Inches(2.8), "0",
+         "record_result calls in its saved code", MUTED)
+    text(s, Inches(0.6), Inches(5.1), Inches(12.1), Inches(1.8),
+         [("The paper is fluent, specific, and unfalsifiable from its own artifacts.",
+           15, True, INK),
+          ("“peak accuracy at K=2 (81.60% test) … a 13.61× speedup (0.0180s vs "
+           "0.2450s) … a catastrophic collapse to 39.20% at K=8.” None of those "
+           "numbers appears anywhere in the code that was actually run.",
+           13, False, INK2),
+          ("Nothing in the pipeline could tell a measurement from a sentence.",
+           13, True, ORANGE)])
 
-    # 3 — checks
+    # ---- 3. against the published rates ---------------------------------- #
     s = blank(prs)
-    header(s, "what gate 1 checks", "20 deterministic checks in six families")
-    picture(s, "checks.png", Inches(0.6), Inches(1.65), Inches(7.6), max_h=Inches(4.4))
-    panel(s, Inches(8.5), Inches(1.65), Inches(4.2), Inches(4.6))
-    text(s, Inches(8.8), Inches(1.85), Inches(3.7), Inches(4.2),
+    header(s, "the benchmarks", "This failure is the field's, and it is quantified")
+    picture(s, "benchmark.png", Inches(0.6), Inches(1.55), Inches(7.9),
+            max_h=Inches(4.6))
+    panel(s, Inches(8.8), Inches(1.55), Inches(3.9), Inches(4.8))
+    text(s, Inches(9.05), Inches(1.75), Inches(3.4), Inches(4.4),
+         [("MLR-Bench", 14, True, INK),
+          ("Coding agents produce fabricated or invalidated experimental results "
+           "in 80% of cases. Both agents score below the 6.0 acceptance "
+           "threshold on Soundness while scoring well on Completeness — fluent, "
+           "and unsound.", 11, False, INK2),
+          ("", 8, False, INK2),
+          ("BadScientist", 14, True, INK),
+          ("Fabricated papers accepted at up to 82.0%, with detection barely "
+           "exceeding random chance.", 11, False, INK2),
+          ("", 8, False, INK2),
+          ("It names the defence it thinks is needed: provenance verification. "
+           "That is what Gate 1 is.", 11, True, BLUE)])
+    text(s, Inches(0.6), Inches(6.45), Inches(8.0), Inches(0.6),
+         [("If LLM reviewers detect fabrication at chance, a validity layer built "
+           "on model judgement inherits that ceiling — so Gate 1's verdict is "
+           "entirely deterministic.", 10.5, False, INK2)])
+
+    # ---- 4. the headline comparison -------------------------------------- #
+    s = blank(prs)
+    # The chart carries its own title, so the header must not repeat it.
+    header(s, "the comparison",
+           "Same acceptance rate — everything downstream differs")
+    picture(s, "headline.png", Inches(0.6), Inches(1.5), Inches(8.1),
+            max_h=Inches(4.8))
+    panel(s, Inches(9.0), Inches(1.5), Inches(3.7), Inches(4.9))
+    text(s, Inches(9.25), Inches(1.7), Inches(3.2), Inches(4.5),
+         [("Both arms accept.", 15, True, INK),
+          ("5 of 5 runs, either way. Acceptance is not where they differ — "
+           "everything that happens to the numbers afterwards is.",
+           11.5, False, INK2),
+          ("", 8, False, INK2),
+          ("Without the gate, 5 of the 15 results a run produced never reached "
+           "the write-up at all; in one run all three were lost, leaving a "
+           "writer with a training log and no results.", 11.5, False, INK2),
+          ("", 8, False, INK2),
+          ("And 0 of 15 carry a trace id or a code hash.", 11.5, True, ORANGE),
+          ("", 8, False, INK2),
+          ("5 runs · deepseek-v4-flash · T=0.7 · same task, same instructions, "
+           "same turn budget.", 10, False, MUTED)])
+
+    # ---- 5. what the reports actually say -------------------------------- #
+    _slide_report_accuracy(prs)
+
+    # ---- 6. the papers --------------------------------------------------- #
+    _slide_papers(prs)
+
+    # ---- 7. what Gate 1 checks ------------------------------------------- #
+    s = blank(prs)
+    header(s, "what gate 1 checks", "20 deterministic checks in six families, "
+                                    "plus one model-assisted")
+    picture(s, "checks.png", Inches(0.6), Inches(1.6), Inches(7.6),
+            max_h=Inches(4.4))
+    panel(s, Inches(8.5), Inches(1.6), Inches(4.2), Inches(4.7))
+    text(s, Inches(8.75), Inches(1.8), Inches(3.7), Inches(4.3),
          [("The severity split is the design", 14, True, INK),
-          ("FAIL blocks the run. WARN and INFO are reported, propagate into the "
-           "evidence bundle, and can never change a verdict.", 11, False, INK2),
+          ("FAIL blocks. WARN and INFO are reported, travel with their evidence, "
+           "and can never change a verdict.", 11, False, INK2),
           ("", 8, False, INK2),
           ("That is what lets a REQUIRED LLM layer coexist with a model-free "
            "verdict: model findings are WARN by construction, and the feedback "
@@ -542,198 +643,62 @@ def build(bench, run):
           ("", 8, False, INK2),
           ("A test parses the module's AST to assert Severity.FAIL never appears "
            "in an expression there.", 10, False, MUTED)])
-    text(s, Inches(0.6), Inches(6.5), Inches(12), Inches(0.5),
+    text(s, Inches(0.6), Inches(6.35), Inches(12.1), Inches(0.7),
          [("results.values_computed is the strongest claim: record_result(\"k\", acc) "
-           "passes, record_result(\"k\", 0.816) fails — and round(0.8160, 3) fails too, "
-           "because constant folding does not launder a typed number.",
+           "passes, record_result(\"k\", 0.816) fails — and round(0.8160, 3) fails "
+           "too, because constant folding does not launder a typed number.",
            11, False, INK2)])
 
-    # 4 — logs
-    s = blank(prs)
-    header(s, "logs", "Collapse the log, then read what the patterns cannot reach")
-    picture(s, "compression.png", Inches(0.6), Inches(1.5), Inches(6.6),
-            max_h=Inches(2.2))
-    picture(s, "scanner.png", Inches(0.6), Inches(3.9), Inches(6.6),
-            max_h=Inches(3.2))
-    panel(s, Inches(7.5), Inches(1.5), Inches(5.2), Inches(5.4))
-    prec = rec = None
-    if bench and "qwen_fewshot_3" in bench:
-        prec = bench["qwen_fewshot_3"]["precision"]
-        rec = bench["qwen_fewshot_3"]["recall"]
-    lines = [
-        ("Lossless in distinct content", 14, True, INK),
-        ("203 non-blank lines → 4 distinct shapes. Every shape survives with its "
-         "first real line number, so nothing a scanner could flag disappears — "
-         "recall is not traded for the saving.", 11, False, INK2),
-        ("", 8, False, INK2),
-        ("nan and inf are not digits, so 'loss nan' survives as its own shape "
-         "rather than being absorbed into the epoch group.", 11, False, INK2),
-        ("", 8, False, INK2),
-        ("Precision is the floor", 14, True, INK),
-        ("These findings are WARN and cannot force a rewrite. What a false "
-         "positive does is put a non-issue into the section the writer is told "
-         "it must disclose — so the paper reports a problem that never happened. "
-         "The corpus includes TensorFlow's cuFFT notice and oneDNN's banner: "
-         "E-level, CUDA-adjacent, and on every healthy run.", 11, False, INK2),
-    ]
-    text(s, Inches(7.8), Inches(1.7), Inches(4.6), Inches(5.0), lines)
+    # ---- 8. the gate in the full workflow -------------------------------- #
+    verdicts = _live_verdicts()
+    if verdicts:
+        s = blank(prs)
+        header(s, "live run", "Gate 1 in the complete workflow, not just the solver")
+        rows = [["attempt", "verdict", "values recorded", "blocking failures"]]
+        rows += [[a, v, n, f] for a, v, n, f in verdicts]
+        _table(s, Inches(0.6), Inches(1.7), Inches(12.1), rows,
+               [Inches(2.0), Inches(1.8), Inches(2.6), Inches(5.7)],
+               size=12, rh=Inches(0.44))
+        y = Inches(1.7) + Inches(0.44) * len(rows) + Inches(0.4)
+        text(s, Inches(0.6), y, Inches(12.1), Inches(2.0),
+             [("The archived paper's run failed exactly this way and was scored 1.0.",
+               14, True, INK),
+              ("It raised NameError: name 'hidden_dim' is not defined on every "
+               "attempt. The run above raised NameError: name "
+               "'all_experiment_data' is not defined — the same class of defect, "
+               "caught, with the reason handed back to the engineer.",
+               12, False, INK2),
+              ("Same failure mode. Opposite outcome.", 13, True, ORANGE)])
 
-    # 5 — runs
-    s = blank(prs)
-    header(s, "the runs", "Five runs, three models, nine defects found")
-    rows = [
-        ("Loop rig · 5 scenarios", "scripted",
-         "All five behave as documented; 6 turns rejected, upstream would have taken 3"),
-        ("End-to-end solver", "scripted",
-         "Full gated path exercised — 2 defects found"),
-        ("Live MLE-solver phase", "gemini-3.5-flash",
-         "415s, 5 executions; caught a real NameError, engineer recovered — 2 defects"),
-        ("Live ablation", "qwen3:8b local",
-         "658s; gate on converged in 2 turns, gate off never converged in 3 — 2 defects"),
-        ("Corpus benchmark", "qwen3:8b local",
-         "68 labelled lines × 2 prompt variants"),
-    ]
-    y = Inches(1.75)
-    for name, model, result in rows:
-        panel(s, Inches(0.6), y, Inches(12.1), Inches(0.82))
-        text(s, Inches(0.85), y + Inches(0.10), Inches(3.0), Inches(0.6),
-             [(name, 13, True, INK)])
-        text(s, Inches(3.9), y + Inches(0.13), Inches(2.4), Inches(0.5),
-             [(model, 11, False, BLUE)])
-        text(s, Inches(6.4), y + Inches(0.13), Inches(6.1), Inches(0.6),
-             [(result, 11, False, INK2)])
-        y += Inches(0.95)
-    text(s, Inches(0.6), Inches(6.7), Inches(12.1), Inches(0.6),
-         [("Four defects appeared only against a real model — and two of those only "
-           "against the weaker one, which is the argument for testing on both.",
-           12, True, ORANGE)])
+    # ---- 9. cost --------------------------------------------------------- #
+    if run:
+        _slide_cost(prs, run)
 
-    # 6 — impact
+    # ---- 10. limits and next --------------------------------------------- #
     s = blank(prs)
-    header(s, "impact", "What the writing agent receives instead")
-    panel(s, Inches(0.6), Inches(1.7), Inches(5.9), Inches(4.3))
-    text(s, Inches(0.9), Inches(1.9), Inches(5.4), Inches(3.9),
-         [("BEFORE", 13, True, ORANGE),
-          ("1,000 characters of stdout, prefix-sliced, with the crash marker "
-           "already fallen off the end.", 12, False, INK2),
-          ("", 8, False, INK2),
-          ("No way to tell a measured number from an invented one.", 12, False, INK2),
-          ("", 8, False, INK2),
-          ("A crashed run reaching the writer scored 1.0.", 12, False, INK2)])
-    panel(s, Inches(6.8), Inches(1.7), Inches(5.9), Inches(4.3))
-    text(s, Inches(7.1), Inches(1.9), Inches(5.4), Inches(3.9),
-         [("AFTER", 13, True, BLUE),
-          ("A verified registry: typed values, trace ids, provenance chains, run "
-           "metadata, and the full untruncated capture on disk.", 12, False, INK2),
-          ("", 8, False, INK2),
-          ("results.values_computed rejects any value that is a source literal at "
-           "its call site.", 12, False, INK2),
-          ("", 8, False, INK2),
-          ("A run that never passed cannot reach the writer at all — GateFailure "
-           "ends the phase.", 12, False, INK2)])
-    text(s, Inches(0.6), Inches(6.3), Inches(12.1), Inches(0.8),
-         [("Every WARN travels with the evidence under a heading saying it must be "
-           "stated rather than omitted — and carries its line and reason, not just a count.",
-           12, False, INK2)])
-
-    # 7 — ablation
-    s = blank(prs)
-    header(s, "ablation", "Gate on versus gate off — same task, model and engineer")
-    picture(s, "ablation.png", Inches(0.6), Inches(1.7), Inches(7.3), max_h=Inches(4.2))
-    panel(s, Inches(8.2), Inches(1.7), Inches(4.5), Inches(4.4))
-    text(s, Inches(8.5), Inches(1.9), Inches(4.0), Inches(4.0),
-         [("false_success = 0", 16, True, INK),
-          ("The divergence did not reproduce here. Every ungated failure crashed "
-           "with zero bytes of stdout, so the marker stayed inside the slice and "
-           "upstream's rule caught them all.", 11, False, INK2),
-          ("", 8, False, INK2),
-          ("That is the honest shape of the claim: the channel defect needs an "
-           "experiment that prints past the ceiling before it dies.", 11, False, INK2),
-          ("", 8, False, INK2),
-          ("What did differ: the gated engineer got a report naming the failing "
-           "check and fixed it; the ungated one got 1,000 raw characters and "
-           "failed three times.", 11, False, INK2),
-          ("", 8, False, INK2),
-          ("n = 1, temperature 0. Suggestive, not a rate.", 11, True, ORANGE)])
-
-    # 8 — cost
-    s = blank(prs)
-    header(s, "cost", "A third of the calls, a sixth of the tokens")
-    picture(s, "callsplit.png", Inches(0.6), Inches(1.7), Inches(7.6), max_h=Inches(4.2))
-    panel(s, Inches(8.5), Inches(1.7), Inches(4.2), Inches(4.3))
-    text(s, Inches(8.8), Inches(1.9), Inches(3.7), Inches(3.9),
-         [("Which is why it can run locally", 14, True, INK),
-          ("qwen3:8b on an 8 GB laptop GPU — 5.5 GB resident, ~16s a call, zero "
-           "marginal cost, no quota.", 11, False, INK2),
-          ("", 8, False, INK2),
-          ("The gate's prompts stay small because the digest collapses repetition; "
-           "the engineer's do not, because they carry code, history and the "
-           "evidence bundle.", 11, False, INK2),
-          ("", 8, False, INK2),
-          ("Putting the ENGINEER on a weak model is the tempting economy and the "
-           "wrong one: it fails the gate more often, and each rejection costs a "
-           "fixes call, a shadow-reward call and another turn.", 11, False, ORANGE)])
-
-    # 9 — literature
-    s = blank(prs)
-    header(s, "the landscape", "What the published benchmarks measure")
-    picture(s, "literature.png", Inches(0.6), Inches(1.65), Inches(7.5), max_h=Inches(4.4))
-    panel(s, Inches(8.4), Inches(1.65), Inches(4.3), Inches(4.6))
-    text(s, Inches(8.7), Inches(1.85), Inches(3.8), Inches(4.2),
-         [("Why the verdict consults no model", 14, True, INK),
-          ("BadScientist: fabricated papers accepted at up to 82.0%, with "
-           "detection accuracy barely above random chance.", 11, False, INK2),
-          ("", 8, False, INK2),
-          ("If LLM reviewers detect fabrication at chance, a validity layer built "
-           "on model judgement inherits that ceiling. Gate 1's verdict is "
-           "therefore entirely deterministic.", 11, False, INK2),
-          ("", 8, False, INK2),
-          ("MLR-Bench: faked experimental results is the most prevalent "
-           "hallucination class — present in almost every AI Scientist V2 paper. "
-           "That is the class Gate 1 addresses, upstream of every reviewed "
-           "approach.", 11, False, INK2)])
-
-    # 10 — limits
-    s = blank(prs)
-    header(s, "limits", "What Gate 1 does not claim")
-    bullets(s, Inches(0.6), Inches(1.8), Inches(12.1),
-            ["It does not check whether a result is plausible — that is Gate 2",
+    header(s, "limits & next", "What Gate 1 does not claim")
+    bullets(s, Inches(0.6), Inches(1.7), Inches(12.1),
+            ["It does not ask whether a result is plausible — that is Gate 2",
              "It does not read the manuscript — that is Gate 3",
-             "The static tier is conservative on purpose; the runtime tier catches "
-             "what it declines to claim, one execution later",
+             "The ungated arm's numbers are not wrong: every one that reached the "
+             "writer reproduced. It fails on completeness and provenance, which "
+             "is a different and narrower claim",
              "The log scanner's recall is bounded by what it was shown, and the "
-             "number of lines examined is recorded so the claim cannot exceed the evidence",
-             "A mean computed inside the experiment over a silently shortened list "
-             "arrives as one value Gate 1 cannot see behind (Gate 2's to close)",
-             "n is still 1 for the archive comparison — the re-run has not been performed"],
-            size=14, gap=2.0)
-    panel(s, Inches(0.6), Inches(5.9), Inches(12.1), Inches(1.1), RGBColor(0xFB, 0xF5, 0xEC))
-    text(s, Inches(0.9), Inches(6.05), Inches(11.5), Inches(0.9),
-         [("The design documents paraphrase MLR-Bench's taxonomy. Its published names are "
-           "faked experimental results, hallucinated methodology, incorrect citations, "
-           "mathematical errors — any \"eliminates N of four classes\" claim should use "
-           "those names or state the mapping.", 12, False, INK2)])
-
-    # 11 — next
-    s = blank(prs)
-    header(s, "next", "Gate 1 is complete as an implementation")
-    bullets(s, Inches(0.6), Inches(1.9), Inches(12.1),
-            [("Measurement, not code, is what remains", 16, True, INK),
-             ("·  Re-run the archive for a real n — both arms, needs a billed key "
-              "and hand annotation", 14, False, INK2),
-             ("·  Channel-fidelity writer arm at MAX_LEN ∈ {1000, 4000, 16000, ∞}",
-              14, False, INK2),
-             ("·  Capture integrity: a missing log must fail loudly, not read as clean",
-              14, False, INK2),
-             ("·  Re-execution verification — turn P10 from possible into performed",
-              14, False, INK2),
-             ("·  A second adapter, to make portability a demonstration rather than "
-              "an argument", 14, False, INK2),
-             ("", 10, False, INK2),
-             ("Then Gate 2 — source ↔ result coherence, on the same model seam",
-              16, True, BLUE)])
+             "lines examined are recorded so the claim cannot exceed the evidence",
+             "A mean computed inside the experiment over a silently shortened "
+             "list arrives as one value Gate 1 cannot see behind — Gate 2's to close"],
+            size=13, gap=1.9)
+    panel(s, Inches(0.6), Inches(5.3), Inches(12.1), Inches(1.7),
+          RGBColor(0xFB, 0xF5, 0xEC))
+    text(s, Inches(0.9), Inches(5.5), Inches(11.5), Inches(1.5),
+         [("Next", 14, True, INK),
+          ("·  Complete the full-workflow paper and audit it against the archived "
+           "one on identical criteria", 12, False, INK2),
+          ("·  Channel-fidelity arm at MAX_LEN ∈ {1000, 4000, 16000, ∞}",
+           12, False, INK2),
+          ("·  Then Gate 2 — source ↔ result coherence, on the same model seam",
+           12, True, BLUE)])
     return prs
-
 
 def main():
     bench = json.loads(BENCH.read_text()) if BENCH.exists() else None

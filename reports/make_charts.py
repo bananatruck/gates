@@ -295,6 +295,149 @@ def chart_accuracy(run: dict | None):
     return save(fig, "accuracy.png")
 
 
+#: Published rates, quoted from the source set. Kept beside our own measurement
+#: because "agents fabricate results" is a claim the field has already
+#: quantified, and a validity layer should be argued against that number rather
+#: than against an anecdote.
+#:
+#: The three are NOT the same construct and the chart says so rather than
+#: implying a like-for-like ranking:
+#:   MLR-Bench    share of coding-agent runs whose experimental results are
+#:                fabricated or invalidated (arXiv 2505.19955)
+#:   BadScientist acceptance rate achieved by deliberately fabricated papers
+#:                under an LLM review pipeline (arXiv 2510.18003)
+#:   here         share of reported results that no execution can be shown to
+#:                have produced
+CITED_RATES = [
+    ("MLR-Bench: coding-agent runs with\nfabricated or invalidated results", 0.80),
+    ("BadScientist: fabricated papers\naccepted by LLM reviewers", 0.82),
+]
+
+
+def chart_benchmark(accuracy: dict | None):
+    """Our two arms against the rates the benchmark papers report.
+
+    The measured bars are the point: Agent Laboratory as shipped reports results
+    that nothing can be shown to have produced, at a rate consistent with what
+    MLR-Bench and BadScientist find across the field. With Gate 1 the same
+    scaffold reports none.
+    """
+    if not accuracy:
+        return None
+
+    def tot(arm, fn):
+        return sum(fn(r.get(arm, {})) for r in accuracy.values())
+
+    u_prod = tot("ungated", lambda a: len(a.get("produced", {})))
+    u_trace = tot("ungated", lambda a: a.get("traceable", 0))
+    g_prod = tot("gated", lambda a: len(a.get("visible", {})))
+    g_trace = tot("gated", lambda a: a.get("traceable", 0))
+    if not u_prod or not g_prod:
+        return None
+
+    rows = list(CITED_RATES) + [
+        (f"Agent Laboratory as shipped:\nreported results with no provenance"
+         f"  ({u_prod - u_trace}/{u_prod})", (u_prod - u_trace) / u_prod),
+        (f"Agent Laboratory + Gate 1:\nreported results with no provenance"
+         f"  ({g_prod - g_trace}/{g_prod})", (g_prod - g_trace) / g_prod),
+    ]
+    # Colour follows what the number *is*, never how big it is: cited figures
+    # in one hue, our measurements in another. Ranking by value would repaint
+    # the bars as soon as a rate moved.
+    colours = [MUTED, MUTED, ORANGE, BLUE]
+
+    fig, ax = plt.subplots(figsize=(7.6, 3.9))
+    labels = [r[0] for r in rows]
+    values = [r[1] for r in rows]
+    y = range(len(rows))
+    bars = ax.barh(list(y), values, height=0.62, color=colours,
+                   edgecolor=SURFACE, linewidth=2)
+    for bar, v in zip(bars, values):
+        ax.text(v + 0.015, bar.get_y() + bar.get_height() / 2,
+                f"{100 * v:.0f}%", va="center", ha="left",
+                fontsize=11, fontweight="bold", color=INK)
+    ax.set_yticks(list(y))
+    ax.set_yticklabels(labels, fontsize=8.5)
+    ax.invert_yaxis()
+    ax.set_xlim(0, 1.06)
+    ax.xaxis.set_major_formatter(PercentFormatter(xmax=1))
+    ax.grid(axis="x", color=GRID, linewidth=0.8)
+    ax.grid(axis="y", visible=False)
+    _finish(ax, "Results that cannot be traced to an execution",
+            "grey = published rate, quoted; coloured = measured here across "
+            f"{len(accuracy)} deepseek-v4-flash runs")
+    ax.grid(axis="y", visible=False)
+    ax.text(0, -0.22,
+            "The three measures are related but not identical — see the note "
+            "beneath. Ours counts reported results lacking provenance.",
+            transform=ax.transAxes, fontsize=7.5, color=MUTED, va="top")
+    return save(fig, "benchmark.png")
+
+
+def chart_headline(accuracy: dict | None, agg_stats: dict | None):
+    """Agent Laboratory with and without Gate 1, on every measure at once.
+
+    One chart, because the argument is not any single row -- it is that the two
+    arms accept at the same rate and differ in everything that happens to the
+    numbers afterwards.
+    """
+    if not accuracy:
+        return None
+
+    def tot(arm, fn):
+        return sum(fn(r.get(arm, {})) for r in accuracy.values())
+
+    g_prod = tot("gated", lambda a: len(a.get("visible", {})))
+    u_prod = tot("ungated", lambda a: len(a.get("produced", {})))
+    rows = [
+        ("results recorded", g_prod, u_prod),
+        ("reached the write-up", g_prod,
+         tot("ungated", lambda a: len(a.get("visible", {})))),
+        ("traceable to a run", tot("gated", lambda a: a.get("traceable", 0)),
+         tot("ungated", lambda a: a.get("traceable", 0))),
+        ("reproduced on re-run", tot("gated", lambda a: len(a.get("matched", []))),
+         tot("ungated", lambda a: len(a.get("matched", [])))),
+    ]
+    if agg_stats:
+        rows.append(("runs accepted as done",
+                     agg_stats["gated"]["accepted"],
+                     agg_stats["ungated"]["accepted"]))
+        rows.append(("false successes",
+                     agg_stats["gated"]["false_success_total"],
+                     agg_stats["ungated"]["false_success_total"]))
+
+    labels = [r[0] for r in rows]
+    gated = [r[1] for r in rows]
+    ungated = [r[2] for r in rows]
+
+    fig, ax = plt.subplots(figsize=(7.6, 4.0))
+    y = range(len(rows))
+    h = 0.36
+    b1 = ax.barh([i - h / 2 for i in y], gated, h, color=BLUE,
+                 label="with Gate 1", edgecolor=SURFACE, linewidth=2)
+    b2 = ax.barh([i + h / 2 for i in y], ungated, h, color=ORANGE,
+                 label="without Gate 1 (as shipped)", edgecolor=SURFACE,
+                 linewidth=2)
+    top = max(gated + ungated + [1])
+    for bars, values in ((b1, gated), (b2, ungated)):
+        for bar, v in zip(bars, values):
+            ax.text(v + top * 0.015, bar.get_y() + bar.get_height() / 2, str(v),
+                    va="center", ha="left", fontsize=9.5, color=INK)
+    ax.set_yticks(list(y))
+    ax.set_yticklabels(labels, fontsize=9.5)
+    ax.invert_yaxis()
+    ax.set_xlim(0, top * 1.16)
+    ax.set_xlabel("count")
+    ax.grid(axis="x", color=GRID, linewidth=0.8)
+    ax.grid(axis="y", visible=False)
+    _finish(ax, "Agent Laboratory, with and without Gate 1",
+            f"{len(accuracy)} runs, data-efficiency task, deepseek-v4-flash "
+            "engineer")
+    ax.grid(axis="y", visible=False)
+    ax.legend(frameon=False, fontsize=9, loc="lower right")
+    return save(fig, "headline.png")
+
+
 def main():
     bench_path = Path(
         "/tmp/claude-1000/-home-kesh/976cef29-0afd-479c-a716-6c557e07b6cb"
@@ -307,7 +450,29 @@ def main():
     bench = json.loads(bench_path.read_text()) if bench_path.exists() else None
     if bench is None:
         print("  (no bench2.json — scanner chart will show the baseline only)")
+    runs_root = Path("/home/kesh/AgentLaboratory-Gemini/ablation_runs")
+    acc_path = runs_root / "report_accuracy.json"
+    accuracy = json.loads(acc_path.read_text()) if acc_path.exists() else None
+
+    agg_stats = None
+    try:
+        import sys as _sys
+
+        _sys.path.insert(0, str(HERE))
+        import aggregate as agg
+
+        runs = agg.Aggregate(agg.load_runs(runs_root))
+        if runs.n:
+            agg_stats = {"gated": runs.arm_stats("gated"),
+                         "ungated": runs.arm_stats("ungated")}
+    except Exception as exc:  # a missing aggregate must not kill every chart
+        print(f"  (aggregate unavailable: {exc})")
+
     print("charts:")
+    if chart_headline(accuracy, agg_stats) is None:
+        print("  (no report_accuracy.json — headline chart skipped)")
+    if chart_benchmark(accuracy) is None:
+        print("  (no report_accuracy.json — benchmark chart skipped)")
     chart_check_inventory()
     chart_scanner(bench)
     chart_compression()

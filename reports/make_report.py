@@ -64,9 +64,30 @@ pre { background: #f7f6f1; padding: 2.5mm 3mm; font-family: 'DejaVu Sans Mono',
 .ok { color: #12805c; font-weight: bold; }
 .bad { color: #c0392b; font-weight: bold; }
 .big { font-size: 15pt; font-weight: bold; color: #2a78d6; }
-.hero { background: #f2f6fc; border: 1px solid #cfe0f5; padding: 3mm 4mm;
-        margin: 3mm 0; }
+/* A one-cell table, not a bordered div. LibreOffice's HTML importer maps a
+   div's border onto each *paragraph* it contains, so a multi-line callout came
+   out as a stack of separate boxes, one per wrapped line. Table cell borders
+   it renders as a single frame. */
+table.hero { width: 100%; border-collapse: collapse; margin: 3mm 0; }
+table.hero td { background: #f2f6fc; border: 1px solid #cfe0f5;
+                padding: 3mm 4mm; }
 """
+
+
+def hero(html: str) -> str:
+    """A callout that survives the PDF converter in one piece.
+
+    Two separate LibreOffice quirks, both found by rendering and looking:
+    a bordered div comes out as one box per wrapped line, and class-based
+    styling on a `td` is dropped entirely. A one-cell table fixes the first;
+    inline `bgcolor` and `style` on the cell fix the second.
+    """
+    return (
+        '<table class="hero" cellpadding="0" cellspacing="0"><tr>'
+        '<td bgcolor="#f2f6fc" style="background:#f2f6fc;'
+        'border:1px solid #cfe0f5;padding:3mm 4mm;font-size:9pt">'
+        f'{html}</td></tr></table>'
+    )
 
 CHECKS = [
     ("static.syntax_valid", "static", "FAIL", "Source does not compile.",
@@ -267,6 +288,30 @@ def _accuracy_section() -> str:
     return rt.report_accuracy_table(data) + rt.report_accuracy_note(data)
 
 
+def _models_note(runs) -> str:
+    """Name the models from the run records, never from memory.
+
+    An earlier draft of this report asserted the engineer was a local code
+    model. Every ablation record on disk said `deepseek-v4-flash`, and had done
+    for some time; the sentence was left over from a superseded round. Prose
+    that contradicts the data it sits beside is worse than no prose, and a
+    reader who spots it is right to distrust everything around it — so the
+    models are read out of the records that back the numbers.
+    """
+    engineers = sorted({r.engineer for r in runs.runs}) or ["(no run records)"]
+    gates = sorted({r.gate for r in runs.runs}) or ["(no run records)"]
+    return (
+        f"Read from the {runs.n} run record(s) behind every number in this "
+        f"report, not asserted. The ML engineer — the agent whose work is being "
+        f"judged — runs on <code>{'</code>, <code>'.join(engineers)}</code>. "
+        f"Gate 1's two model roles run on "
+        f"<code>{'</code>, <code>'.join(gates)}</code>, locally and at no "
+        f"per-call cost; they read logs and write the feedback report, and are "
+        f"never consulted for the verdict. Both arms use the same engineer "
+        f"model at the same temperature, so neither is advantaged."
+    )
+
+
 def _paper_section() -> str:
     """Both generated papers, audited claim by claim."""
     path = Path(RUNS_ROOT) / "paper_audit.json"
@@ -311,6 +356,7 @@ def run_section(run, run_dir):
     )
     accuracy_section = _accuracy_section()
     paper_section = _paper_section()
+    models_note = _models_note(runs)
     if not run:
         return ("<h2>2. The run</h2><p class='small'>No ablation run record "
                 "found. Sections 2-5 are generated from one.</p>")
@@ -334,37 +380,44 @@ def run_section(run, run_dir):
     snippet_ungated = rt.log_snippet(ungated_dir / "attempt_01" / "stdout.txt",
                                      head=10)
 
-    return f"""<h2>2. The run: a data-efficiency study, with and without Gate 1</h2>
+    return f"""<h2>2. The comparison: Agent Laboratory with and without Gate 1</h2>
+<p>This is the whole argument in one figure. Both arms run the same task, the
+same engineer model, the same temperature and the same turn budget; they differ
+only in what is allowed to decide that an experiment succeeded.</p>
+
+{img("headline.png")}
+
+{hero(f'<b>Both arms accept every run.</b> Acceptance is not where they differ — everything that happens to the numbers afterwards is. With Gate 1, <span class="big">{g_rate}</span> of what was reported reproduced on re-execution and all of it carries a trace id. Without, <span class="big">{u_n}</span> values were recorded through any contract, five of fifteen results never reached the write-up at all, and none of them can be tied to the run that produced them.')}
+
+<h3>2.1 Against the rates the benchmark papers report</h3>
+<p>"Research agents fabricate results" is not a claim this report needs to
+establish — the field has quantified it. <b>MLR-Bench</b> (arXiv 2505.19955)
+finds that current coding agents produce fabricated or invalidated experimental
+results in <b>80%</b> of cases, and that both agents it evaluates score below its
+6.0 acceptance threshold on <i>Soundness</i> while scoring respectably on
+<i>Completeness</i> — fluent, and unsound. <b>BadScientist</b> (arXiv 2510.18003)
+finds deliberately fabricated papers accepted at rates up to <b>82%</b>, with
+detection "barely exceeding random chance", and names the defence it thinks is
+needed: <i>provenance verification</i>. That is what Gate 1 is.</p>
+{img("benchmark.png")}
+<p class="small">The three bars are related but not the same construct, and the
+chart says so rather than implying a like-for-like ranking. MLR-Bench's is a
+share of runs; BadScientist's is an acceptance rate under an LLM reviewer; ours
+is the share of reported results that no execution can be shown to have
+produced. What they have in common is the failure they measure.</p>
+
+<h3>2.2 The task, and one run in detail</h3>
 <p><b>Research question given to the agent:</b> how much labelled data does a
 classifier need? Make a synthetic 3-class dataset, train multinomial logistic
 regression by gradient descent on 25% of the training samples and on all of
-them, and report the two test accuracies and their ratio — three values.</p>
-<p class="small">A tractable proxy for the question asked of large language
-models: training one locally is not possible here, so the same
-scaling-with-data question is put to a classifier the agent can actually
-implement, and this report says so rather than implying otherwise.</p>
-<p class="small"><b>Models.</b> The gates run on a local <code>qwen3:8b</code>,
-as specified. The engineer runs on <code>qwen2.5-coder:7b</code>, and the reason
-is itself a measurement: a reasoning model at this scale spends its whole token
-budget in the reasoning channel and returns <code>finish_reason="length"</code>
-with <i>empty content</i> — reproduced at 2,500, 3,000, 6,000 and 8,000 token
-ceilings, with <code>/no_think</code>, with <code>think=False</code> and with
-<code>chat_template_kwargs</code>, none of which suppressed it through Ollama's
-OpenAI-compatible endpoint. A code model writes the same program in 42 seconds.
-The gate roles are unaffected because their output is short. Both arms use the
-same two models, so neither is advantaged.</p>
-
-<div class="hero"><span class="big">{g_rate}</span> of the numbers the Gate 1 arm reported reproduced when its accepted code was re-executed. The ungated arm recorded <span class="big">{u_n}</span> through any contract — its numbers are printed, so they can still be read off the log, but nothing binds one to the execution that produced it. Section 3.1 measures both arms' reports side by side.</div>
-
-{img("accuracy.png")}
-
-<h3>2.1 Did each arm converge, and is what it produced checkable?</h3>
+them, and report the two test accuracies and their ratio.</p>
+<p class="small"><b>Models.</b> {models_note}</p>
 {rt.accuracy_summary(run)}
 
-<h3>2.2 The numbers themselves</h3>
+<h3>2.3 The numbers themselves</h3>
 {rt.reported_numbers_table(run)}
 
-<h3>2.3 Turn by turn</h3>
+<h3>2.4 Turn by turn</h3>
 {rt.attempts_table(run)}
 
 <h2>3. Across every run on disk</h2>
