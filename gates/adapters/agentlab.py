@@ -199,6 +199,32 @@ def make_context(
     )
 
 
+def make_gate_model(model_str: str, api_key: str | None = None, temp: float = 0.0):
+    """Adapt this scaffold's ``query_model`` to the layer's two-argument seam.
+
+    The import is deliberately lazy. ``adapters/`` is where host knowledge is
+    allowed to live, but the package still has to import cleanly outside the
+    host — a module-level ``import inference`` would break ``pip install gates``
+    for everyone who is not Agent-Researcher.
+
+    ``temp=0.0``: this model writes a validity report, not prose. The upstream
+    reward model runs at 0.6 and that is part of what Gate 1 exists to answer.
+    """
+    from inference import query_model  # noqa: PLC0415 — see docstring
+
+    def call(prompt: str, system_prompt: str) -> str:
+        return query_model(
+            model_str=model_str,
+            prompt=prompt,
+            system_prompt=system_prompt,
+            openai_api_key=api_key,
+            temp=temp,
+            print_cost=False,
+        )
+
+    return call
+
+
 def gated_execute(code: str, context: GateContext) -> GatedExecution:
     """Execute ``code`` under Gate 1 and return the verdict plus its artifacts."""
     context.attempt += 1
