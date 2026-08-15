@@ -42,12 +42,30 @@ def render_feedback(report: GateReport, *, include_stdout_tail: bool = True) -> 
             # locate in the logs is a warning it will ignore.
             out.extend(_render_check(check))
 
-    fixes = _required_fixes(failures)
-    if fixes:
+    # The model writes the fixes when it produced grounded ones; the template is
+    # the fallback, not the default. Either way the findings above are the
+    # deterministic ones, verbatim — the model explains what to do, it does not
+    # get to restate what happened.
+    if report.generated_fixes:
         out.append("REQUIRED FIXES")
-        for i, fix in enumerate(fixes, 1):
-            out.append(f"  {i}. {fix}")
+        out.extend(
+            f"  {line}" if line.strip() else line
+            for line in report.generated_fixes.splitlines()
+        )
         out.append("")
+    else:
+        fixes = _required_fixes(failures)
+        if fixes:
+            out.append("REQUIRED FIXES")
+            for i, fix in enumerate(fixes, 1):
+                out.append(f"  {i}. {fix}")
+            if failures and _fixes_are_degraded(report):
+                out.append("")
+                out.append(
+                    "  (standard guidance — the model that writes specific "
+                    "fixes was unavailable for this attempt)"
+                )
+            out.append("")
 
     execution = report.execution
     if execution is not None:
@@ -238,6 +256,21 @@ _FIXES = {
         "— it is a harness fault, not a fault in your code."
     ),
 }
+
+
+def _fixes_are_degraded(report: GateReport) -> bool:
+    """True when a model was configured but did not deliver usable fixes.
+
+    Distinguishes "this deployment has no model" — where the template is simply
+    what the report is — from "the model was meant to write this and did not",
+    which the reader is entitled to know.
+    """
+    if report.model_degraded:
+        return True
+    return any(
+        c.id == "report.fixes_grounded" and c.evidence.get("degraded")
+        for c in report.checks
+    )
 
 
 def _required_fixes(failures: list[CheckResult]) -> list[str]:
