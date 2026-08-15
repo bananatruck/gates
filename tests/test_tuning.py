@@ -195,3 +195,85 @@ def test_every_task_declares_keys_the_gate_will_enforce():
     for task in TASKS:
         assert task.expected_keys
         assert all("." in key for key in task.expected_keys)
+
+
+# --------------------------------------------------------------------------- #
+# the ablation: Gate 1 on vs Gate 1 off
+# --------------------------------------------------------------------------- #
+
+CRASH_AFTER_OUTPUT = (
+    "for i in range(60):\n"
+    "    print(f'epoch {i:03d}  loss 1.9243  train_acc 0.4120  val_acc 0.3980')\n"
+    "acc = correct / total\n"
+)
+RECORDS = (
+    "import random\nrandom.seed(0)\nrecord_metadata('seed', 0)\n"
+    "for i in range(60):\n    print(f'epoch {i} loss 1.0')\n"
+    "acc = 408/500\nrecord_result('exp1.test_acc', acc, unit='ratio')\n"
+)
+
+
+def scripted(*replies):
+    state = {"i": 0}
+
+    def fn(prompt, system):
+        i = min(state["i"], len(replies) - 1)
+        state["i"] += 1
+        return replies[i]
+
+    return fn
+
+
+def test_the_ungated_arm_accepts_a_crash_that_printed_past_the_ceiling(tmp_path):
+    """The archived run's shape, reproduced against the real runner.
+
+    The crash marker is appended after the program's own output and the view is
+    sliced to 1,000 characters, so upstream's only failure test never fires.
+    """
+    from rig.ablation import run_ungated
+
+    arm = run_ungated(
+        scripted(CRASH_AFTER_OUTPUT), "task", tmp_path, max_turns=2, timeout_s=60
+    )
+    assert arm.accepted
+    assert arm.accepted_at == 1
+    assert arm.accepted_a_crash == 1
+    assert arm.accepted_without_results == 1
+    assert arm.false_success == 1
+    assert arm.attempts[0].exit_code == 1
+    assert arm.attempts[0].stdout_bytes > 1000
+
+
+def test_the_gated_arm_rejects_it_and_the_engineer_recovers(tmp_path):
+    from rig.ablation import run_gated
+
+    arm = run_gated(
+        scripted(CRASH_AFTER_OUTPUT, RECORDS),
+        "task",
+        ("exp1.test_acc",),
+        tmp_path,
+        max_turns=3,
+        timeout_s=60,
+    )
+    assert arm.accepted
+    assert arm.accepted_at == 2
+    assert arm.false_success == 0
+    assert arm.accepted_a_crash == 0
+    assert "exec.no_uncaught_exception" in arm.attempts[0].failed_checks
+    assert arm.attempts[1].recorded == {"exp1.test_acc": pytest.approx(0.816)}
+
+
+def test_a_short_crash_is_caught_by_both_arms(tmp_path):
+    """The divergence is conditional, not universal.
+
+    A run that dies before printing 1,000 characters leaves the marker inside
+    the slice, and upstream catches it too. Holding this stops the ablation
+    being read as a blanket claim.
+    """
+    from rig.ablation import run_ungated
+
+    arm = run_ungated(
+        scripted("acc = missing_name / 2\n"), "task", tmp_path, max_turns=1, timeout_s=60
+    )
+    assert not arm.accepted
+    assert arm.false_success == 0
