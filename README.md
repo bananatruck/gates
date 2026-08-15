@@ -91,7 +91,6 @@ We benchmarked our verification layer against published scientific ground truth:
 git clone https://github.com/bananatruck/gates.git
 cd gates
 git checkout feature/verification-layer
-pip install python-pptx
 ```
 
 ### 2. Run Gate 2 Strategy Comparison Suite
@@ -132,13 +131,10 @@ python3 run_accuracy_comparison.py
 ```
 .
 ├── README.md                          # Comprehensive project documentation
-├── Presentation.pptx                  # PowerPoint presentation matching template
 ├── benchmark_runner.py                # Gate 2 Option A/B/C/Combined comparison suite
 ├── run_interactive_test.py            # Live interactive test harness
 ├── run_expanded_tests.py              # 12 real-world paper test case runner
 ├── run_accuracy_comparison.py         # Grounding fidelity & accuracy comparison
-├── create_presentation.py             # Script generating standalone slide deck
-├── update_template_presentation.py    # Script updating template PPTX
 ├── gates/
 │   ├── __init__.py
 │   ├── gate1.py                       # Execution Validity Gate (14 checks)
