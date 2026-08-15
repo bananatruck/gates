@@ -14,10 +14,17 @@ import subprocess
 from datetime import date
 from pathlib import Path
 
+import run_tables as rt
+
 HERE = Path(__file__).resolve().parent
 ASSETS = HERE / "assets"
 OUT_HTML = HERE / "GATE1_REPORT.html"
 OUT_PDF = HERE / "GATE1_REPORT.pdf"
+
+RUN_DIR = Path(
+    "/home/kesh/AgentLaboratory-Gemini/ablation_runs/data_efficiency"
+)
+RUN_JSON = RUN_DIR / "ablation.json"
 
 BENCH = Path(
     "/tmp/claude-1000/-home-kesh/976cef29-0afd-479c-a716-6c557e07b6cb"
@@ -54,6 +61,11 @@ img { max-width: 100%; margin: 3mm 0; }
 pre { background: #f7f6f1; padding: 2.5mm 3mm; font-family: 'DejaVu Sans Mono',
       monospace; font-size: 7.6pt; line-height: 1.35; white-space: pre-wrap; }
 .small { font-size: 8pt; color: #52514e; }
+.ok { color: #12805c; font-weight: bold; }
+.bad { color: #c0392b; font-weight: bold; }
+.big { font-size: 15pt; font-weight: bold; color: #2a78d6; }
+.hero { background: #f2f6fc; border: 1px solid #cfe0f5; padding: 3mm 4mm;
+        margin: 3mm 0; }
 """
 
 CHECKS = [
@@ -241,314 +253,261 @@ def img(name: str) -> str:
     return f'<img src="data:image/png;base64,{data}">'
 
 
-def build_html(bench):
+def run_section(run, run_dir):
+    """The measured run: what each arm produced, and whether it holds up."""
+    if not run:
+        return ("<h2>2. The run</h2><p class='small'>No ablation run record "
+                "found. Sections 2-5 are generated from one.</p>")
+
+    g, u = run["arms"]["gated"], run["arms"]["ungated"]
+    gv, uv = g["verification"], u["verification"]
+    g_rate = f"{100 * gv['rate']:.0f}%" if gv["rate"] is not None else "n/a"
+    u_n = len(uv["reported"])
+
+    gated_dir = Path(run_dir) / "gated" / "gate1"
+    ungated_dir = Path(run_dir) / "ungated"
+    acc_g = g["accepted_at"]
+    # If nothing was accepted, the last attempt is still the interesting one --
+    # it is what the ungated path would have shipped.
+    last_g = g["attempts"][-1]["turn"] if g["attempts"] else None
+    show_g = acc_g or last_g
+    snippet_gate = (
+        rt.log_snippet(gated_dir / f"attempt_{show_g:02d}" / "stdout.txt", tail=6)
+        if show_g else "<p class='small'>no attempt produced output</p>"
+    )
+    snippet_ungated = rt.log_snippet(ungated_dir / "attempt_01" / "stdout.txt",
+                                     head=10)
+
+    return f"""<h2>2. The run: a data-efficiency study, with and without Gate 1</h2>
+<p><b>Research question given to the agent:</b> how much labelled data does a
+classifier need? Make a synthetic 3-class dataset, train multinomial logistic
+regression by gradient descent on 25% of the training samples and on all of
+them, and report the two test accuracies and their ratio — three values.</p>
+<p class="small">A tractable proxy for the question asked of large language
+models: training one locally is not possible here, so the same
+scaling-with-data question is put to a classifier the agent can actually
+implement, and this report says so rather than implying otherwise.</p>
+<p class="small"><b>Models.</b> The gates run on a local <code>qwen3:8b</code>,
+as specified. The engineer runs on <code>qwen2.5-coder:7b</code>, and the reason
+is itself a measurement: a reasoning model at this scale spends its whole token
+budget in the reasoning channel and returns <code>finish_reason="length"</code>
+with <i>empty content</i> — reproduced at 2,500, 3,000, 6,000 and 8,000 token
+ceilings, with <code>/no_think</code>, with <code>think=False</code> and with
+<code>chat_template_kwargs</code>, none of which suppressed it through Ollama's
+OpenAI-compatible endpoint. A code model writes the same program in 42 seconds.
+The gate roles are unaffected because their output is short. Both arms use the
+same two models, so neither is advantaged.</p>
+
+<div class="hero">
+<span class="big">{g_rate}</span> of the numbers the Gate&nbsp;1 arm reported
+reproduced when its accepted code was re-executed.
+&nbsp;·&nbsp; <span class="big">{u_n}</span> numbers the ungated arm recorded
+through any contract, so {u_n if u_n else "none"} of what it would hand the
+writer can be checked against an execution at all.
+</div>
+
+{img("accuracy.png")}
+
+<h3>2.1 Did each arm converge, and is what it produced checkable?</h3>
+{rt.accuracy_summary(run)}
+
+<h3>2.2 The numbers themselves</h3>
+{rt.reported_numbers_table(run)}
+
+<h3>2.3 Turn by turn</h3>
+{rt.attempts_table(run)}
+
+<h2>3. Every check that ran</h2>
+<p>Not the catalogue of what Gate 1 <i>could</i> check — the record of what it
+did check, on this run, turn by turn.</p>
+{rt.checks_fired_table(run, "gated")}
+
+<h3>3.1 What the same checks said about the ungated arm</h3>
+<p>The ungated arm is judged by upstream's rule, but every one of its executions
+was also passed through Gate 1 so the two verdicts can be compared on identical
+evidence. Those shadow verdicts:</p>
+{rt.checks_fired_table(run, "ungated")}
+
+<h2>4. The feedback the engineer actually received</h2>
+{rt.feedback_example(run_dir, run)}
+
+<h2>5. The logs</h2>
+{rt.log_locations(run_dir)}
+
+<h3>5.1 With Gate 1 — captured in full, and the values recorded separately</h3>
+{snippet_gate}
+
+<h3>5.2 Without Gate 1 — the same capture, but only the first 1,000 characters
+ever reach the agent</h3>
+{snippet_ungated}
+"""
+
+
+def build_html(bench, run, run_dir):
     today = date.today().isoformat()
     return f"""<html><head><meta charset="utf-8"><title>Gate 1 Report</title>
 <style>{CSS}</style></head><body>
 
 <h1>G.A.T.E.S. — Gate 1</h1>
-<div class="sub">Execution validity for autonomous research agents:
-checks, metrics, runs, and measured impact on Agent Laboratory</div>
+<div class="sub">What it checks, what it measured, and what changed when it was
+switched on</div>
 <div class="meta">Generated {today} &nbsp;·&nbsp; gates @ main &nbsp;·&nbsp;
-247 gate tests, 63 host integration tests &nbsp;·&nbsp; every figure below is a
-recorded measurement or a cited published number</div>
+249 gate tests, 63 host integration tests &nbsp;·&nbsp; every number below is a
+recorded measurement or a cited published figure</div>
 
-<h2>1. What Gate 1 is, and the defect it answers</h2>
-<p>Gate 1 sits between code execution and the reward model in an autonomous
-research scaffold, and answers one question with no model in the path:
-<i>did this code actually run to completion, and were the numbers it reports
-produced by this run rather than inherited, hardcoded, or invented?</i></p>
-
-<p>In the audited scaffold (Agent Laboratory / Agent-Researcher) a single line
-produced both a silent failure and a fabricated paper:</p>
+<h2>1. The defect, in one line of the host scaffold</h2>
 <pre>def execute_code(code_str, timeout=60, MAX_LEN=1000):
     ...
     except Exception as e:
-        output_capture.write(f"[CODE EXECUTION ERROR]: {{str(e)}}\\n")   # appended AFTER the prints
+        output_capture.write(f"[CODE EXECUTION ERROR]: {{str(e)}}\n")   # appended AFTER the prints
     return output_capture.getvalue()[:MAX_LEN]                        # ...then sliced off</pre>
+<p>The writing agent's entire experimental record was 1,000 characters, and the
+crash marker was appended after the program's own output — so on any run that
+printed more than that, the marker fell off the same slice and the solver's only
+crash test never fired.</p>
+<table>
+<tr><th style="width:38%">measured in the archived run</th><th>value</th></tr>
+<tr><td>Reward score on a run raising <code>NameError</code> every attempt</td><td class="bad">0.95 → 0.98 → 1.0</td></tr>
+<tr><td>Test accuracy reported in the paper</td><td>81.60% <span class="small">(never measured)</span></td></tr>
+<tr><td>Speedup reported</td><td>13.61× <span class="small">(never measured)</span></td></tr>
+<tr><td>Ablation collapse reported</td><td>39.20% <span class="small">(never measured)</span></td></tr>
+<tr><td>Archived runs usable of seven</td><td class="bad">1</td></tr>
+</table>
 
-<p>Two consequences follow from the same slice. The writing agent was starved —
-<code>exp_results</code>, the entire experimental record handed to the paper
-writer, was 1,000 characters. And the failure detector was blinded — the crash
-marker is appended <i>after</i> the program's own output, so it fell off the end
-of that same slice, and the solver's only crash test
-(<code>if "[CODE EXECUTION ERROR]" in code_ret</code>) never fired.</p>
+{run_section(run, run_dir)}
 
-<div class="callout">Observed in <code>results/gemini_3_5_flash_run_1/</code>:
-a run raising <code>NameError: name 'hidden_dim' is not defined</code> on every
-attempt was scored <b>0.95 → 0.98 → 1.0</b> by the reward model and written up
-with a results table to two decimals — 81.60% test accuracy, a 13.61× speedup,
-a 39.20% ablation collapse. None of it was measured.</div>
-
-<h2>2. The checks</h2>
+<h2>6. The full check inventory</h2>
 <p>Twenty deterministic checks in six families, plus one model-assisted check.
-Severity decides the verdict: the run fails if and only if a <span class="fail">FAIL</span>
-check fails. <span class="warn">WARN</span> and <span class="info">INFO</span>
-are reported and propagate into the evidence bundle, and can never block.</p>
-
+The run fails if and only if a <span class="fail">FAIL</span> check fails;
+<span class="warn">WARN</span> and <span class="info">INFO</span> are reported
+and can never change a verdict.</p>
 {img("checks.png")}
 {checks_table()}
 
 <div class="callout"><b>Why the severity split is load-bearing.</b> The LLM layer
-is a required component of Gate 1 — the feedback report is the loop's return path
-to the ML engineer, and no template writes “bind <code>hidden_dim</code> before
-use, or pass it into <code>GCN.__init__</code>”. It coexists with a model-free
-verdict because of <i>where</i> it sits and <i>what severity</i> it can emit:
-model findings are WARN by construction, and report generation runs after
-<code>decide()</code> has already fixed the verdict. A test parses the module's
-AST to assert <code>Severity.FAIL</code> never appears in an expression there.</div>
+is a required part of Gate 1 — the feedback report is the loop's return path to
+the ML engineer, and no template writes “bind <code>hidden_dim</code> before use,
+or pass it into <code>GCN.__init__</code>”. It coexists with a model-free verdict
+because of where it sits and what severity it can emit: model findings are WARN
+by construction, and report generation runs after <code>decide()</code> has
+already fixed the verdict. A test parses the module's AST to assert
+<code>Severity.FAIL</code> never appears in an expression there.</div>
 
-<h2>3. The metrics and artifacts Gate 1 produces</h2>
-<p>Per attempt, under <code>&lt;research_dir&gt;/gate_artifacts/gate1/attempt_NN/</code>:</p>
+<h2>7. Metrics the gate records per attempt</h2>
 <table>
-<tr><th style="width:22%">artifact</th><th>contents</th></tr>
-<tr><td class="mono">experiment.py</td><td>exactly what ran</td></tr>
-<tr><td class="mono">stdout.txt / stderr.txt</td><td>complete, untruncated, separated</td></tr>
-<tr><td class="mono">results.json</td><td>declared metrics with call-site provenance and the full observation history per key</td></tr>
-<tr><td class="mono">registry.json</td><td>the citable value registry: typed values, trace ids, provenance chains, chain-integrity rate</td></tr>
-<tr><td class="mono">gate1_report.json</td><td>verdict and every check, with evidence; model budget; generated fixes</td></tr>
-<tr><td class="mono">divergence.jsonl</td><td>one line per attempt pairing the gate verdict with the reward score</td></tr>
-</table>
-
-<h3>Reported metrics</h3>
-<table>
-<tr><th style="width:26%">metric</th><th>definition</th></tr>
-<tr><td class="mono">trace_id</td><td><code>sha256(run_id, key, lineno)</code> — binds one value to one execution. Two runs of identical source produce different trace ids, which is what makes a backfilled number detectable.</td></tr>
-<tr><td class="mono">chain_integrity</td><td>fraction of recorded values whose provenance chain (task → command → log → value) is complete, with the missing link named per key.</td></tr>
+<tr><th style="width:24%">metric</th><th>definition</th></tr>
+<tr><td class="mono">trace_id</td><td><code>sha256(run_id, key, lineno)</code> — binds one value to one execution. Two runs of identical source give different trace ids, which is what makes a backfilled number detectable.</td></tr>
+<tr><td class="mono">chain_integrity</td><td>fraction of values whose provenance chain (task → command → log → value) is complete, with the missing link named per key.</td></tr>
 <tr><td class="mono">citable</td><td>false on a rejected run's registry, so a consumer that ignores the verdict still cannot cite it.</td></tr>
 <tr><td class="mono">arg_kind</td><td><code>computed</code> or <code>literal</code>, from static analysis of the <code>record_result</code> call site.</td></tr>
-<tr><td class="mono">call_count</td><td>how many times a key was recorded, with the value span.</td></tr>
-<tr><td class="mono">model.calls / degraded</td><td>what the LLM layer spent, and whether any call failed — so a thinner report is never mistaken for a complete one.</td></tr>
+<tr><td class="mono">call_count</td><td>times a key was recorded, with the value span — a best-epoch number reported as final is visible.</td></tr>
+<tr><td class="mono">code_sha256</td><td>hashed by the child that ran it and compared to what the parent wrote.</td></tr>
+<tr><td class="mono">model.calls / degraded</td><td>what the LLM layer spent, and whether any call failed, so a thinner report is never mistaken for a complete one.</td></tr>
 </table>
 
-<h2>4. Logs: what the gate does with them</h2>
-<p>The capture is written to disk in full and never truncated. Two things then
-read it: a precision-tuned pattern set, and — for the lines those patterns cannot
-reach — the model.</p>
-
-{img("compression.png")}
-
-<p>Before the model reads anything, the log is collapsed to its distinct shapes.
-Experiment logs are overwhelmingly repetitive; measured on a realistic capture,
-<b>203 non-blank lines reduced to four distinct shapes</b>. The collapse is
-lossless in distinct content — every shape survives with its first real line
-number, so nothing a scanner could have flagged disappears, and recall is not
-traded for the saving. Two details do real work: <code>nan</code> and
-<code>inf</code> are not digits, so <code>loss nan</code> survives as its own
-shape rather than being absorbed into the epoch group; and when a group's values
-drift, the last member is kept beside the first.</p>
-
-<h3>Scanner accuracy on the labelled corpus</h3>
+<h2>8. The log scanner, measured</h2>
 <p>68 labelled lines, 34 of them error signals, 16 of those outside anything a
-regex was going to reach. Sixteen lines are taken verbatim from the archived run.
-The corpus is self-checking: every entry naming a signal must be caught by that
-signal, and every entry labelled a gap must not be caught at all.</p>
-
+regex was going to reach. Sixteen lines come verbatim from the archived run.</p>
 {img("scanner.png")}
 <table>
 <tr><th>scanner</th><th>precision</th><th>95% CI</th><th>recall</th><th>95% CI</th></tr>
 {scanner_rows(bench)}
 </table>
 {verdict_paragraph(bench)}
+{img("compression.png")}
+<p>Before the model reads anything, the log is collapsed to its distinct shapes:
+<b>203 non-blank lines to four</b>, a 95.9% smaller prompt. The collapse is
+lossless in distinct content — every shape survives with its first real line
+number, so nothing a scanner could have flagged disappears.</p>
 
-<div class="callout">The four hard negatives that decide this are drawn from the
-archived run itself: TensorFlow's <code>Unable to register cuFFT factory</code>
-is logged at E level and mentions CUDA; oneDNN's banner contains the words
-“numerical” and “errors”. Both appear on every healthy run that imports
-TensorFlow.
-<br><br><b>What a false positive here actually costs, stated precisely.</b> These
-findings are WARN, and <code>decide()</code> fails only on blocking checks, so a
-spurious one cannot force a rewrite. What it does is put a non-issue into the
-“these must be stated in the report, not omitted” section the writer receives —
-so the manuscript discloses a problem that never happened. That is a credibility
-cost rather than a compute one, and this project's own earlier wording (“costs
-the agent a rewrite”) overstated it. The correction has been made in the code
-comments as well as here.</div>
-
-<h2>5. The runs performed</h2>
-<table>
-<tr><th style="width:20%">run</th><th style="width:16%">model</th><th>result</th></tr>
-<tr><td>Loop rig, 5 scenarios</td><td>none (scripted)</td>
-<td>All five behave exactly as documented. Gate 1 rejects 6 engineer turns; the upstream 1,000-character detector would have accepted 3 of them.</td></tr>
-<tr><td>End-to-end solver</td><td>scripted</td>
-<td>Full gated path exercised — <code>process_command</code>, <code>Replace.parse_command</code>, <code>gated_execute</code>, the feedback loop, <code>get_score</code>, the ledger. Two defects found.</td></tr>
-<tr><td>Live MLE-solver phase</td><td>gemini-3.5-flash</td>
-<td>415s, 5 executions. Gate 1 caught a genuine <code>NameError</code> in model-written code; the engineer recovered on the next turn. Two defects found.</td></tr>
-<tr><td>Live ablation</td><td>qwen3:8b (local)</td>
-<td>658s. Gate on converged in 2 turns; gate off never converged in 3. Two defects found.</td></tr>
-<tr><td>Corpus benchmark</td><td>qwen3:8b (local)</td>
-<td>68 labelled lines &times; 2 prompt variants. Numbers in §4.</td></tr>
-</table>
-
-<h3>The divergence is conditional, and the live runs showed it</h3>
-<div class="warnbox">In the live Gemini run the two rejected attempts were scored
-<b>0.15 and 0.2</b> by the reward model — not 1.0. Both crashed <i>before printing
-anything</i>, so the crash marker sat at index 0 of the 1,000-character view and
-upstream's detector would have caught them too. The divergence the archived run
-exhibits is real but requires an experiment that prints past the ceiling before it
-dies. That is exactly what the channel-fidelity argument claims, and the honest
-form of the claim is narrower than “the reward model scores crashed runs 1.0”.</div>
-
-<h2>6. Impact on Agent Laboratory</h2>
-<h3>6.1 What the writing agent receives</h3>
-<table>
-<tr><th style="width:50%">before</th><th>after</th></tr>
-<tr><td>1,000 characters of stdout, prefix-sliced, with the crash marker
-(if any) already fallen off the end.</td>
-<td>A verified registry of typed values with trace ids and provenance chains,
-run metadata, every WARN that must be stated rather than omitted, and the full
-untruncated capture on disk with a generous inline budget.</td></tr>
-<tr><td>No way to distinguish a measured number from an invented one.</td>
-<td><code>results.values_computed</code> rejects any value that is a source
-literal at its call site.</td></tr>
-<tr><td>A crashed run reaching the writer scored 1.0.</td>
-<td>A run that never passed cannot reach the writer at all —
-<code>GateFailure</code> ends the phase.</td></tr>
-</table>
-
-<h3>6.2 The ablation: gate on versus gate off</h3>
-<p>Same task, same model, same engineer; the arms differ in what decides that an
-experiment succeeded, and in the width of the channel the engineer sees.</p>
-{img("ablation.png")}
-<pre>  ARM       TURNS  ACCEPTED  AT TURN  CRASH OK  NO RESULTS OK  FALSE SUCCESS
-  gated         2      True        2         0              0              0
-  ungated       3     False        —         0              0              0</pre>
-<p><b>false_success was 0 in this run.</b> Every ungated failure crashed with zero
-bytes of stdout, so the marker stayed inside the slice and upstream's rule caught
-them all — the condition for divergence was not met. What the run does show is a
-convergence difference: the gated engineer received a report naming
-<code>static.syntax_valid</code> and fixed it; the ungated engineer received
-1,000 characters of raw output and failed three times. The gated arm's first turn
-also cost <i>zero compute</i> — the static tier rejected a syntax error before
-execution.</p>
-<div class="warnbox"><b>Read this at its true size.</b> n = 1, temperature 0, so
-re-running reproduces it exactly rather than sampling. It is suggestive of a
-convergence difference, not a rate. The ungated arm also does not receive the
-results-contract instructions (faithful — upstream has none), which makes
-“accepted without results” true of it by construction; the harness has a
-<code>--same-instructions</code> mode that isolates the decision rule instead,
-and any table should say which mode produced it.</div>
-
-<h3>6.3 What the layer costs</h3>
+<h2>9. What the layer costs</h2>
 {img("callsplit.png")}
 <p>Measured over five executions of one solver phase: Gate 1's own model calls
-are <b>a third of the calls but a sixth of the tokens</b>, because the digest
-keeps its prompts small while the engineer's carry code, history and the evidence
-bundle. That asymmetry is why the gate can run on a small local model —
-<code>qwen3:8b</code> on an 8 GB laptop GPU, 5.5 GB resident, ~16s per call,
-zero marginal cost — while the engineer stays on the stronger model.</p>
-<p>Putting the <i>engineer</i> on a weak model is the tempting economy and the
-wrong one: a weaker engineer fails Gate 1 more often, and every rejection costs a
-fixes call, a shadow-reward call and another engineer turn.</p>
+are <b>a third of the calls but a sixth of the tokens</b>. That is why the gate
+can run on <code>qwen3:8b</code> on an 8 GB laptop GPU — 5.5 GB resident, ~16s a
+call, zero marginal cost — while the engineer stays on a stronger model. Putting
+the <i>engineer</i> on a weak model is the tempting economy and the wrong one: it
+fails the gate more often, and every rejection costs a fixes call, a
+shadow-reward call and another turn.</p>
 
-<h2>7. Validity metrics against the published benchmarks</h2>
+<h2>10. Defects the runs found</h2>
+<p>Nine, fixed. Four appeared only against a real model, and two of those only
+against the weaker one.</p>
+<table>
+<tr><th style="width:32%">defect</th><th style="width:15%">found by</th><th>consequence</th></tr>
+<tr><td>Unparseable reply executed an empty experiment</td><td>scripted e2e</td><td>Gate reported “you never called record_result()” when the command had not parsed</td></tr>
+<tr><td>Evidence bundle showed warning counts without evidence</td><td>scripted e2e</td><td>The writer was told to disclose warnings it could not see</td></tr>
+<tr><td>Fallback note reported an outage that had not happened</td><td>scripted e2e</td><td>Three different situations under one message</td></tr>
+<tr><td>Prose in backticks parsed as code</td><td>gemini-3.5-flash</td><td>A good fix discarded over <code>['so','that','it','when','executing']</code></td></tr>
+<tr><td>Prompt leaked the gate's artifact paths</td><td>gemini-3.5-flash</td><td>Told the engineer to edit <code>/home/…/attempt_03/experiment.py</code></td></tr>
+<tr><td>Scan prompt offered two numbers per row</td><td>qwen3:8b</td><td>The weaker model reported the file line, not the row index; a correct finding was discarded</td></tr>
+<tr><td>Output cap unreachable for most backends</td><td>qwen3:8b</td><td>One call generated <b>21,858 tokens</b> for an answer whose correct form is <code>[]</code></td></tr>
+<tr><td>Rate-limit retry killed the phase in 25s</td><td>gemini-3.5-flash</td><td>Flat 5s × 5 against a per-minute meter</td></tr>
+<tr><td>Five config keys reached nothing</td><td>integration audit</td><td>A config declaring a lit-review backend did not get one</td></tr>
+</table>
+
+<h2>11. This run, scored against MLR-Bench's taxonomy</h2>
+<p>Our run, their categories. This is <b>not</b> a run of MLR-Bench — that needs
+their harness and their task set — but the first of their four classes is
+measurable on any run, and here it is measured rather than asserted.</p>
+{rt.taxonomy_table(run) if run else "<p class='small'>No run record.</p>"}
+
+<h2>12. Where this sits against the published benchmarks</h2>
 {img("literature.png")}
 <table>
-<tr><th style="width:22%">source</th><th style="width:34%">what it measures</th><th>reported</th></tr>
+<tr><th style="width:20%">source</th><th style="width:32%">what it measures</th><th>reported</th></tr>
 <tr><td>MLR-Bench<br><span class="small">arXiv 2505.19955</span></td>
-<td>Four fact-based hallucination types in AI-generated papers: faked
-experimental results, hallucinated methodology, incorrect citations,
-mathematical errors.</td>
-<td>Faked results and hallucinated methodology each appear in more than half of
-10 tasks; <b>almost all papers from AI Scientist V2 contain both</b>. Nonexistent
-citations in <b>50%</b> of MLR-Agent tasks. Case study: the coding agent failed
-to run the experiment and generated simulated results instead.</td></tr>
+<td>Four fact-based hallucination types in AI-generated papers.</td>
+<td>Faked results and hallucinated methodology each in more than half of 10 tasks;
+<b>almost all AI Scientist V2 papers contain both</b>. Nonexistent citations in
+<b>50%</b> of MLR-Agent tasks.</td></tr>
 <tr><td>BadScientist<br><span class="small">arXiv 2510.18003</span></td>
-<td>Whether fabricated papers requiring no real experiments can pass multi-model
-LLM review.</td>
-<td>Fabricated papers accepted at <b>up to 82.0%</b>. Detection accuracy
-“barely exceeding random chance”. Reviewers flag integrity concerns yet assign
-acceptance-level scores.</td></tr>
+<td>Whether fabricated papers pass multi-model LLM review.</td>
+<td>Accepted at <b>up to 82.0%</b>; detection “barely exceeding random chance”.</td></tr>
 <tr><td>CORE-Bench<br><span class="small">arXiv 2409.11363</span></td>
-<td>Computational reproducibility of published work by agents.</td>
-<td>Best agent <b>21%</b> on the hardest level. Correctness judged against a
-<b>95% prediction interval</b> over three manual reproductions — the tolerance
-methodology Gate 2 adopts rather than choosing a band by hand.</td></tr>
+<td>Computational reproducibility by agents.</td>
+<td>Best agent <b>21%</b> on the hardest level; correctness judged against a
+<b>95% prediction interval</b> over three manual reproductions.</td></tr>
 <tr><td>PaperBench<br><span class="small">arXiv 2504.01848</span></td>
 <td>Replicating AI research end to end.</td>
-<td>Best agent <b>21.0%</b> average replication score; ML PhDs <b>41.4%</b> best-of-3
-after 48 hours.</td></tr>
+<td>Best agent <b>21.0%</b>; ML PhDs <b>41.4%</b> best-of-3 after 48 hours.</td></tr>
 </table>
+<p>BadScientist is the reason Gate 1's verdict consults no model: if LLM
+reviewers detect fabrication at barely above chance, a validity layer built on
+model judgement inherits that ceiling.</p>
+<div class="callout"><b>Naming.</b> This project's design documents paraphrase
+MLR-Bench's taxonomy. Its published names are <i>faked experimental results,
+hallucinated methodology, incorrect citations, mathematical errors</i>. “Silent
+failure scored as success” is a cause of the first in their scheme, not a fifth
+class, and any “eliminates N of four” claim should say so.</div>
 
-<h3>Where Gate 1 sits against these</h3>
-<p>MLR-Bench's first class — faked experimental results, the most prevalent one —
-is the class Gate 1 addresses, and it does so upstream of every reviewed
-approach: before the reward model, before interpretation, before writing.
-BadScientist's finding is the reason a checking <i>agent</i> was rejected as the
-mechanism: if LLM reviewers detect fabrication at barely above chance, a validity
-layer built on model judgement inherits that ceiling. Gate 1's verdict therefore
-consults no model at all.</p>
-<div class="callout"><b>The honest mapping.</b> This project's design documents
-describe the MLR-Bench classes in paraphrase (“fabricated numeric results”,
-“silent failure scored as success”). MLR-Bench's published names are <i>faked
-experimental results, hallucinated methodology, incorrect citations, mathematical
-errors</i>. Any claim of the form “eliminates N of the four MLR-Bench classes”
-should use the published taxonomy or state the mapping explicitly — silent
-failure scored as success is a <i>cause</i> of faked experimental results in
-their scheme, not a fifth class.</div>
-
-<h2>8. What running it actually found</h2>
-<p>Nine defects were found and fixed during integration and live testing. Four
-appeared only against a real model, and two of those only against the
-<i>weaker</i> model — which is the argument for testing on both.</p>
-<table>
-<tr><th style="width:34%">defect</th><th style="width:16%">found by</th><th>why it mattered</th></tr>
-<tr><td>Unparseable reply executed an empty experiment</td><td>scripted e2e</td>
-<td>Gate 1 reported “you never called record_result()” when the real fault was that the command did not parse — the same misdiagnosis already fixed once on the timeout path.</td></tr>
-<tr><td>Evidence bundle showed warning counts without the evidence</td><td>scripted e2e</td>
-<td>The writer was told to disclose warnings it could not see — this layer's own failure mode, reproduced at its exit.</td></tr>
-<tr><td>Fallback note reported an outage that had not happened</td><td>scripted e2e</td>
-<td>Conflated “no model configured”, “model unreachable” and “model output rejected as ungrounded”.</td></tr>
-<tr><td>Prose in backticks parsed as code</td><td>gemini-3.5-flash</td>
-<td>A good fix discarded over <code>['so','that','it','when','executing']</code>.</td></tr>
-<tr><td>Prompt leaked the gate's artifact paths</td><td>gemini-3.5-flash</td>
-<td>Produced “define <code>n_classes</code> … in <code>/home/…/attempt_03/experiment.py</code>” — grounded, because the path is in the evidence, and useless.</td></tr>
-<tr><td>Scan prompt offered two numbers per row</td><td>qwen3:8b</td>
-<td>The weaker model reported the file line instead of the row index; grounding discarded it, losing a correct finding to prompt ambiguity.</td></tr>
-<tr><td>Output cap was unreachable for most backends</td><td>qwen3:8b</td>
-<td>Capped only when <code>api_key == "ollama"</code>. One call generated <b>21,858 tokens</b> — fourteen minutes for an answer whose correct form is <code>[]</code>.</td></tr>
-<tr><td>Rate-limit retry killed the phase in 25s</td><td>gemini-3.5-flash</td>
-<td>Flat 5s × 5 against a per-minute meter. Now exponential, bounded by a 15-minute per-process budget so an exhausted daily quota fails fast instead of stalling.</td></tr>
-<tr><td>Five config keys reached nothing</td><td>integration audit</td>
-<td>A config declaring a separate literature-review backend did not get one — the same defect class the layer exists to catch, one level up.</td></tr>
-</table>
-
-<h2>9. What Gate 1 does not claim</h2>
+<h2>13. What Gate 1 does not claim</h2>
 <ul>
-<li><b>It does not check whether a result is plausible.</b> A correctly measured,
-correctly recorded, causally traced number can still be scientifically wrong.
-Comparing against the literature is Gate 2.</li>
-<li><b>It does not read the manuscript.</b> Whether a prose claim is supported by
-a registry value is Gate 3.</li>
-<li><b>The static tier is conservative on purpose.</b> Module-level
-use-before-assignment is not reported, because deciding it needs ordering
-analysis and would produce false positives. The runtime tier catches what the
-static tier declines to claim, one execution later.</li>
-<li><b>The log scanner's recall is bounded by what it was shown</b>, and the
-number of lines examined is recorded so the claim cannot exceed the evidence.</li>
-<li><b>One requirement is partial.</b> Dropping a failed replicate from an
-averaged metric is visible when each replicate is recorded, but a mean computed
-inside the experiment over a silently shortened list arrives as one value that
-Gate 1 cannot see behind. Closing it needs a replicate contract checked against
-the plan's declared seed count, which is Gate 2's.</li>
-<li><b>n is still 1 for the headline archive comparison.</b> Five of seven
-archived runs died on a CLI defect (now fixed); the re-run has not been
-performed, and no rate should be quoted from a single run.</li>
+<li>It does not check whether a result is <i>plausible</i> — that is Gate 2.</li>
+<li>It does not read the manuscript — that is Gate 3.</li>
+<li>The static tier is conservative on purpose; the runtime tier catches what it
+declines to claim, one execution later.</li>
+<li>The scanner's recall is bounded by the lines it was shown, and that count is
+recorded so the claim cannot exceed the evidence.</li>
+<li>A mean computed inside the experiment over a silently shortened list arrives
+as one value the gate cannot see behind.</li>
+<li>The ablation is <b>n = 1 at temperature 0</b>. It shows what happened on one
+task with one model; it is not a rate.</li>
+<li>n is still 1 for the archived-run comparison — the re-run has not been done.</li>
 </ul>
 
-<h2>10. Reproducing everything in this report</h2>
+<h2>14. Reproducing this</h2>
 <pre>./tools_local_model.sh start                  # local qwen3:8b, no API key
-python -m rig.gate1_loop                      # the five loop scenarios
+python tools_ablation.py --model qwen3-8b-local --turns 4
 python -m rig.corpus                          # deterministic scanner baseline
-python tools_ablation.py                      # gate on vs gate off
-python tools_live_gate1.py                    # one live solver phase
+python -m rig.gate1_loop                      # the five loop scenarios
 python reports/make_charts.py && python reports/make_report.py
-pytest                                        # 247 gate tests</pre>
+python reports/make_deck.py
+pytest                                        # 249 gate tests</pre>
 
-<p class="small">Sources: MLR-Bench (arXiv 2505.19955), BadScientist (arXiv
-2510.18003), CORE-Bench (arXiv 2409.11363), PaperBench (arXiv 2504.01848),
-RE-Bench (arXiv 2411.15114), AutoResearchClaw (arXiv 2605.20025), ScientistOne
-(arXiv 2605.26340), SAGE (arXiv 2606.31478).</p>
+<p class="small">Sources: MLR-Bench (2505.19955), BadScientist (2510.18003),
+CORE-Bench (2409.11363), PaperBench (2504.01848), RE-Bench (2411.15114),
+AutoResearchClaw (2605.20025), ScientistOne (2605.26340), SAGE (2606.31478).</p>
 
 </body></html>"""
 
@@ -557,7 +516,10 @@ def main():
     bench = json.loads(BENCH.read_text()) if BENCH.exists() else None
     if bench is None:
         print("  WARNING: no bench2.json — model-tier numbers will be omitted")
-    OUT_HTML.write_text(build_html(bench), encoding="utf-8")
+    run = json.loads(RUN_JSON.read_text()) if RUN_JSON.exists() else None
+    if run is None:
+        print(f"  WARNING: no {RUN_JSON} — the run sections will be empty")
+    OUT_HTML.write_text(build_html(bench, run, RUN_DIR), encoding="utf-8")
     print(f"  wrote {OUT_HTML.name}")
     subprocess.run(
         ["soffice", "--headless", "--convert-to", "pdf", "--outdir", str(HERE),

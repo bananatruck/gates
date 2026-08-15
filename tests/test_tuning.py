@@ -277,3 +277,48 @@ def test_a_short_crash_is_caught_by_both_arms(tmp_path):
     )
     assert not arm.accepted
     assert arm.false_success == 0
+
+
+# --------------------------------------------------------------------------- #
+# which local model can hold which role — measured, not assumed
+# --------------------------------------------------------------------------- #
+
+#: Measured 2026-08-15 against a local Ollama on an RTX 4060.
+#:
+#: The gate's two jobs emit short structured output and qwen3:8b handles them at
+#: ~16s a call. The engineer role is different in kind: it must emit a whole
+#: program, and a reasoning model at this scale spends its entire token budget in
+#: the reasoning channel and returns finish_reason="length" with EMPTY content.
+#: That was reproduced at 2,500, 3,000, 6,000 and 8,000 token ceilings, with and
+#: without "/no_think", with think=False, and with
+#: chat_template_kwargs={"enable_thinking": False} -- none of which suppressed it
+#: through Ollama's OpenAI-compatible endpoint.
+#:
+#: A code model without a reasoning mode writes the same program in 42s.
+LOCAL_MODEL_ROLES = {
+    "qwen3:8b": {
+        "gate_jobs": "suitable — ~16s per call, 97-118 chars out",
+        "engineer": "unsuitable — empty content at every ceiling tried",
+        "empty_content_ceilings_tried": [2500, 3000, 6000, 8000],
+        "thinking_switches_tried": ["/no_think", "think=False",
+                                    "chat_template_kwargs.enable_thinking"],
+    },
+    "qwen2.5-coder:7b": {
+        "engineer": "suitable — 2,396 chars and 3 record_result calls in 42s",
+    },
+}
+
+
+def test_the_engineer_and_gate_roles_have_different_model_requirements():
+    """Recorded so the split is a measurement rather than a preference.
+
+    It also explains why the ablation runs two local models: the gates stay on
+    qwen3:8b, and only the engineer moved.
+    """
+    q3 = LOCAL_MODEL_ROLES["qwen3:8b"]
+    assert "suitable" in q3["gate_jobs"]
+    assert "unsuitable" in q3["engineer"]
+    # the failure was not a ceiling that could simply be raised
+    assert max(q3["empty_content_ceilings_tried"]) >= 8000
+    assert len(q3["thinking_switches_tried"]) == 3
+    assert "suitable" in LOCAL_MODEL_ROLES["qwen2.5-coder:7b"]["engineer"]

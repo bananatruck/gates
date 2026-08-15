@@ -56,6 +56,9 @@ class Attempt:
     #: What the other arm would have decided about this same execution.
     counterpart_would_accept: bool | None = None
     failed_checks: list[str] = field(default_factory=list)
+    #: Every check that ran, with its outcome and severity — the full record of
+    #: what the gate actually did on this attempt, not just what went wrong.
+    all_checks: list[dict] = field(default_factory=list)
     recorded: dict[str, Any] = field(default_factory=dict)
     stdout_bytes: int = 0
     exit_code: int | None = None
@@ -63,10 +66,37 @@ class Attempt:
 
 
 @dataclass
+class Verification:
+    """Re-executing what an arm accepted, and comparing what comes back.
+
+    The most direct answer to "how accurate is the report this arm produced":
+    run the accepted code again and see whether the numbers it reported are the
+    numbers it produces. An arm with nothing recorded has nothing to verify,
+    which is itself the finding.
+    """
+
+    ran: bool = False
+    reason: str = ""
+    reported: dict[str, Any] = field(default_factory=dict)
+    reproduced: dict[str, Any] = field(default_factory=dict)
+    matched: list[str] = field(default_factory=list)
+    mismatched: list[str] = field(default_factory=list)
+
+    @property
+    def verifiable(self) -> int:
+        return len(self.matched) + len(self.mismatched)
+
+    @property
+    def rate(self) -> float | None:
+        return len(self.matched) / self.verifiable if self.verifiable else None
+
+
+@dataclass
 class ArmResult:
     arm: str
     attempts: list[Attempt] = field(default_factory=list)
     accepted_at: int | None = None
+    verification: Verification = field(default_factory=Verification)
 
     @property
     def turns(self) -> int:
@@ -173,6 +203,11 @@ def run_gated(
             code=code,
             accepted=report.passed,
             failed_checks=sorted(c.id for c in report.failed_checks()),
+            all_checks=[
+                {"id": c.id, "severity": c.severity.value, "passed": c.passed,
+                 "message": c.message}
+                for c in report.checks
+            ],
             recorded={k: m.value for k, m in report.metrics().items()},
             stdout_bytes=execution.stdout_bytes if execution else 0,
             exit_code=execution.exit_code if execution else None,
@@ -231,6 +266,11 @@ def run_ungated(
             accepted=upstream_ok,
             counterpart_would_accept=gate_report.passed,
             failed_checks=sorted(c.id for c in gate_report.failed_checks()),
+            all_checks=[
+                {"id": c.id, "severity": c.severity.value, "passed": c.passed,
+                 "message": c.message}
+                for c in gate_report.checks
+            ],
             recorded={k: m.value for k, m in gate_report.metrics().items()},
             stdout_bytes=execution.stdout_bytes,
             exit_code=execution.exit_code,
@@ -242,6 +282,51 @@ def run_ungated(
             break
         feedback = view  # upstream hands back exactly what it saw
     return result
+
+
+def verify(arm: ArmResult, workdir: Path, *, timeout_s: int = 180) -> Verification:
+    """Re-run what the arm accepted and compare the numbers it comes back with.
+
+    Tolerance is exact for values the experiment computes deterministically and
+    relative for anything whose key names a duration, because wallclock cannot
+    be compared for equality and pretending otherwise would manufacture
+    mismatches.
+    """
+    v = Verification()
+    if not arm.accepted:
+        v.reason = "nothing was accepted, so there is nothing to verify"
+        return v
+    accepted = arm.attempts[arm.accepted_at - 1]
+    v.reported = dict(accepted.recorded)
+    if not v.reported:
+        v.reason = ("the accepted run recorded no values, so none of the numbers "
+                    "it would hand the writer can be checked against an execution")
+        return v
+
+    execution = run_experiment(
+        accepted.code, workdir / "verify", timeout_s=timeout_s
+    )
+    v.ran = True
+    if execution.exit_code != 0:
+        v.reason = f"re-execution exited {execution.exit_code}"
+        return v
+    v.reproduced = {k: m.value for k, m in execution.metrics.items()}
+
+    for key, reported in v.reported.items():
+        again = v.reproduced.get(key)
+        if again is None:
+            v.mismatched.append(key)
+            continue
+        timing = any(t in key.lower() for t in ("_s", "time", "wallclock", "sec"))
+        try:
+            if timing:
+                ok = abs(again - reported) <= max(0.5 * abs(reported), 0.05)
+            else:
+                ok = again == reported
+        except TypeError:
+            ok = again == reported
+        (v.matched if ok else v.mismatched).append(key)
+    return v
 
 
 def render(gated: ArmResult, ungated: ArmResult) -> str:

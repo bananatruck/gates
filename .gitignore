@@ -10,3 +10,6 @@ gate_artifacts/
 
 # report build intermediates
 reports/GATE1_REPORT.html
+
+# libreoffice lock files
+.~lock.*#

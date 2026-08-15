@@ -20,6 +20,11 @@ HERE = Path(__file__).resolve().parent
 ASSETS = HERE / "assets"
 OUT = HERE / "GATE1_DECK.pptx"
 
+RUN_JSON = Path(
+    "/home/kesh/AgentLaboratory-Gemini/ablation_runs/data_efficiency/ablation.json"
+)
+RUN_DIR = RUN_JSON.parent
+
 BENCH = Path(
     "/tmp/claude-1000/-home-kesh/976cef29-0afd-479c-a716-6c557e07b6cb"
     "/scratchpad/bench2.json"
@@ -126,10 +131,194 @@ def picture(slide, name, x, y, w, max_h=None):
     slide.shapes.add_picture(str(p), x, y, width=w, height=height)
 
 
+
+
+def _table(slide, x, y, w, rows, col_w, header=True, size=11, rh=Inches(0.34)):
+    """A real table, because a claim about numbers should show the numbers."""
+    from pptx.util import Inches as I
+
+    n_rows, n_cols = len(rows), len(rows[0])
+    shape = slide.shapes.add_table(n_rows, n_cols, x, y, w, rh * n_rows)
+    tbl = shape.table
+    for j, cw in enumerate(col_w):
+        tbl.columns[j].width = cw
+    for i, row in enumerate(rows):
+        for j, cell_text in enumerate(row):
+            cell = tbl.cell(i, j)
+            cell.text = str(cell_text)
+            para = cell.text_frame.paragraphs[0]
+            para.font.size = Pt(size)
+            para.font.name = "DejaVu Sans"
+            para.font.bold = header and i == 0
+            para.font.color.rgb = INK if (header and i == 0) else INK2
+            cell.fill.solid()
+            cell.fill.fore_color.rgb = PANEL if (header and i == 0) else SURFACE
+    return shape
+
+
+def _slide_run(prs, run):
+    s = blank(prs)
+    header(s, "the run", "Data efficiency, with and without Gate 1")
+    text(s, Inches(0.6), Inches(1.55), Inches(12.1), Inches(0.9),
+         [("Question given to the agent: how much labelled data does a classifier "
+           "actually need? Report test accuracy at 5/10/25/50/100% of the training "
+           "pool, the smallest fraction reaching 95% of full-data accuracy, and the "
+           "training wallclock — seven values.", 13, False, INK2),
+          ("Engineer and gate both on a local qwen3:8b. The arms differ only in what "
+           "decides that an experiment succeeded.", 11, False, MUTED)])
+
+    g, u = run["arms"]["gated"], run["arms"]["ungated"]
+    gv, uv = g["verification"], u["verification"]
+    rows = [["", "with Gate 1", "without Gate 1"],
+            ["accepted a run", "yes" if g["accepted"] else "no",
+             "yes" if u["accepted"] else "no"],
+            ["turns used", g["turns"], u["turns"]],
+            ["numbers reported", len(gv["reported"]), len(uv["reported"])],
+            ["numbers checkable against an execution",
+             len(gv["matched"]) + len(gv["mismatched"]),
+             len(uv["matched"]) + len(uv["mismatched"])],
+            ["reproduced on re-execution", len(gv["matched"]), len(uv["matched"])]]
+    _table(s, Inches(0.6), Inches(3.0), Inches(12.1), rows,
+           [Inches(6.1), Inches(3.0), Inches(3.0)], size=13, rh=Inches(0.46))
+
+    rate = f"{100 * gv['rate']:.0f}%" if gv["rate"] is not None else "n/a"
+    stat(s, Inches(0.6), Inches(6.0), Inches(4.0), rate,
+         "of the Gate 1 arm's numbers reproduced when its code was re-run", BLUE)
+    stat(s, Inches(4.9), Inches(6.0), Inches(4.0), str(len(uv["reported"])),
+         "numbers the ungated arm recorded through any contract", ORANGE)
+    stat(s, Inches(9.2), Inches(6.0), Inches(3.5),
+         str(len(gv["matched"]) + len(gv["mismatched"])),
+         "of the gated arm's numbers are checkable at all", BLUE)
+
+
+def _slide_accuracy(prs, run):
+    s = blank(prs)
+    header(s, "the two reports", "What each arm would hand the writing agent")
+    gv = run["arms"]["gated"]["verification"]
+    uv = run["arms"]["ungated"]["verification"]
+    keys = sorted(set(gv["reported"]) | set(uv["reported"]))[:9]
+    rows = [["metric", "Gate 1: reported", "re-executed", "verdict",
+             "no gate: reported"]]
+    for k in keys:
+        rep = gv["reported"].get(k)
+        again = gv["reproduced"].get(k)
+        verdict = ("reproduced" if k in gv["matched"]
+                   else "MISMATCH" if k in gv["mismatched"] else "—")
+        rows.append([
+            k,
+            f"{rep:.4g}" if isinstance(rep, float) else (rep if rep is not None else "—"),
+            f"{again:.4g}" if isinstance(again, float) else (again if again is not None else "—"),
+            verdict,
+            uv["reported"].get(k, "not recorded"),
+        ])
+    if len(rows) == 1:
+        rows.append(["(neither arm recorded a value)", "", "", "", ""])
+    _table(s, Inches(0.6), Inches(1.7), Inches(12.1), rows,
+           [Inches(3.4), Inches(2.2), Inches(2.2), Inches(2.1), Inches(2.2)],
+           size=11, rh=Inches(0.36))
+    text(s, Inches(0.6), Inches(6.4), Inches(12.1), Inches(0.9),
+         [(uv["reason"].capitalize() + "." if uv["reason"] else
+           "Both arms recorded values.", 13, True, ORANGE),
+          ("Accuracy here means one thing only: run the accepted code again and "
+           "see whether the numbers it reported are the numbers it produces.",
+           11, False, INK2)])
+
+
+def _slide_checks_fired(prs, run):
+    s = blank(prs)
+    header(s, "checks", "Every check that ran, turn by turn")
+    attempts = run["arms"]["gated"]["attempts"]
+    ids = []
+    for a in attempts:
+        for c in a.get("all_checks", []):
+            if c["id"] not in ids:
+                ids.append(c["id"])
+    ids = ids[:14]
+    rows = [["check", "sev"] + [f"turn {a['turn']}" for a in attempts]]
+    for cid in ids:
+        row, sev = [cid], ""
+        for a in attempts:
+            m = next((c for c in a.get("all_checks", []) if c["id"] == cid), None)
+            if m is None:
+                row.append("—")
+            else:
+                sev = m["severity"]
+                row.append("pass" if m["passed"] else sev)
+        rows.append([row[0], sev] + row[1:])
+    if len(rows) == 1:
+        rows.append(["(no per-check record)", "", ""])
+    ncols = len(rows[0])
+    _table(s, Inches(0.6), Inches(1.7), Inches(12.1), rows,
+           [Inches(4.6), Inches(1.1)] + [Inches(6.4 / max(ncols - 2, 1))] * (ncols - 2),
+           size=10, rh=Inches(0.33))
+
+
+def _slide_taxonomy(prs, run):
+    """Our run, scored with MLR-Bench's published categories."""
+    s = blank(prs)
+    header(s, "taxonomy", "This run, scored against MLR-Bench's four classes")
+    g, u = run["arms"]["gated"], run["arms"]["ungated"]
+    gv, uv = g["verification"], u["verification"]
+
+    def cell(arm, ver):
+        if not arm["accepted"]:
+            return "nothing reached the writer"
+        if not ver["reported"]:
+            return "every number unbacked — nothing recorded"
+        unbacked = len(ver["reported"]) - (len(ver["matched"]) + len(ver["mismatched"]))
+        return f"{unbacked} of {len(ver['reported'])} unbacked, {len(ver['matched'])} reproduced"
+
+    rows = [["MLR-Bench class", "with Gate 1", "without Gate 1", "whose job"],
+            ["Faked experimental results", cell(g, gv), cell(u, uv), "Gate 1 — measured here"],
+            ["Hallucinated methodology", "not measured", "not measured", "Gate 2"],
+            ["Incorrect citations", "not measured", "not measured", "Gate 3"],
+            ["Mathematical errors", "not measured", "not measured", "outside all three"]]
+    _table(s, Inches(0.6), Inches(1.8), Inches(12.1), rows,
+           [Inches(3.4), Inches(3.3), Inches(3.3), Inches(2.1)], size=12,
+           rh=Inches(0.62))
+    text(s, Inches(0.6), Inches(5.6), Inches(12.1), Inches(1.2),
+         [("This is our run scored with their categories — not a run of MLR-Bench, "
+           "which needs their harness and task set.", 13, True, ORANGE),
+          ("For scale, MLR-Bench reports faked results and hallucinated methodology "
+           "in more than half of 10 tasks, and almost all AI Scientist V2 papers "
+           "contain both. BadScientist reports fabricated papers accepted at up to "
+           "82.0% with detection barely above chance.", 11, False, INK2)])
+
+
+def _slide_logs(prs, run):
+    s = blank(prs)
+    header(s, "logs", "Where the evidence is")
+    d = RUN_DIR
+    rows = [["arm", "path", "files per attempt"],
+            ["with Gate 1", f"{d}/gated/gate1/attempt_NN/",
+             "experiment.py, stdout.txt, stderr.txt, results.json, registry.json, gate1_report.json"],
+            ["without Gate 1", f"{d}/ungated/attempt_NN/",
+             "experiment.py, stdout.txt, stderr.txt"],
+            ["shadow verdicts", f"{d}/ungated/shadow_gate/gate1/attempt_NN/",
+             "what Gate 1 would have said about the same executions"],
+            ["re-execution", f"{d}/<arm>/verify/", "the accepted code, run again"],
+            ["summary", f"{d}/ablation.txt · ablation.json", "the tables in the report"]]
+    _table(s, Inches(0.6), Inches(1.7), Inches(12.1), rows,
+           [Inches(2.2), Inches(5.2), Inches(4.7)], size=10, rh=Inches(0.52))
+    # a real excerpt
+    acc = run["arms"]["gated"].get("accepted_at")
+    snippet = ""
+    if acc:
+        f = RUN_DIR / "gated" / "gate1" / f"attempt_{acc:02d}" / "stdout.txt"
+        if f.exists():
+            snippet = "\n".join(f.read_text(errors="replace").splitlines()[:6])
+    if snippet:
+        panel(s, Inches(0.6), Inches(4.9), Inches(12.1), Inches(2.0))
+        text(s, Inches(0.85), Inches(5.05), Inches(11.6), Inches(1.8),
+             [("stdout.txt from the accepted run, captured in full and never truncated",
+               11, True, INK)] +
+             [(ln[:120], 10, False, INK2) for ln in snippet.splitlines()])
+
+
 # --------------------------------------------------------------------------- #
 
 
-def build(bench):
+def build(bench, run):
     prs = deck()
 
     # 1 — title
@@ -146,7 +335,15 @@ def build(bench):
            "   ·   every figure a recorded measurement or a cited number",
            11, False, MUTED)])
 
-    # 2 — the defect
+    # 2 — the run and what each arm produced
+    if run:
+        _slide_run(prs, run)
+        _slide_accuracy(prs, run)
+        _slide_checks_fired(prs, run)
+        _slide_logs(prs, run)
+        _slide_taxonomy(prs, run)
+
+    # 3 — the defect
     s = blank(prs)
     header(s, "the problem", "One line produced both the silent failure and the fabrication")
     panel(s, Inches(0.6), Inches(1.7), Inches(12.1), Inches(1.5))
@@ -380,7 +577,10 @@ def build(bench):
 
 def main():
     bench = json.loads(BENCH.read_text()) if BENCH.exists() else None
-    prs = build(bench)
+    run = json.loads(RUN_JSON.read_text()) if RUN_JSON.exists() else None
+    if run is None:
+        print(f'  WARNING: no {RUN_JSON} — run slides omitted')
+    prs = build(bench, run)
     prs.save(OUT)
     print(f"  wrote {OUT.name} ({OUT.stat().st_size:,} bytes, "
           f"{len(prs.slides.__iter__.__self__._sldIdLst)} slides)")

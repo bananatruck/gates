@@ -239,11 +239,59 @@ def chart_call_split():
     return save(fig, "callsplit.png")
 
 
+def chart_accuracy(run: dict | None):
+    """How much of what each arm reported can actually be checked.
+
+    Three quantities per arm: numbers reported, numbers checkable against an
+    execution, numbers that reproduced when the accepted code was re-run. An arm
+    that recorded nothing has nothing in the second and third bars, which is the
+    finding rather than an omission.
+    """
+    if not run:
+        return None
+    arms = ["with Gate 1", "without Gate 1"]
+    reported, checkable, reproduced = [], [], []
+    for key in ("gated", "ungated"):
+        v = run["arms"][key]["verification"]
+        reported.append(len(v["reported"]))
+        checkable.append(len(v["matched"]) + len(v["mismatched"]))
+        reproduced.append(len(v["matched"]))
+
+    x = range(len(arms))
+    width = 0.26
+    fig, ax = plt.subplots(figsize=(7.2, 3.3))
+    series = (
+        (reported, MUTED, "reported", -width),
+        (checkable, ORANGE, "checkable against an execution", 0.0),
+        (reproduced, BLUE, "reproduced on re-execution", width),
+    )
+    for values, colour, label, off in series:
+        bars = ax.bar([i + off for i in x], values, width, color=colour,
+                      label=label, edgecolor=SURFACE, linewidth=2)
+        for bar, v in zip(bars, values):
+            ax.text(bar.get_x() + bar.get_width() / 2, v + 0.08, str(v),
+                    ha="center", va="bottom", fontsize=9, color=INK)
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(arms, fontsize=10)
+    ax.set_ylabel("numbers")
+    top = max(reported + [1])
+    ax.set_ylim(0, top * 1.35)
+    _finish(ax, "How much of each arm's report can be checked",
+            "One run, data-efficiency task, qwen3:8b on both arms")
+    ax.legend(frameon=False, fontsize=8.5, loc="upper center",
+              bbox_to_anchor=(0.5, -0.14), ncol=3)
+    return save(fig, "accuracy.png")
+
+
 def main():
     bench_path = Path(
         "/tmp/claude-1000/-home-kesh/976cef29-0afd-479c-a716-6c557e07b6cb"
         "/scratchpad/bench2.json"
     )
+    run_path = Path(
+        "/home/kesh/AgentLaboratory-Gemini/ablation_runs/data_efficiency/ablation.json"
+    )
+    run = json.loads(run_path.read_text()) if run_path.exists() else None
     bench = json.loads(bench_path.read_text()) if bench_path.exists() else None
     if bench is None:
         print("  (no bench2.json — scanner chart will show the baseline only)")
@@ -254,6 +302,8 @@ def main():
     chart_ablation()
     chart_literature()
     chart_call_split()
+    if chart_accuracy(run) is None:
+        print('  (no ablation.json — accuracy chart skipped)')
 
 
 if __name__ == "__main__":
