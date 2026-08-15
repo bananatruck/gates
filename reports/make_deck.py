@@ -285,6 +285,38 @@ def _slide_taxonomy(prs, run):
            "82.0% with detection barely above chance.", 11, False, INK2)])
 
 
+def _slide_cost(prs, run):
+    """Where the money goes, and what the gate adds to it."""
+    s = blank(prs)
+    header(s, "cost", "Gate 1's marginal cost on the paid API is zero")
+    usage = run.get("usage") or {}
+    rows = [["role", "calls", "prompt tok", "completion tok", "of which reasoning", "billed"]]
+    for role, u in sorted(usage.items()):
+        rows.append([role, u["calls"], f"{u['prompt']:,}", f"{u['completion']:,}",
+                     f"{u['reasoning']:,}",
+                     "paid API" if role == "engineer" else "local — free"])
+    if len(rows) == 1:
+        rows.append(["(no accounting)", "", "", "", "", ""])
+    _table(s, Inches(0.6), Inches(1.8), Inches(12.1), rows,
+           [Inches(2.0), Inches(1.3), Inches(2.2), Inches(2.4), Inches(2.4), Inches(1.8)],
+           size=12, rh=Inches(0.5))
+    eng, gate = usage.get("engineer", {}), usage.get("gate", {})
+    if eng.get("calls") and gate.get("calls"):
+        ep = eng["completion"] / eng["calls"]
+        gp = gate["completion"] / gate["calls"]
+        stat(s, Inches(0.6), Inches(4.6), Inches(3.8), f"{ep/gp:.0f}x",
+             "one engineer call vs one gate call, in completion tokens", ORANGE)
+        stat(s, Inches(4.7), Inches(4.6), Inches(3.8), f"{gate['completion']:,}",
+             "gate tokens — all local, none billed", BLUE)
+        stat(s, Inches(8.8), Inches(4.6), Inches(3.9), f"{eng['reasoning']:,}",
+             "engineer reasoning tokens: billed, never seen in the output", ORANGE)
+    text(s, Inches(0.6), Inches(6.3), Inches(12.1), Inches(0.9),
+         [("What Gate 1 changes on the bill is rewrites: each rejection buys "
+           "another engineer call. A rejection that names the real fault is a "
+           "rewrite the agent does not waste — which is why the shadowed-contract "
+           "check was worth adding.", 13, False, INK2)])
+
+
 def _slide_logs(prs, run):
     s = blank(prs)
     header(s, "logs", "Where the evidence is")
@@ -342,6 +374,7 @@ def build(bench, run):
         _slide_checks_fired(prs, run)
         _slide_logs(prs, run)
         _slide_taxonomy(prs, run)
+        _slide_cost(prs, run)
 
     # 3 — the defect
     s = blank(prs)

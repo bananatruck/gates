@@ -328,16 +328,20 @@ was also passed through Gate 1 so the two verdicts can be compared on identical
 evidence. Those shadow verdicts:</p>
 {rt.checks_fired_table(run, "ungated")}
 
-<h2>4. The feedback the engineer actually received</h2>
+<h2>4. What the run cost</h2>
+{rt.usage_table(run)}
+{rt.cost_note(run)}
+
+<h2>5. The feedback the engineer actually received</h2>
 {rt.feedback_example(run_dir, run)}
 
-<h2>5. The logs</h2>
+<h2>6. The logs</h2>
 {rt.log_locations(run_dir)}
 
-<h3>5.1 With Gate 1 — captured in full, and the values recorded separately</h3>
+<h3>6.1 With Gate 1 — captured in full, and the values recorded separately</h3>
 {snippet_gate}
 
-<h3>5.2 Without Gate 1 — the same capture, but only the first 1,000 characters
+<h3>6.2 Without Gate 1 — the same capture, but only the first 1,000 characters
 ever reach the agent</h3>
 {snippet_ungated}
 """
@@ -376,7 +380,7 @@ crash test never fired.</p>
 
 {run_section(run, run_dir)}
 
-<h2>6. The full check inventory</h2>
+<h2>7. The full check inventory</h2>
 <p>Twenty deterministic checks in six families, plus one model-assisted check.
 The run fails if and only if a <span class="fail">FAIL</span> check fails;
 <span class="warn">WARN</span> and <span class="info">INFO</span> are reported
@@ -393,7 +397,7 @@ by construction, and report generation runs after <code>decide()</code> has
 already fixed the verdict. A test parses the module's AST to assert
 <code>Severity.FAIL</code> never appears in an expression there.</div>
 
-<h2>7. Metrics the gate records per attempt</h2>
+<h2>8. Metrics the gate records per attempt</h2>
 <table>
 <tr><th style="width:24%">metric</th><th>definition</th></tr>
 <tr><td class="mono">trace_id</td><td><code>sha256(run_id, key, lineno)</code> — binds one value to one execution. Two runs of identical source give different trace ids, which is what makes a backfilled number detectable.</td></tr>
@@ -405,7 +409,7 @@ already fixed the verdict. A test parses the module's AST to assert
 <tr><td class="mono">model.calls / degraded</td><td>what the LLM layer spent, and whether any call failed, so a thinner report is never mistaken for a complete one.</td></tr>
 </table>
 
-<h2>8. The log scanner, measured</h2>
+<h2>9. The log scanner, measured</h2>
 <p>68 labelled lines, 34 of them error signals, 16 of those outside anything a
 regex was going to reach. Sixteen lines come verbatim from the archived run.</p>
 {img("scanner.png")}
@@ -420,7 +424,7 @@ regex was going to reach. Sixteen lines come verbatim from the archived run.</p>
 lossless in distinct content — every shape survives with its first real line
 number, so nothing a scanner could have flagged disappears.</p>
 
-<h2>9. What the layer costs</h2>
+<h2>10. What the layer costs in a phase</h2>
 {img("callsplit.png")}
 <p>Measured over five executions of one solver phase: Gate 1's own model calls
 are <b>a third of the calls but a sixth of the tokens</b>. That is why the gate
@@ -430,7 +434,7 @@ the <i>engineer</i> on a weak model is the tempting economy and the wrong one: i
 fails the gate more often, and every rejection costs a fixes call, a
 shadow-reward call and another turn.</p>
 
-<h2>10. Defects the runs found</h2>
+<h2>11. Defects the runs found</h2>
 <p>Nine, fixed. Four appeared only against a real model, and two of those only
 against the weaker one.</p>
 <table>
@@ -446,13 +450,13 @@ against the weaker one.</p>
 <tr><td>Five config keys reached nothing</td><td>integration audit</td><td>A config declaring a lit-review backend did not get one</td></tr>
 </table>
 
-<h2>11. This run, scored against MLR-Bench's taxonomy</h2>
+<h2>12. This run, scored against MLR-Bench's taxonomy</h2>
 <p>Our run, their categories. This is <b>not</b> a run of MLR-Bench — that needs
 their harness and their task set — but the first of their four classes is
 measurable on any run, and here it is measured rather than asserted.</p>
 {rt.taxonomy_table(run) if run else "<p class='small'>No run record.</p>"}
 
-<h2>12. Where this sits against the published benchmarks</h2>
+<h2>13. Where this sits against the published benchmarks</h2>
 {img("literature.png")}
 <table>
 <tr><th style="width:20%">source</th><th style="width:32%">what it measures</th><th>reported</th></tr>
@@ -481,7 +485,7 @@ hallucinated methodology, incorrect citations, mathematical errors</i>. “Silen
 failure scored as success” is a cause of the first in their scheme, not a fifth
 class, and any “eliminates N of four” claim should say so.</div>
 
-<h2>13. What Gate 1 does not claim</h2>
+<h2>14. What Gate 1 does not claim</h2>
 <ul>
 <li>It does not check whether a result is <i>plausible</i> — that is Gate 2.</li>
 <li>It does not read the manuscript — that is Gate 3.</li>
@@ -496,7 +500,7 @@ task with one model; it is not a rate.</li>
 <li>n is still 1 for the archived-run comparison — the re-run has not been done.</li>
 </ul>
 
-<h2>14. Reproducing this</h2>
+<h2>15. Reproducing this</h2>
 <pre>./tools_local_model.sh start                  # local qwen3:8b, no API key
 python tools_ablation.py --model qwen3-8b-local --turns 4
 python -m rig.corpus                          # deterministic scanner baseline

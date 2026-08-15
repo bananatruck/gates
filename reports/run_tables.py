@@ -318,3 +318,86 @@ def feedback_example(run_dir: str | Path, run: dict) -> str:
             f"<pre>{_escape(fixes)}</pre>"
         )
     return "<p class='small'>No rejection with generated fixes in this run.</p>"
+
+
+# --------------------------------------------------------------------------- #
+# cost
+# --------------------------------------------------------------------------- #
+
+
+def usage_table(run: dict) -> str:
+    """Tokens by role, and where the money actually goes.
+
+    The engineer is a paid reasoning model; the gate runs locally. Reasoning
+    tokens are billed and invisible in the output, which is why they are broken
+    out rather than folded into completion.
+    """
+    usage = run.get("usage") or {}
+    if not usage:
+        return "<p class='small'>No token accounting in this run record.</p>"
+
+    paid_roles = {"engineer"}
+    rows, totals = [], {"calls": 0, "prompt": 0, "completion": 0, "reasoning": 0}
+    for role, u in sorted(usage.items()):
+        for k in totals:
+            totals[k] += u.get(k, 0)
+        billed = "paid API" if role in paid_roles else "local — no marginal cost"
+        rows.append(
+            f"<tr><td><b>{role}</b></td><td>{u['calls']}</td>"
+            f"<td>{u['prompt']:,}</td><td>{u['completion']:,}</td>"
+            f"<td>{u['reasoning']:,}</td>"
+            f"<td class='small'>{billed}</td></tr>"
+        )
+    per_call = (totals["completion"] / totals["calls"]) if totals["calls"] else 0
+    return (
+        "<table><tr><th style='width:18%'>role</th><th>calls</th>"
+        "<th>prompt tokens</th><th>completion tokens</th>"
+        "<th>of which reasoning</th><th>billed</th></tr>"
+        + "".join(rows)
+        + f"<tr><td><b>total</b></td><td>{totals['calls']}</td>"
+        f"<td>{totals['prompt']:,}</td><td>{totals['completion']:,}</td>"
+        f"<td>{totals['reasoning']:,}</td>"
+        f"<td class='small'>{per_call:,.0f} completion tokens per call</td></tr>"
+        "</table>"
+    )
+
+
+def cost_note(run: dict) -> str:
+    """What Gate 1 adds to the bill, and what it saves."""
+    usage = run.get("usage") or {}
+    eng = usage.get("engineer", {})
+    gate = usage.get("gate", {})
+    if not eng:
+        return ""
+    eng_per = eng["completion"] / eng["calls"] if eng["calls"] else 0
+    gate_per = gate.get("completion", 0) / gate["calls"] if gate.get("calls") else 0
+    ratio = (eng_per / gate_per) if gate_per else None
+
+    # Executions the static tier rejected before they ran.
+    saved = sum(
+        1
+        for arm in ("gated",)
+        for a in run["arms"][arm]["attempts"]
+        if a["exit_code"] is None
+    )
+    lines = [
+        f"<p><b>Gate 1's marginal cost on the paid API is zero.</b> Its two jobs "
+        f"ran locally: {gate.get('calls', 0)} calls, "
+        f"{gate.get('completion', 0):,} completion tokens, nothing billed.</p>"
+    ]
+    if ratio:
+        lines.append(
+            f"<p>For scale, one engineer call costs {eng_per:,.0f} completion "
+            f"tokens against {gate_per:,.0f} for a gate call — "
+            f"<b>{ratio:.0f}×</b>. Almost all of the engineer's is reasoning, "
+            f"which is billed and never appears in the output.</p>"
+        )
+    lines.append(
+        f"<p>What Gate 1 <i>does</i> change on the bill is rewrites: each "
+        f"rejection buys another engineer call. In this run "
+        f"<b>{saved}</b> attempt(s) were rejected by the static tier before "
+        f"execution, costing no compute at all, and every rejection that names "
+        f"the real fault is a rewrite the agent does not waste — which is the "
+        f"whole reason the shadowed-contract check was added.</p>"
+    )
+    return "".join(lines)
