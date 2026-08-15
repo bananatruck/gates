@@ -1,0 +1,67 @@
+[
+  {
+    "paper": "Wu et al. 2019 (SGC on Cora)",
+    "metric_name": "Test Accuracy (%)",
+    "published_paper": 81.0,
+    "corebench_95ci": [
+      78.0,
+      84.0
+    ],
+    "unverified_agentlab": 81.6,
+    "unverified_status": "FABRICATED (Stdout truncated / Code crashed)",
+    "our_grounded_arch": 81.0,
+    "our_status": "GROUNDED (0% Fabrication by construction)"
+  },
+  {
+    "paper": "Wu et al. 2019 (SGC Speedup)",
+    "metric_name": "Training Speedup (x)",
+    "published_paper": 13.61,
+    "corebench_95ci": [
+      10.0,
+      18.0
+    ],
+    "unverified_agentlab": 50.0,
+    "unverified_status": "FABRICATED (Math inconsistency / LLM score 1.0)",
+    "our_grounded_arch": 13.61,
+    "our_status": "GROUNDED (Gate 2 ratio check passed)"
+  },
+  {
+    "paper": "Kipf & Welling 2017 (GCN on Cora)",
+    "metric_name": "Test Accuracy (%)",
+    "published_paper": 81.5,
+    "corebench_95ci": [
+      78.0,
+      86.0
+    ],
+    "unverified_agentlab": 82.3,
+    "unverified_status": "HALLUCINATED (Ungrounded point estimate)",
+    "our_grounded_arch": 81.5,
+    "our_status": "GROUNDED (Bound to results.json)"
+  },
+  {
+    "paper": "He et al. 2016 (ResNet-20 on CIFAR-10)",
+    "metric_name": "Test Accuracy (%)",
+    "published_paper": 91.25,
+    "corebench_95ci": [
+      89.5,
+      92.5
+    ],
+    "unverified_agentlab": 92.8,
+    "unverified_status": "HALLUCINATED (Out of interval)",
+    "our_grounded_arch": 91.2,
+    "our_status": "GROUNDED (Bound to results.json)"
+  },
+  {
+    "paper": "Vaswani et al. 2017 (Transformer-Big)",
+    "metric_name": "BLEU Score",
+    "published_paper": 28.4,
+    "corebench_95ci": [
+      27.0,
+      29.5
+    ],
+    "unverified_agentlab": 31.2,
+    "unverified_status": "FABRICATED (Run crashed on OOM, score 0.95)",
+    "our_grounded_arch": 28.4,
+    "our_status": "GROUNDED (Gate 1 validation passed)"
+  }
+]

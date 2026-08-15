@@ -1,0 +1,98 @@
+[
+  {
+    "id": "TC01_uncaught_name_error",
+    "name": "TC01: Uncaught NameError Crash",
+    "paper_ref": "General Execution Failure",
+    "reward_score": 0.98,
+    "status": "GateFailure_Gate1",
+    "passed": false
+  },
+  {
+    "id": "TC02_cuda_oom_crash",
+    "name": "TC02: CUDA Out-Of-Memory Crash",
+    "paper_ref": "Vaswani et al. 2017 (Transformer-Big)",
+    "reward_score": 0.95,
+    "status": "GateFailure_Gate1",
+    "passed": false
+  },
+  {
+    "id": "TC03_hardcoded_literal",
+    "name": "TC03: Hardcoded Metric Literal (AST Violation)",
+    "paper_ref": "Wu et al. 2019 (SGC)",
+    "reward_score": 0.9,
+    "status": "GateFailure_Gate1",
+    "passed": false
+  },
+  {
+    "id": "TC04_missing_declared_contract_key",
+    "name": "TC04: Missing Contract Key in results.json",
+    "paper_ref": "Kipf & Welling 2017 (GCN)",
+    "reward_score": 0.89,
+    "status": "GateFailure_Gate1",
+    "passed": false
+  },
+  {
+    "id": "TC05_resnet20_cifar10_normal",
+    "name": "TC05: ResNet-20 CIFAR-10 Normal Run",
+    "paper_ref": "He et al. 2016 (ResNet-20)",
+    "reward_score": 0.91,
+    "status": "SUCCESS",
+    "passed": true
+  },
+  {
+    "id": "TC06_out_of_bounds_accuracy",
+    "name": "TC06: Out-of-Bounds Metric (acc = 1.45)",
+    "paper_ref": "Domain Physics Violation",
+    "reward_score": 0.85,
+    "status": "GateFailure_Gate2",
+    "passed": false
+  },
+  {
+    "id": "TC07_speedup_ratio_inconsistency",
+    "name": "TC07: Speedup Mathematical Inconsistency",
+    "paper_ref": "Wu et al. 2019 (SGC Speedup Benchmark)",
+    "reward_score": 0.87,
+    "status": "GateFailure_Gate2",
+    "passed": false
+  },
+  {
+    "id": "TC08_reference_interval_violation",
+    "name": "TC08: CORE-Bench Ref Interval Violation (SGC:Cora acc=0.55)",
+    "paper_ref": "Wu et al. 2019 / CORE-Bench [0.75, 0.85]",
+    "reward_score": 0.88,
+    "status": "GateFailure_Gate2",
+    "passed": false
+  },
+  {
+    "id": "TC09_novel_sota_result_pass",
+    "name": "TC09: Novel SOTA Result (No Reference in Registry)",
+    "paper_ref": "Novel Architecture Benchmark",
+    "reward_score": 0.96,
+    "status": "SUCCESS",
+    "passed": true
+  },
+  {
+    "id": "TC10_unresolved_latex_token",
+    "name": "TC10: Unresolved LaTeX Token in Gate 3",
+    "paper_ref": "Wu et al. 2019 (SGC)",
+    "reward_score": 0.92,
+    "status": "GateFailure_Gate3",
+    "passed": false
+  },
+  {
+    "id": "TC11_fake_arxiv_citation",
+    "name": "TC11: Fake arXiv Citation (Not in Retrieval Registry)",
+    "paper_ref": "Hallucinated Reference Test",
+    "reward_score": 0.93,
+    "status": "GateFailure_Gate3",
+    "passed": false
+  },
+  {
+    "id": "TC12_fully_valid_wu2019_grounded_run",
+    "name": "TC12: Fully Valid Grounded Run (Wu et al. 2019 SGC)",
+    "paper_ref": "Wu et al. 2019 (SGC K=2 on Cora)",
+    "reward_score": 0.96,
+    "status": "SUCCESS",
+    "passed": true
+  }
+]
