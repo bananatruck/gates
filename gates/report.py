@@ -59,12 +59,10 @@ def render_feedback(report: GateReport, *, include_stdout_tail: bool = True) -> 
             out.append("REQUIRED FIXES")
             for i, fix in enumerate(fixes, 1):
                 out.append(f"  {i}. {fix}")
-            if failures and _fixes_are_degraded(report):
+            note = _fallback_reason(report) if failures else None
+            if note:
                 out.append("")
-                out.append(
-                    "  (standard guidance — the model that writes specific "
-                    "fixes was unavailable for this attempt)"
-                )
+                out.append(f"  ({note})")
             out.append("")
 
     execution = report.execution
@@ -103,11 +101,20 @@ def render_summary(report: GateReport) -> str:
 # --------------------------------------------------------------------------- #
 
 
+def render_evidence(check: CheckResult) -> list[str]:
+    """The check's evidence as display lines, or empty when it has no renderer.
+
+    Public because the evidence bundle needs the same rows the feedback report
+    shows: a warning the writer is told to disclose but cannot see is not a
+    warning, it is an instruction to guess.
+    """
+    renderer = _EVIDENCE_RENDERERS.get(check.id)
+    return renderer(check) if renderer else []
+
+
 def _render_check(check: CheckResult) -> list[str]:
     lines = [f"  [{check.id}]", f"    {check.message}"]
-    renderer = _EVIDENCE_RENDERERS.get(check.id)
-    if renderer:
-        lines.extend(f"    {line}" for line in renderer(check))
+    lines.extend(f"    {line}" for line in render_evidence(check))
     lines.append("")
     return lines
 
@@ -258,19 +265,50 @@ _FIXES = {
 }
 
 
-def _fixes_are_degraded(report: GateReport) -> bool:
-    """True when a model was configured but did not deliver usable fixes.
+def _fallback_reason(report: GateReport) -> str | None:
+    """Why this report carries the template, when it does.
 
-    Distinguishes "this deployment has no model" — where the template is simply
-    what the report is — from "the model was meant to write this and did not",
-    which the reader is entitled to know.
+    Three situations, and they are not the same thing:
+
+    * no model configured — the template is simply what this deployment's
+      report is, and saying anything would be noise;
+    * the model could not be reached — the reader is entitled to know the
+      report is thinner than it should be;
+    * the model answered and its answer was rejected as ungrounded — worth
+      saying plainly, because it names a specific fault in the generated
+      text rather than an outage, and it is the one an operator can act on.
+
+    An earlier version returned a bool and printed "the model was unavailable"
+    for all three, which was wrong for the last and the most misleading of the
+    three: it reported an outage that had not happened.
     """
-    if report.model_degraded:
-        return True
-    return any(
-        c.id == "report.fixes_grounded" and c.evidence.get("degraded")
-        for c in report.checks
+    ungrounded = next(
+        (
+            c
+            for c in report.checks
+            if c.id == "report.fixes_grounded" and c.evidence.get("ungrounded")
+        ),
+        None,
     )
+    if ungrounded is not None:
+        count = len(ungrounded.evidence["ungrounded"])
+        # Deliberately does NOT name the invented tokens. Echoing them here
+        # would put the hallucinated identifier back in front of the agent and
+        # defeat the grounding check that just removed it — the engineer could
+        # still go looking for `dropout_rate`. The names are recorded in
+        # report.fixes_grounded and gate1_report.json, where an operator
+        # debugging the generator can read them and the agent cannot.
+        return (
+            f"standard guidance — the specific fixes written for this attempt "
+            f"referred to {count} name{'s' if count != 1 else ''} this run does "
+            f"not contain, so they were discarded"
+        )
+    if report.model_degraded:
+        return (
+            "standard guidance — the model that writes specific fixes could "
+            "not be reached for this attempt"
+        )
+    return None
 
 
 def _required_fixes(failures: list[CheckResult]) -> list[str]:

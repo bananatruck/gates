@@ -14,6 +14,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..report import render_evidence
 from .. import (
     REGISTRY_FILENAME,
     Gate1Config,
@@ -285,7 +286,15 @@ def build_evidence_bundle(report: GateReport, budget: int = STDOUT_BUDGET_CHARS)
     warnings = report.warnings()
     if warnings:
         lines += ["", "WARNINGS — these must be stated in the report, not omitted"]
-        lines += [f"  [{c.id}] {c.message}" for c in warnings]
+        for check in warnings:
+            lines.append(f"  [{check.id}] {check.message}")
+            # The evidence, not only the count. Telling the writer that "1 line
+            # reports trouble the run continued past" and then withholding the
+            # line asks it to disclose something it cannot see — which is this
+            # layer's own failure mode, reproduced at its exit. render_feedback
+            # already renders these for the engineer; the writer needs them at
+            # least as much, because it is the one making the claim.
+            lines += [f"    {row}" for row in render_evidence(check)]
 
     if report.artifact_dir:
         lines += [

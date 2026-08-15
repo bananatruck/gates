@@ -159,7 +159,10 @@ def test_ungrounded_output_is_rejected_whole_and_the_template_renders(config):
     assert "train_with_warmup" not in text
     # the deterministic template took over
     assert "Bind every name listed above" in text
-    assert "model that writes specific fixes was unavailable" in text
+    # names the actual fault rather than reporting an outage that did not happen
+    assert "dropout_rate" not in text
+    assert "this run does not contain" in text
+    assert "could not be reached" not in text
 
 
 def test_the_rejection_is_recorded_rather_than_silent(config):
@@ -198,7 +201,8 @@ def test_no_model_falls_back_without_claiming_degradation(config):
     report = run_gate1(UNBOUND, config())
     text = render_feedback(report)
     assert "REQUIRED FIXES" in text
-    assert "was unavailable" not in text
+    assert "could not be reached" not in text
+    assert "standard guidance" not in text
 
 
 def test_a_failing_model_degrades_and_says_so(config):
@@ -210,7 +214,8 @@ def test_a_failing_model_degrades_and_says_so(config):
     assert report.model_degraded
     text = render_feedback(report)
     assert "Bind every name listed above" in text
-    assert "was unavailable" in text
+    assert "could not be reached" in text
+    assert "does not contain" not in text
 
 
 def test_generation_never_runs_before_the_verdict(config):

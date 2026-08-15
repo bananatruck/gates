@@ -266,3 +266,45 @@ def test_a_model_that_flags_everything_is_caught_by_precision_not_recall():
     assert result.recall == 1.0
     assert result.precision < 0.6
     assert len(result.spurious) > 15
+
+
+def test_the_writer_receives_the_warning_evidence_not_just_the_count(config):
+    """The bundle tells the writer these "must be stated in the report". A
+    warning it can see the count of but not the content is an instruction to
+    guess -- this layer's own failure mode, reproduced at its exit."""
+    import re
+    from gates.adapters.agentlab import build_evidence_bundle
+
+    def smart(prompt, system):
+        if "JSON array" in system:
+            for line in prompt.splitlines():
+                m = re.match(r"(\d+)\t\[", line)
+                if m and "Skipping" in line:
+                    return f'[{{"line": {m.group(1)}, "why": "replicates dropped"}}]'
+            return "[]"
+        return "1. nothing to fix"
+
+    src = (
+        "print('Skipping 2 of 10 folds that raised during fitting')\n"
+        "record_metadata('seed', 0)\n"
+        "v = 0.5\n"
+        "record_result('a', v * 2)\n"
+    )
+    report = run_gate1(src, config(consult_model=smart))
+    bundle = build_evidence_bundle(report)
+    assert "WARNINGS" in bundle
+    assert "replicates dropped" in bundle
+    assert "Skipping 2 of 10 folds" in bundle
+
+
+def test_deterministic_log_findings_also_reach_the_writer(config):
+    from gates.adapters.agentlab import build_evidence_bundle
+
+    src = (
+        "print('RuntimeWarning: invalid value encountered in true_divide')\n"
+        "record_metadata('seed', 0)\n"
+        "v = 0.5\n"
+        "record_result('a', v * 2)\n"
+    )
+    bundle = build_evidence_bundle(run_gate1(src, config()))
+    assert "invalid value encountered" in bundle
