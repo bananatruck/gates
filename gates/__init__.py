@@ -18,6 +18,7 @@ implementation against Agent-Researcher / Agent Laboratory.
 from .errors import GateError, GateFailure, HarnessError
 from .gate1 import GATE_NAME as GATE1_NAME, Gate1Config, run_gate1
 from .ledger import Ledger
+from .llm import ModelBudget, ModelCall, ModelFn, ModelLayer, model_warning
 from .registry import (
     REGISTRY_FILENAME,
     build_registry,
@@ -52,6 +53,10 @@ __all__ = [
     "HarnessError",
     "Ledger",
     "MetricRecord",
+    "ModelBudget",
+    "ModelCall",
+    "ModelFn",
+    "ModelLayer",
     "Severity",
     "Verdict",
     "build_registry",
@@ -61,6 +66,7 @@ __all__ = [
     "load_registry",
     "make_run_id",
     "make_trace_id",
+    "model_warning",
     "render_feedback",
     "render_summary",
     "resolve_trace",

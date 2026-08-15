@@ -13,7 +13,13 @@ import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import log_checks, static_checks
+from . import llm_report, llm_scan, log_checks, static_checks
+from .llm import (
+    DEFAULT_MAX_PROMPT_CHARS,
+    DEFAULT_TIMEOUT_S as DEFAULT_MODEL_TIMEOUT_S,
+    ModelFn,
+    ModelLayer,
+)
 from .registry import write_registry
 from .runner import DEFAULT_TIMEOUT_S, code_sha256, run_experiment
 from .schema import (
@@ -62,6 +68,13 @@ class Gate1Config:
     #: Left on by default: a run with no seed cannot be re-executed to check its
     #: own numbers.
     require_seed: bool = True
+    #: The LLM layer's model. Supplied by the host adapter — ``gates`` imports no
+    #: client. Absent, the gate still issues a full verdict and falls back to the
+    #: deterministic feedback template, saying that it did. See ``llm.py`` for
+    #: why a required model layer does not put a model in the verdict.
+    consult_model: ModelFn | None = None
+    model_timeout_s: float = DEFAULT_MODEL_TIMEOUT_S
+    max_prompt_chars: int = DEFAULT_MAX_PROMPT_CHARS
 
     def attempt_dir(self, attempt: int) -> Path:
         return Path(self.artifact_root) / "gate1" / f"attempt_{attempt:02d}"
@@ -75,6 +88,15 @@ def run_gate1(source: str, config: Gate1Config, attempt: int = 1) -> GateReport:
     """
     artifact_dir = config.attempt_dir(attempt)
     artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    # The LLM layer is constructed for every run, model or not: callers get the
+    # same object either way, and an absent model is an ordinary degraded path
+    # rather than a branch every call site has to remember.
+    model = ModelLayer(
+        config.consult_model,
+        timeout_s=config.model_timeout_s,
+        max_prompt_chars=config.max_prompt_chars,
+    )
 
     checks: list[CheckResult] = []
     bound = frozenset({"record_result", "record_metadata"}) | config.extra_bound_names
@@ -95,7 +117,11 @@ def run_gate1(source: str, config: Gate1Config, attempt: int = 1) -> GateReport:
         code_sha256=code_sha256(source),
     )
     if not report.passed:
-        # Rejected before execution. Nothing ran, so there is nothing to record.
+        # Rejected before execution. Nothing ran, so there is nothing to record
+        # — but the engineer still needs a report, and this is the cheapest
+        # rejection there is, so it is the one worth writing well.
+        _attach_generated_fixes(report, model, source)
+        _record_model_budget(report, model)
         _write_report(report, artifact_dir)
         return report
 
@@ -119,6 +145,26 @@ def run_gate1(source: str, config: Gate1Config, attempt: int = 1) -> GateReport:
             _check_code_identity(execution, report.code_sha256),
             _check_no_swallowed_traceback(execution, stdout, stderr),
             _check_log_error_signals(stdout, stderr),
+        ]
+    )
+
+    # The model reads what the patterns did not flag. WARN-severity by
+    # construction, and appended before decide() only because ordering the
+    # report by tier reads better than ordering it by author — decide() is
+    # blind to everything here either way.
+    scan_check = llm_scan.build_check(
+        llm_scan.scan_with_model(
+            model,
+            stdout,
+            stderr,
+            already_flagged=log_checks.scan_streams(stdout, stderr),
+        )
+    )
+    if scan_check is not None:
+        checks.append(scan_check)
+
+    checks.extend(
+        [
             _check_clean_namespace(execution),
             _check_seed_recorded(execution, config),
             _check_contract_present(execution, config),
@@ -139,12 +185,59 @@ def run_gate1(source: str, config: Gate1Config, attempt: int = 1) -> GateReport:
 
     report.checks = checks
     report.execution = execution
+    # Verdict is fixed here, from deterministic checks alone. Anything the model
+    # contributed above is WARN-severity by construction and cannot reach this.
     report.verdict = decide(checks)
+    # Only now, with the verdict already fixed, does the model get asked to
+    # write anything the engineer will read.
+    _attach_generated_fixes(report, model, source)
+    _record_model_budget(report, model)
     _write_report(report, artifact_dir)
     # Written for passing and failing runs alike; the file records which it was,
     # and a rejected registry reports itself as not citable.
     write_registry(report, artifact_dir, task_ref=config.task_ref)
     return report
+
+
+# --------------------------------------------------------------------------- #
+# the model layer's contributions, both after the verdict
+# --------------------------------------------------------------------------- #
+
+
+def _attach_generated_fixes(report: GateReport, model: ModelLayer, source: str) -> None:
+    """Have the model write REQUIRED FIXES, and keep it only if it is grounded.
+
+    Called after ``verdict`` is already set, on both return paths. A passing run
+    has no fixes to write; a rejected one gets the template unless the model
+    produced something every name and line number of which the report supports.
+    """
+    if report.passed or not model.available:
+        return
+    outcome = llm_report.generate_fixes(model, report, source)
+    if outcome.usable:
+        report.generated_fixes = outcome.text
+    elif outcome.ungrounded:
+        # Rejected whole rather than repaired. A fix naming a variable the code
+        # does not contain sends the engineer chasing something that does not
+        # exist, which is the failure this gate exists to prevent.
+        report.checks.append(
+            CheckResult(
+                id="report.fixes_grounded",
+                passed=True,
+                severity=Severity.INFO,
+                message=(
+                    "the generated fixes cited "
+                    f"{', '.join(outcome.ungrounded[:4])}, which this run does "
+                    "not support; the deterministic template was used instead"
+                ),
+                evidence={"ungrounded": outcome.ungrounded, "degraded": True},
+            )
+        )
+
+
+def _record_model_budget(report: GateReport, model: ModelLayer) -> None:
+    if model.available or model.budget.calls:
+        report.model = model.budget.to_dict()
 
 
 # --------------------------------------------------------------------------- #

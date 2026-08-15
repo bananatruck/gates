@@ -230,10 +230,27 @@ class GateReport:
     execution: ExecutionRecord | None = None
     artifact_dir: str | None = None
     code_sha256: str | None = None
+    #: What the LLM layer spent and whether any call failed. ``None`` when no
+    #: model was supplied. Never influences ``verdict`` — see ``llm.py``.
+    model: dict[str, Any] | None = None
+    #: The REQUIRED FIXES section as the model wrote it, after grounding.
+    #: ``None`` means the deterministic template renders instead — either no
+    #: model, a failed call, or output that cited something the report does not
+    #: support.
+    generated_fixes: str | None = None
 
     @property
     def passed(self) -> bool:
         return self.verdict is Verdict.PASS
+
+    @property
+    def model_degraded(self) -> bool:
+        """A model call failed, so anything the layer produced is incomplete.
+
+        Callers surface this rather than letting a degraded report pass for a
+        full one.
+        """
+        return bool(self.model and self.model.get("degraded"))
 
     def failed_checks(self) -> list[CheckResult]:
         return [c for c in self.checks if c.blocking]
@@ -256,6 +273,8 @@ class GateReport:
             "artifact_dir": self.artifact_dir,
             "checks": [c.to_dict() for c in self.checks],
             "execution": self.execution.to_dict() if self.execution else None,
+            "model": self.model,
+            "generated_fixes": self.generated_fixes,
         }
 
     def to_json(self, indent: int = 2) -> str:

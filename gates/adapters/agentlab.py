@@ -14,6 +14,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..report import render_evidence
 from .. import (
     REGISTRY_FILENAME,
     Gate1Config,
@@ -168,6 +169,7 @@ def make_context(
     num_classes: int | None = None,
     reward_model: str | None = None,
     task_ref: str | None = None,
+    consult_model: Any = None,
 ) -> GateContext:
     """Build the gate context for one solver phase.
 
@@ -185,6 +187,10 @@ def make_context(
         artifact_root=artifact_root,
         cwd=os.getcwd(),  # figures must land where papersolver looks for them
         task_ref=task_ref,
+        # The LLM layer. In this scaffold the caller passes a closure over
+        # inference.query_model; absent one, the gate issues the same verdict and
+        # falls back to the deterministic feedback template.
+        consult_model=consult_model,
     )
     return GateContext(
         config=config,
@@ -192,6 +198,61 @@ def make_context(
         phase=phase,
         reward_model=reward_model,
     )
+
+
+#: Gate output is a short JSON array or four numbered sentences. Nothing it
+#: produces legitimately runs long, so the cap is generous rather than tight and
+#: exists to bound the pathological case rather than to shape the answer.
+GATE_MAX_TOKENS = 1024
+
+#: Models that reason at length unless told not to. Both of the gate's jobs are
+#: classification and short instruction-writing; extended reasoning buys nothing
+#: and costs a great deal. Measured on qwen3:8b before this was applied: 630
+#: output tokens on average and 21,858 on the worst call, which at 26 tokens a
+#: second is fourteen minutes spent on a request whose answer was "[]".
+_NO_THINK_PREFIXES = ("qwen3",)
+
+
+def make_gate_model(
+    model_str: str,
+    api_key: str | None = None,
+    temp: float = 0.0,
+    max_tokens: int | None = GATE_MAX_TOKENS,
+):
+    """Adapt this scaffold's ``query_model`` to the layer's two-argument seam.
+
+    The import is deliberately lazy. ``adapters/`` is where host knowledge is
+    allowed to live, but the package still has to import cleanly outside the
+    host — a module-level ``import inference`` would break ``pip install gates``
+    for everyone who is not Agent-Researcher.
+
+    ``temp=0.0``: this model writes a validity report, not prose. The upstream
+    reward model runs at 0.6 and that is part of what Gate 1 exists to answer.
+
+    Model-specific quirks belong here rather than in ``gates/``, which stays
+    ignorant of who is answering it. ``/no_think`` is qwen3's own switch and is
+    inert text to any other model.
+    """
+    from inference import query_model  # noqa: PLC0415 — see docstring
+
+    quiet = model_str.split(":")[0].split("-")[0].lower().startswith(
+        _NO_THINK_PREFIXES
+    )
+
+    def call(prompt: str, system_prompt: str) -> str:
+        if quiet:
+            system_prompt = f"{system_prompt}\n/no_think"
+        return query_model(
+            model_str=model_str,
+            prompt=prompt,
+            system_prompt=system_prompt,
+            openai_api_key=api_key,
+            temp=temp,
+            print_cost=False,
+            max_tokens=max_tokens,
+        )
+
+    return call
 
 
 def gated_execute(code: str, context: GateContext) -> GatedExecution:
@@ -254,7 +315,15 @@ def build_evidence_bundle(report: GateReport, budget: int = STDOUT_BUDGET_CHARS)
     warnings = report.warnings()
     if warnings:
         lines += ["", "WARNINGS — these must be stated in the report, not omitted"]
-        lines += [f"  [{c.id}] {c.message}" for c in warnings]
+        for check in warnings:
+            lines.append(f"  [{check.id}] {check.message}")
+            # The evidence, not only the count. Telling the writer that "1 line
+            # reports trouble the run continued past" and then withholding the
+            # line asks it to disclose something it cannot see — which is this
+            # layer's own failure mode, reproduced at its exit. render_feedback
+            # already renders these for the engineer; the writer needs them at
+            # least as much, because it is the one making the claim.
+            lines += [f"    {row}" for row in render_evidence(check)]
 
     if report.artifact_dir:
         lines += [

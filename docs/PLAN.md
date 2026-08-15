@@ -183,9 +183,12 @@ defensible, and `run_experiments.py` has a live argument-passing bug to fix firs
 These hold for all three gates and are what make the layer portable.
 
 1. **Deterministic first.** A gate fails on a mechanically checkable fact wherever one exists. A
-   model is consulted only where no such fact exists (Gate 2's semantic coherence, Gate 3's prose
-   entailment), and where consulted, its output is **reported as a rate with a confidence
-   interval, never claimed as a guarantee**.
+   model is consulted only where no such fact exists (Gate 1's log recall and feedback-report
+   prose, Gate 2's semantic coherence, Gate 3's prose entailment), and where consulted, its
+   output is **reported as a rate with a confidence interval, never claimed as a guarantee**.
+   Note that "deterministic first" constrains where a model sits, not whether one is present:
+   every gate's *verdict* is deterministic, and Gate 1's LLM layer is required precisely because
+   it is positioned outside that verdict (§3.4).
 2. **The gate is the authority.** No model opinion can admit an artifact the gate rejected.
 3. **Every gate emits two artifacts:** a machine-readable verdict (`gate<N>_report.json`) and a
    small natural-language feedback report for the agent it loops back to.
@@ -347,6 +350,71 @@ STDOUT: 14,208 bytes captured in full (artifacts/attempt_02/stdout.txt)
 
 Note what is *not* in the report: no score, no praise, no model opinion. Only facts the runtime
 established.
+
+#### One model seam, shared by all three gates
+
+The layer described below is not Gate 1's private arrangement. Gates 2 and 3 each
+need a model for the part of their work that has no mechanically checkable fact —
+Gate 2's semantic coherence, Gate 3's claim entailment — and both are subject to
+the same rule: the model is consulted only outside the verdict, and its output is
+reported as a rate rather than claimed as a guarantee.
+
+So there is one seam, `Gate1Config.consult_model` today and a shared config field
+as Gates 2 and 3 land, carrying one injected `(prompt, system) -> str` callable.
+A host wires it once. The decided default deployment is **a locally run
+`qwen3:8b`** for all three gates, with the hosted API as the fallback:
+
+| | |
+|---|---|
+| what runs it | Ollama, `qwen3-8b-local` in the model registry |
+| why local is affordable here | the gates are ~⅓ of a phase's calls but ~⅙ of its tokens, and their prompts are short structured requests |
+| why it is safe | no gate's verdict consults a model; a wrong answer degrades a report, never a decision |
+| default | the hosted API — local mode is opt-in via `--gate-backend` or `GATE_BACKEND` |
+
+Running the gates on a small local model is also a claim the paper can make on
+its own: the validity layer costs no API budget to operate, which is what lets it
+be applied to every attempt rather than sampled.
+
+#### The report is generated, and that is why Gate 1 has an LLM layer
+
+The example above is what the feedback report must be, and no template produces it. "Bind
+`hidden_dim` before use, or pass it into `GCN.__init__`" depends on where the name is read, what
+scope it is in, and what the enclosing class takes — facts that exist in the `GateReport` but
+compose differently on every rejection. A canned sentence per check id is not a feedback report.
+
+So the LLM layer is a **required component of the Gate 1 pipeline**, not an optional enhancement:
+it is the loop's return path to the ML engineer. It does two jobs, and its position is what makes
+both safe:
+
+```
+static → execution → runtime → log → results checks
+                                      ↓
+                      LLM log scan  (WARN-severity only)
+                                      ↓
+                                 decide()        ← verdict fixed here, zero LLM
+                                      ↓
+          PASS → evidence bundle        FAIL → LLM generates the feedback report
+```
+
+Neither job can move a verdict. Log findings are WARN, and `decide()` fails only on a *blocking*
+check; report generation runs after the verdict already exists. R1.9 — "gate verdict is computed
+with no LLM in the path" — holds exactly as stated, and §2.1's first invariant is satisfied
+rather than bent: a model is consulted only where no mechanically checkable fact exists, and
+writing the fix for a human-readable report is precisely that place. Both jobs are constrained
+further:
+
+- **Grounding.** Generated text may reference only check ids, names, line numbers and source
+  lines present in the `GateReport`, verified mechanically before the report is returned. A fix
+  that invents a variable name costs the engineer a rewrite — the failure Gate 1 exists to
+  prevent, reintroduced at its exit.
+- **Degradation, declared.** When the model is unavailable the layer falls back to the
+  deterministic template and says that it did. A degraded report must never be mistaken for a
+  full one.
+- **The findings stay verbatim.** FAILED CHECKS and WARNINGS are runtime facts and keep their
+  deterministic rendering. The model writes the fixes, not the findings.
+
+Whether the generated report actually converges the loop faster is measured, not assumed — see
+`rig/gate1_loop.py` and `GATE1_COMPLETION.md`.
 
 ### 3.5 What Gate 1 changes downstream
 
@@ -549,14 +617,27 @@ An adapter is responsible for exactly four things:
 | 1 | `gates/` package — Gate 1 complete | **done** |
 | 2 | `adapters/agentlab.py` + MLE-solver wiring; retire `execute_code`'s truncation | **done** |
 | 3 | `divergence.jsonl` and the reward-vs-gate evidence table | **done** |
-| 4 | Fix `run_experiments.py --yaml-location`; re-run the archive for a real n | pending |
-| 5 | The channel-fidelity experiment: fabrication rate vs. `MAX_LEN` | pending |
+| 3a | `rig/` — the loop rig: the gate driven engineer-turn by engineer-turn, no model | **done** |
+| 4 | Fix `run_experiments.py --yaml-location`; re-run the archive for a real n | **CLI fixed**; runs pending |
+| 5 | The channel-fidelity experiment: fabrication rate vs. `MAX_LEN` | detector arm instrumented; writer arm pending |
 | 6 | Gate 2 | pending |
 | 7 | Gate 3 | pending |
 | 8 | Evaluate on a CORE-Bench subset and PaperBench Code-Dev | pending |
 
 Steps 4 and 5 produce a result either way. If widening the channel changes the numbers, that is
 the finding. If they come back identical to the published SGC paper, that is a stronger one.
+
+The remaining Gate 1 work is measurement, not implementation, and is scheduled in
+[`GATE1_COMPLETION.md`](GATE1_COMPLETION.md). Two corrections to what this section
+previously said, both verified rather than assumed:
+
+- **`--yaml-location` is already fixed.** `run_experiments.py` no longer emits it, and
+  `build_command` produces no argument `ai_lab_repo.py`'s parser rejects. What remains in that
+  file is a quieter defect: five YAML keys are dropped silently instead of being passed or
+  refused, so a config can declare a lit-review backend the run does not use.
+- **The channel sweep's detector arm no longer needs a run.** Whether upstream's marker survives
+  a given `MAX_LEN` is a property of the capture, and `rig/reward.py` measures it offline. The
+  fabrication-rate arm still needs real runs and a real writing agent.
 
 ### 7.1 What Gate 1 would have done to the archived run — precisely
 

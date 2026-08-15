@@ -42,12 +42,28 @@ def render_feedback(report: GateReport, *, include_stdout_tail: bool = True) -> 
             # locate in the logs is a warning it will ignore.
             out.extend(_render_check(check))
 
-    fixes = _required_fixes(failures)
-    if fixes:
+    # The model writes the fixes when it produced grounded ones; the template is
+    # the fallback, not the default. Either way the findings above are the
+    # deterministic ones, verbatim — the model explains what to do, it does not
+    # get to restate what happened.
+    if report.generated_fixes:
         out.append("REQUIRED FIXES")
-        for i, fix in enumerate(fixes, 1):
-            out.append(f"  {i}. {fix}")
+        out.extend(
+            f"  {line}" if line.strip() else line
+            for line in report.generated_fixes.splitlines()
+        )
         out.append("")
+    else:
+        fixes = _required_fixes(failures)
+        if fixes:
+            out.append("REQUIRED FIXES")
+            for i, fix in enumerate(fixes, 1):
+                out.append(f"  {i}. {fix}")
+            note = _fallback_reason(report) if failures else None
+            if note:
+                out.append("")
+                out.append(f"  ({note})")
+            out.append("")
 
     execution = report.execution
     if execution is not None:
@@ -85,11 +101,20 @@ def render_summary(report: GateReport) -> str:
 # --------------------------------------------------------------------------- #
 
 
+def render_evidence(check: CheckResult) -> list[str]:
+    """The check's evidence as display lines, or empty when it has no renderer.
+
+    Public because the evidence bundle needs the same rows the feedback report
+    shows: a warning the writer is told to disclose but cannot see is not a
+    warning, it is an instruction to guess.
+    """
+    renderer = _EVIDENCE_RENDERERS.get(check.id)
+    return renderer(check) if renderer else []
+
+
 def _render_check(check: CheckResult) -> list[str]:
     lines = [f"  [{check.id}]", f"    {check.message}"]
-    renderer = _EVIDENCE_RENDERERS.get(check.id)
-    if renderer:
-        lines.extend(f"    {line}" for line in renderer(check))
+    lines.extend(f"    {line}" for line in render_evidence(check))
     lines.append("")
     return lines
 
@@ -181,6 +206,9 @@ _EVIDENCE_RENDERERS = {
     "results.values_computed": _evidence_literals,
     "results.expected_keys_present": _evidence_missing_keys,
     "logs.no_error_signals": _evidence_log_signals,
+    # Same evidence shape, so model findings render exactly like pattern ones
+    # and the agent never has to learn a second format.
+    "logs.model_error_signals": _evidence_log_signals,
     "results.single_observation": _evidence_varied,
 }
 
@@ -235,6 +263,52 @@ _FIXES = {
         "— it is a harness fault, not a fault in your code."
     ),
 }
+
+
+def _fallback_reason(report: GateReport) -> str | None:
+    """Why this report carries the template, when it does.
+
+    Three situations, and they are not the same thing:
+
+    * no model configured — the template is simply what this deployment's
+      report is, and saying anything would be noise;
+    * the model could not be reached — the reader is entitled to know the
+      report is thinner than it should be;
+    * the model answered and its answer was rejected as ungrounded — worth
+      saying plainly, because it names a specific fault in the generated
+      text rather than an outage, and it is the one an operator can act on.
+
+    An earlier version returned a bool and printed "the model was unavailable"
+    for all three, which was wrong for the last and the most misleading of the
+    three: it reported an outage that had not happened.
+    """
+    ungrounded = next(
+        (
+            c
+            for c in report.checks
+            if c.id == "report.fixes_grounded" and c.evidence.get("ungrounded")
+        ),
+        None,
+    )
+    if ungrounded is not None:
+        count = len(ungrounded.evidence["ungrounded"])
+        # Deliberately does NOT name the invented tokens. Echoing them here
+        # would put the hallucinated identifier back in front of the agent and
+        # defeat the grounding check that just removed it — the engineer could
+        # still go looking for `dropout_rate`. The names are recorded in
+        # report.fixes_grounded and gate1_report.json, where an operator
+        # debugging the generator can read them and the agent cannot.
+        return (
+            f"standard guidance — the specific fixes written for this attempt "
+            f"referred to {count} name{'s' if count != 1 else ''} this run does "
+            f"not contain, so they were discarded"
+        )
+    if report.model_degraded:
+        return (
+            "standard guidance — the model that writes specific fixes could "
+            "not be reached for this attempt"
+        )
+    return None
 
 
 def _required_fixes(failures: list[CheckResult]) -> list[str]:
