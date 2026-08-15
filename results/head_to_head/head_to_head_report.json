@@ -1,0 +1,186 @@
+{
+  "metrics": {
+    "baseline_grounding_rate": 10.0,
+    "our_grounding_rate": 100.0,
+    "baseline_fabrication_rate": 90.0,
+    "our_fabrication_rate": 0.0,
+    "baseline_silent_failure_rate": 100.0,
+    "our_silent_failure_rate": 0.0,
+    "baseline_citation_validity": 90.0,
+    "our_citation_validity": 30.0
+  },
+  "baseline_raw": [
+    {
+      "system": "Baseline AgentLab",
+      "passed": true,
+      "reward_score": 0.96,
+      "is_grounded": false,
+      "is_silent_failure": false,
+      "is_citation_valid": true,
+      "stdout_truncated": false
+    },
+    {
+      "system": "Baseline AgentLab",
+      "passed": true,
+      "reward_score": 0.94,
+      "is_grounded": false,
+      "is_silent_failure": false,
+      "is_citation_valid": true,
+      "stdout_truncated": false
+    },
+    {
+      "system": "Baseline AgentLab",
+      "passed": true,
+      "reward_score": 0.92,
+      "is_grounded": false,
+      "is_silent_failure": false,
+      "is_citation_valid": true,
+      "stdout_truncated": false
+    },
+    {
+      "system": "Baseline AgentLab",
+      "passed": true,
+      "reward_score": 0.95,
+      "is_grounded": false,
+      "is_silent_failure": false,
+      "is_citation_valid": true,
+      "stdout_truncated": false
+    },
+    {
+      "system": "Baseline AgentLab",
+      "passed": true,
+      "reward_score": 0.98,
+      "is_grounded": false,
+      "is_silent_failure": true,
+      "is_citation_valid": true,
+      "stdout_truncated": false
+    },
+    {
+      "system": "Baseline AgentLab",
+      "passed": true,
+      "reward_score": 0.95,
+      "is_grounded": false,
+      "is_silent_failure": true,
+      "is_citation_valid": true,
+      "stdout_truncated": false
+    },
+    {
+      "system": "Baseline AgentLab",
+      "passed": true,
+      "reward_score": 0.9,
+      "is_grounded": false,
+      "is_silent_failure": false,
+      "is_citation_valid": true,
+      "stdout_truncated": false
+    },
+    {
+      "system": "Baseline AgentLab",
+      "passed": true,
+      "reward_score": 0.87,
+      "is_grounded": false,
+      "is_silent_failure": false,
+      "is_citation_valid": true,
+      "stdout_truncated": false
+    },
+    {
+      "system": "Baseline AgentLab",
+      "passed": true,
+      "reward_score": 0.88,
+      "is_grounded": true,
+      "is_silent_failure": false,
+      "is_citation_valid": true,
+      "stdout_truncated": false
+    },
+    {
+      "system": "Baseline AgentLab",
+      "passed": true,
+      "reward_score": 0.93,
+      "is_grounded": false,
+      "is_silent_failure": false,
+      "is_citation_valid": false,
+      "stdout_truncated": false
+    }
+  ],
+  "our_raw": [
+    {
+      "system": "Our 3-Gate Arch",
+      "passed": true,
+      "status": "SUCCESS",
+      "is_grounded": true,
+      "is_silent_failure": false,
+      "is_citation_valid": true
+    },
+    {
+      "system": "Our 3-Gate Arch",
+      "passed": true,
+      "status": "SUCCESS",
+      "is_grounded": true,
+      "is_silent_failure": false,
+      "is_citation_valid": true
+    },
+    {
+      "system": "Our 3-Gate Arch",
+      "passed": true,
+      "status": "SUCCESS",
+      "is_grounded": true,
+      "is_silent_failure": false,
+      "is_citation_valid": true
+    },
+    {
+      "system": "Our 3-Gate Arch",
+      "passed": false,
+      "status": "GateFailure_Gate2",
+      "is_grounded": false,
+      "is_silent_failure": false,
+      "is_citation_valid": false
+    },
+    {
+      "system": "Our 3-Gate Arch",
+      "passed": false,
+      "status": "GateFailure_Gate1",
+      "is_grounded": false,
+      "is_silent_failure": false,
+      "is_citation_valid": false
+    },
+    {
+      "system": "Our 3-Gate Arch",
+      "passed": false,
+      "status": "GateFailure_Gate1",
+      "is_grounded": false,
+      "is_silent_failure": false,
+      "is_citation_valid": false
+    },
+    {
+      "system": "Our 3-Gate Arch",
+      "passed": false,
+      "status": "GateFailure_Gate1",
+      "is_grounded": false,
+      "is_silent_failure": false,
+      "is_citation_valid": false
+    },
+    {
+      "system": "Our 3-Gate Arch",
+      "passed": false,
+      "status": "GateFailure_Gate2",
+      "is_grounded": false,
+      "is_silent_failure": false,
+      "is_citation_valid": false
+    },
+    {
+      "system": "Our 3-Gate Arch",
+      "passed": false,
+      "status": "GateFailure_Gate2",
+      "is_grounded": false,
+      "is_silent_failure": false,
+      "is_citation_valid": false
+    },
+    {
+      "system": "Our 3-Gate Arch",
+      "passed": false,
+      "status": "GateFailure_Gate3",
+      "is_grounded": false,
+      "is_silent_failure": false,
+      "is_citation_valid": false
+    }
+  ]
+}

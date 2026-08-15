@@ -24,10 +24,10 @@ class Gate2Evaluator:
     Option C (Semantic Tier), and Combined (A+B FAIL, C WARN).
     """
     def __init__(self, reference_registry: Dict[str, Dict[str, List[float]]] = None, llm_evaluator=None):
-        # reference_registry format: {"method:dataset": {"accuracy": [lower_bound, upper_bound]}}
         self.reference_registry = reference_registry or {
             "SGC:Cora": {"accuracy": [0.75, 0.85], "speedup": [5.0, 20.0]},
-            "GCN:Cora": {"accuracy": [0.78, 0.86], "speedup": [1.0, 5.0]}
+            "GCN:Cora": {"accuracy": [0.78, 0.86], "speedup": [1.0, 5.0]},
+            "Transformer:WMT14": {"accuracy": [25.0, 32.0]}
         }
         self.llm_evaluator = llm_evaluator
 
@@ -48,13 +48,23 @@ class Gate2Evaluator:
         # check 1: range_valid
         for k, v in metrics.items():
             if any(term in k.lower() for term in ["acc", "precision", "recall", "f1"]):
-                if not (0.0 <= v <= 1.0):
-                    fail_checks.append(CheckResult(
-                        check_id="gate2.range_valid",
-                        passed=False,
-                        severity="FAIL",
-                        reason=f"Metric '{k}' value {v} outside valid range [0, 1]."
-                    ))
+                # Check accuracy in [0, 1] or [0, 100] for BLEU
+                if "bleu" in k.lower():
+                    if not (0.0 <= v <= 100.0):
+                        fail_checks.append(CheckResult(
+                            check_id="gate2.range_valid",
+                            passed=False,
+                            severity="FAIL",
+                            reason=f"BLEU metric '{k}' value {v} outside valid range [0, 100]."
+                        ))
+                else:
+                    if not (0.0 <= v <= 1.0):
+                        fail_checks.append(CheckResult(
+                            check_id="gate2.range_valid",
+                            passed=False,
+                            severity="FAIL",
+                            reason=f"Metric '{k}' value {v} outside valid range [0, 1]."
+                        ))
             if any(term in k.lower() for term in ["time", "duration", "latency"]):
                 if v <= 0:
                     fail_checks.append(CheckResult(
@@ -92,7 +102,6 @@ class Gate2Evaluator:
                                 severity="FAIL",
                                 reason=f"Metric '{metric_key}'={val} violates reference interval [{low}, {high}] for {key}."
                             ))
-            # Q1 Resolution: If key not in registry (Novel Result), it passes this check (no baseline to violate)
 
         # -------------------------------------------------------------
         # OPTION C: Semantic Tier (LLM-Assisted Mismatch Classifier)
@@ -102,14 +111,11 @@ class Gate2Evaluator:
             if self.llm_evaluator:
                 mismatch_detected, reason = self.llm_evaluator(method_name, dataset_name, metrics)
             else:
-                # Mock semantic evaluation rule for benchmark simulation:
-                # Flag if method is reported with impossibly high baseline setting mismatch
                 mismatch_detected = metrics.get("accuracy", 0.0) > 0.98 and method_name == "SGC"
                 reason = "LLM flagged potential method/dataset difficulty mismatch: SGC accuracy > 98% on Cora is atypical."
 
             if mismatch_detected:
                 if mode == "OPTION_C":
-                    # If evaluating Option C standalone as blocking
                     fail_checks.append(CheckResult(
                         check_id="gate2.semantic_mismatch",
                         passed=False,
@@ -117,7 +123,6 @@ class Gate2Evaluator:
                         reason=reason
                     ))
                 else:
-                    # In COMBINED mode: MUST be WARN tier (Slide 4 invariant: semantic tier is not provable)
                     warn_checks.append(CheckResult(
                         check_id="gate2.semantic_mismatch",
                         passed=False,
