@@ -14,6 +14,8 @@ import os
 from dataclasses import dataclass, field
 from typing import Any
 
+from pathlib import Path
+
 from ..report import render_evidence
 from .. import (
     REGISTRY_FILENAME,
@@ -23,6 +25,7 @@ from .. import (
     Ledger,
     render_feedback,
     render_summary,
+    run_experiment,
     run_gate1,
 )
 
@@ -125,17 +128,25 @@ class GateContext:
 class GatedExecution:
     """What the solver gets back in place of a raw stdout string."""
 
-    report: GateReport
+    report: GateReport | None
     feedback: str
     evidence_bundle: str
     code: str = ""
+    #: Set only on the bypass path, where there is no report to ask.
+    ungated_passed: bool | None = None
 
     @property
     def passed(self) -> bool:
+        if self.report is None:
+            # Bypass: upstream's rule, which is a substring search over the
+            # already-truncated view. Not a stand-in for it — the same test.
+            return bool(self.ungated_passed)
         return self.report.passed
 
     @property
     def summary(self) -> str:
+        if self.report is None:
+            return f"gate bypassed — {'accepted' if self.passed else 'rejected'}"
         return render_summary(self.report)
 
     def legacy_view(self, max_len: int = 1000) -> str:
@@ -255,8 +266,67 @@ def make_gate_model(
     return call
 
 
+#: Upstream's ceiling on what the writing agent ever saw. Reproduced exactly in
+#: the bypass path, because a baseline that quietly got a bigger channel would
+#: understate the defect this layer exists to fix.
+LEGACY_MAX_LEN = 1000
+
+
+def gate1_enabled() -> bool:
+    """Whether Gate 1 arbitrates, read from the environment.
+
+    Set ``GATES_GATE1=off`` to run the host exactly as shipped. This exists so
+    the two arms of a full-workflow comparison can differ in the gate and in
+    nothing else. Checking out the pre-Gate-1 branch instead would also change
+    the model plumbing, the rate-limit backoff and the prompts, and any
+    difference in the papers could then be attributed to those.
+    """
+    return os.environ.get("GATES_GATE1", "on").strip().lower() not in {
+        "off", "0", "false", "no"
+    }
+
+
+def _ungated_execute(code: str, context: GateContext) -> GatedExecution:
+    """The host's original path: run it, truncate to 1,000 characters, accept.
+
+    Deliberately not "Gate 1 with the checks skipped". Upstream appended its
+    crash marker *after* the program's own output and then sliced the whole
+    string, so on a run that prints past the ceiling the marker falls off and
+    the failure becomes invisible. That ordering is the defect, so the bypass
+    reproduces it rather than tidying it up.
+    """
+    context.attempt += 1
+    workdir = Path(context.config.artifact_root) / f"ungated_{context.attempt:02d}"
+    execution = run_experiment(code, workdir,
+                               timeout_s=context.config.timeout_s)
+    captured = execution.stdout_text()
+    exc = execution.exception
+    if exc is not None:
+        # Appended AFTER the program's own output, then the whole thing sliced.
+        captured += f"[CODE EXECUTION ERROR]: {exc.message}\n{exc.traceback}"
+    bundle = captured[:LEGACY_MAX_LEN]
+    accepted = "[CODE EXECUTION ERROR]" not in bundle
+
+    lost = exc is not None and accepted
+    print(f"$$$$ gate 1 BYPASSED (GATES_GATE1=off) — attempt {context.attempt}, "
+          f"{'accepted' if accepted else 'rejected'}, {len(captured):,} chars "
+          f"captured, {len(bundle):,} handed on"
+          + ("  ** CRASHED, and the marker fell outside the slice **" if lost else ""))
+
+    return GatedExecution(
+        report=None,
+        feedback=bundle,
+        evidence_bundle=bundle,
+        code=code,
+        ungated_passed=accepted,
+    )
+
+
 def gated_execute(code: str, context: GateContext) -> GatedExecution:
     """Execute ``code`` under Gate 1 and return the verdict plus its artifacts."""
+    if not gate1_enabled():
+        return _ungated_execute(code, context)
+
     context.attempt += 1
     report = run_gate1(code, context.config, attempt=context.attempt)
     report.rewrite = context.consecutive_rejections + 1
