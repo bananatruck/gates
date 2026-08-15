@@ -83,6 +83,8 @@ _SYSTEM = (
     "Never invent a variable, function, file or line number.\n"
     "- Put code identifiers in backticks.\n"
     "- Do not restate the diagnosis; the reader already has it. Give the fix.\n"
+    "- Never mention a file path or a file name. The reader edits one program "
+    "and does not know where the gate stored it; refer to lines, not files.\n"
     "- Do not apologise, praise, score, or speculate about intent.\n"
     "- No preamble and no closing remarks. Output the numbered list only.\n"
     "- At most 4 instructions, at most 40 words each."
@@ -179,6 +181,16 @@ def _harvest(node: object, names: set[str], linenos: set[int]) -> None:
         linenos.add(node)
 
 
+#: A span is treated as code when it is a single token, a dotted path, or a
+#: call. Anything with internal whitespace that is not a call is prose being
+#: emphasised, and checking its words as identifiers produces nonsense.
+_CODE_LIKE = re.compile(r"^[\w.\[\]'\"-]+$|^[\w.]+\(.*\)$|^[\w.]+\s*=\s*\S+$")
+
+
+def _is_code_like(span: str) -> bool:
+    return bool(_CODE_LIKE.match(span))
+
+
 def check_grounding(text: str, report: GateReport, source: str = "") -> list[str]:
     """Tokens the model used that the report does not support.
 
@@ -191,6 +203,12 @@ def check_grounding(text: str, report: GateReport, source: str = "") -> list[str
     for match in _BACKTICKED.finditer(text):
         span = match.group(1).strip()
         if span.startswith(_TEMPLATE_APIS):
+            continue
+        if not _is_code_like(span):
+            # Prose inside backticks is not a claim about the code. A live run
+            # rejected a perfectly good fix over ['so', 'that', 'it', 'when',
+            # 'executing'] because the model emphasised a phrase this way, and
+            # every English word in it was read as an invented identifier.
             continue
         # String literals are proposed values, not references to existing names,
         # so they are stripped before identifiers are extracted. What remains is
@@ -259,9 +277,24 @@ def _evidence_lines(evidence: dict, limit: int = 6) -> list[str]:
     return out
 
 
+#: Evidence keys carrying absolute paths into the gate's own artifact directory.
+#: A live run produced the fix "Define `n_classes` before line 20 in
+#: `/home/.../attempt_03/experiment.py`" — grounded, because every segment of
+#: that path appears in the evidence, and useless, because the engineer edits
+#: its own program and has never heard of the gate's copy. The model cannot
+#: cite what it is not shown.
+_PATH_KEYS = frozenset(
+    {"stdout_path", "stderr_path", "results_json_path", "path", "file", "filename"}
+)
+
+
 def _flatten(item: object) -> str:
     if isinstance(item, dict):
-        return "  ".join(f"{k}={v}" for k, v in item.items() if v not in (None, ""))
+        return "  ".join(
+            f"{k}={v}"
+            for k, v in item.items()
+            if v not in (None, "") and k not in _PATH_KEYS
+        )
     return str(item)
 
 

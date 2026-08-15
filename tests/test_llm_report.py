@@ -267,3 +267,50 @@ def test_the_template_exemption_does_not_extend_to_other_calls(unbound_report):
     """Only the harness APIs are templates. Everything else still refers."""
     text = "1. Call `configure_optimiser(lr)` before training."
     assert "configure_optimiser" in check_grounding(text, unbound_report, UNBOUND)
+
+
+# --------------------------------------------------------------------------- #
+# found by the first live Gemini run
+# --------------------------------------------------------------------------- #
+
+
+def test_prose_in_backticks_is_not_read_as_code(unbound_report):
+    """A live run rejected a good fix over ['so', 'that', 'it', 'when',
+    'executing'] because the model emphasised a phrase with backticks."""
+    text = (
+        "1. Move the assignment up `so that it is bound when executing` the "
+        "forward pass."
+    )
+    assert check_grounding(text, unbound_report, UNBOUND) == []
+
+
+def test_code_like_spans_are_still_checked(unbound_report):
+    """The prose exemption must not become a way to smuggle invented names."""
+    assert "ghost_fn" in check_grounding(
+        "1. Call `ghost_fn(x)` first.", unbound_report, UNBOUND
+    )
+    assert "ghost_var" in check_grounding(
+        "1. Set `ghost_var`.", unbound_report, UNBOUND
+    )
+
+
+def test_artifact_paths_are_not_shown_to_the_model(config):
+    """The model cannot cite a path it never sees.
+
+    A live run produced "Define `n_classes` before line 20 in
+    `/home/.../attempt_03/experiment.py`" -- grounded, because every segment of
+    that path is in the evidence, and useless, because the engineer edits its
+    own program and has never heard of the gate's copy.
+    """
+    seen = {}
+
+    def capture(prompt, system):
+        seen["prompt"] = prompt
+        seen["system"] = system
+        return "1. Bind `hidden_dim` before it is read."
+
+    run_gate1(UNBOUND, config(consult_model=capture))
+    assert "/attempt_" not in seen["prompt"]
+    assert "stdout.txt" not in seen["prompt"]
+    assert "experiment.py" not in seen["prompt"]
+    assert "file path" in seen["system"]
