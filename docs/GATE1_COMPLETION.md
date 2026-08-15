@@ -1,8 +1,29 @@
 # Gate 1 — what is left, and how to finish it
 
-**Read this with [`PLAN.md`](PLAN.md) §7 open.** Gate 1's implementation is complete: 14 checks
-live, 85 tests green, wired into Agent-Researcher, zero model calls in the verdict. Everything
+**Read this with [`PLAN.md`](PLAN.md) §7 open.** Gate 1's implementation is complete: 16 checks
+live, 206 tests green, wired into Agent-Researcher, zero model calls in the verdict. Everything
 below is *measurement* — the numbers the paper needs, which no amount of further coding produces.
+
+## The LLM layer
+
+Built, and required rather than optional — the feedback report is the loop's return path to the
+ML engineer, and no template writes `PLAN.md` §3.4's example. It does two jobs, both after
+`decide()` has fixed the verdict:
+
+| Job | Module | Severity | Measured against |
+|---|---|---|---|
+| Read the log lines the pattern set cannot reach | `gates/llm_scan.py` | WARN, by construction | `tests/fixtures/log_corpus.jsonl` |
+| Write the REQUIRED FIXES the engineer reads | `gates/llm_report.py` | not a check at all | `rig/tuning.py` (unrun) |
+
+The deterministic baseline is now a number rather than an adjective:
+
+```
+precision  1.000  (95% CI 0.824–1.000)   18 of 18 flagged were real
+recall     0.529  (95% CI 0.367–0.685)   18 of 34 signals found
+```
+
+Precision is the floor and the corpus enforces it. Recall is what the model layer exists to move,
+and **the model's own rates are not yet measured** — that needs an API key, and is T6 below.
 
 Status of the three source documents' requirements is unchanged and traced in
 [`GATE1_REQUIREMENTS.md`](GATE1_REQUIREMENTS.md): V1–V6 met, D1–D7 met, D8 instrumented, D9
@@ -236,14 +257,30 @@ cheapest available path to T2's numbers on a single machine before committing to
 |---|---|---|---|
 | T1 | Configuration keys must not be dropped silently | host repo | **done** |
 | T5 | Settle: budget exhausted → `GateFailure` or → Gate 2 | decision | **resolved — `GateFailure`** |
+| — | LLM layer: log scan, feedback generation, grounding, cost ceiling | gates repo | **done** |
 | T2 | Re-run the archive, both arms, for a real n | host repo | **open** — needs API budget + hand annotation |
 | T3 | Channel-fidelity: writer arm | host repo | **open** — needs T2's runs |
 | T4 | Second adapter | gates repo | **open** — ~1 day, no API cost |
+| T6 | Measure the model tier: scan precision/recall, and feedback convergence | gates repo | **open** — harness built, needs an API key |
 
 **Gate 1 is complete as an implementation.** Every item that can be closed without spending API
-budget or annotation time is closed. What remains is T2 and T3, which are measurement — they need
-real runs against a real model and a human labelling the fabricated numbers — and T4, which is a
-portability demonstration rather than a Gate 1 requirement.
+budget or annotation time is closed. What remains is T2, T3 and T6, which are measurement — they
+need real runs against a real model and a human labelling the fabricated numbers — and T4, which
+is a portability demonstration rather than a Gate 1 requirement.
+
+T6 is the cheapest of the three and unblocks the model layer's claims:
+
+```python
+from rig.corpus import combined_scanner, load_corpus, score, render
+print(render("deterministic + model", score(combined_scanner(my_model_fn))))
+
+from rig.tuning import compare_arms
+print(compare_arms(my_model_fn, seeds=5))
+```
+
+The first is 68 model calls and produces the precision/recall pair the layer is claimed on. The
+second runs three tasks twice under two feedback regimes and produces turns-to-pass. Neither
+needs a training run.
 
 To launch T2 when the budget is there:
 
