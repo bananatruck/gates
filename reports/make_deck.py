@@ -262,6 +262,55 @@ def _slide_accuracy(prs, run):
            11, False, INK2)])
 
 
+def _slide_report_accuracy(prs):
+    """The comparison the deck was missing: both arms' reports, measured alike.
+
+    Three properties, kept apart on purpose. The ungated arm passes on accuracy
+    and fails on the other two, and one merged column would have hidden that —
+    which is the more interesting result, not the more flattering one.
+    """
+    path = Path(RUNS_ROOT) / "report_accuracy.json"
+    if not path.exists():
+        return
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not data:
+        return
+
+    def tot(arm, fn):
+        return sum(fn(r.get(arm, {})) for r in data.values())
+
+    g_vis = tot("gated", lambda a: len(a.get("visible", {})))
+    g_tr = tot("gated", lambda a: a.get("traceable", 0))
+    u_prod = tot("ungated", lambda a: len(a.get("produced", {})))
+    u_vis = tot("ungated", lambda a: len(a.get("visible", {})))
+    u_lost = u_prod - u_vis
+    u_match = tot("ungated", lambda a: len(a.get("matched", [])))
+    u_check = u_match + tot("ungated", lambda a: len(a.get("mismatched", [])))
+
+    s = blank(prs)
+    header(s, "report accuracy", "Both arms' reports, measured the same way")
+    rows = [["", "with Gate 1", "without Gate 1"],
+            ["results the run produced", g_vis, u_prod],
+            ["reached the writing agent", g_vis, u_vis],
+            ["lost to the 1,000-char channel", 0, u_lost],
+            ["traceable to an execution", g_tr,
+             tot("ungated", lambda a: a.get("traceable", 0))],
+            ["reproduced when re-run", f"{g_vis} of {g_vis}",
+             f"{u_match} of {u_check}"]]
+    _table(s, Inches(0.6), Inches(1.75), Inches(12.1), rows,
+           [Inches(5.5), Inches(3.3), Inches(3.3)], size=13, rh=Inches(0.46))
+    text(s, Inches(0.6), Inches(5.5), Inches(12.1), Inches(1.6),
+         [("The ungated arm's numbers are not wrong.", 14, True, INK),
+          (f"Every one of the {u_check} that reached the writer reproduced "
+           f"exactly. It fails on completeness — {u_lost} of {u_prod} results "
+           f"never got through the window, and in one run all three did not, "
+           f"leaving the writer a training log and no results — and on "
+           f"traceability: 0 of {u_prod} carry a trace id or a code hash.",
+           12, False, INK2),
+          ("A number that reproduces by luck and a number that was measured "
+           "look identical to a reader. That is the gap.", 12, False, ORANGE)])
+
+
 def _slide_checks_fired(prs, run):
     s = blank(prs)
     header(s, "checks", "Every check that ran, turn by turn")
@@ -410,6 +459,7 @@ def build(bench, run):
         _slide_run(prs, run)
         _slide_all_runs(prs)
         _slide_accuracy(prs, run)
+        _slide_report_accuracy(prs)
         _slide_checks_fired(prs, run)
         _slide_logs(prs, run)
         _slide_taxonomy(prs, run)

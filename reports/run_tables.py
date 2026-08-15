@@ -401,3 +401,86 @@ def cost_note(run: dict) -> str:
         f"whole reason the shadowed-contract check was added.</p>"
     )
     return "".join(lines)
+
+
+# --------------------------------------------------------------------------- #
+# both arms' reports, measured the same way
+# --------------------------------------------------------------------------- #
+
+
+def report_accuracy_table(data: dict) -> str:
+    """Three separate properties, kept separate because they differ.
+
+    Accuracy is whether a number reproduces. Completeness is whether it reached
+    the writer at all. Traceability is whether anything binds it to the run that
+    produced it. The ungated arm can score well on the first and still fail the
+    other two, and collapsing them would hide exactly that.
+    """
+    rows, tot = [], {
+        "gp": 0, "gv": 0, "gt": 0, "gm": 0,
+        "up": 0, "uv": 0, "ul": 0, "ut": 0, "um": 0, "uc": 0,
+    }
+    for name, r in sorted(data.items()):
+        g, u = r.get("gated", {}), r.get("ungated", {})
+        gp, gv = len(g.get("produced", {})), len(g.get("visible", {}))
+        gm = len(g.get("matched", []))
+        up, uv = len(u.get("produced", {})), len(u.get("visible", {}))
+        ul, um = u.get("lost_to_channel", 0), len(u.get("matched", []))
+        uc = um + len(u.get("mismatched", []))
+        tot["gp"] += gp; tot["gv"] += gv; tot["gt"] += g.get("traceable", 0)
+        tot["gm"] += gm
+        tot["up"] += up; tot["uv"] += uv; tot["ul"] += ul
+        tot["ut"] += u.get("traceable", 0); tot["um"] += um; tot["uc"] += uc
+        rows.append(
+            f"<tr><td class='mono'>{name}</td>"
+            f"<td>{gp}</td><td>{gv}</td><td>{g.get('traceable', 0)}</td><td>{gm}</td>"
+            f"<td>{up}</td><td>{uv}</td>"
+            f"<td class='{'bad' if ul else ''}'>{ul}</td>"
+            f"<td class='bad'>{u.get('traceable', 0)}</td>"
+            f"<td>{um}/{uc}</td></tr>"
+        )
+    rows.append(
+        f"<tr><td><b>total</b></td>"
+        f"<td><b>{tot['gp']}</b></td><td><b>{tot['gv']}</b></td>"
+        f"<td><b>{tot['gt']}</b></td><td><b>{tot['gm']}</b></td>"
+        f"<td><b>{tot['up']}</b></td><td><b>{tot['uv']}</b></td>"
+        f"<td class='bad'><b>{tot['ul']}</b></td>"
+        f"<td class='bad'><b>{tot['ut']}</b></td>"
+        f"<td><b>{tot['um']}/{tot['uc']}</b></td></tr>"
+    )
+    return (
+        "<table><tr><th rowspan=2>run</th>"
+        "<th colspan=4 style='text-align:center'>with Gate 1</th>"
+        "<th colspan=5 style='text-align:center'>without Gate 1</th></tr>"
+        "<tr><th>produced</th><th>reached writer</th><th>traceable</th><th>reproduced</th>"
+        "<th>produced</th><th>reached writer</th><th>lost to channel</th>"
+        "<th>traceable</th><th>reproduced</th></tr>"
+        + "".join(rows) + "</table>"
+    )
+
+
+def report_accuracy_note(data: dict) -> str:
+    up = sum(len(r.get("ungated", {}).get("produced", {})) for r in data.values())
+    uv = sum(len(r.get("ungated", {}).get("visible", {})) for r in data.values())
+    um = sum(len(r.get("ungated", {}).get("matched", [])) for r in data.values())
+    uc = um + sum(len(r.get("ungated", {}).get("mismatched", [])) for r in data.values())
+    gv = sum(len(r.get("gated", {}).get("visible", {})) for r in data.values())
+    gt = sum(r.get("gated", {}).get("traceable", 0) for r in data.values())
+    lost = up - uv
+    return (
+        f"<p><b>The ungated arm's numbers are not wrong.</b> Of the {uc} that "
+        f"reached the writer and could be checked, {um} reproduced exactly when "
+        f"the same code was re-run. Accuracy is not where that arm fails.</p>"
+        f"<div class='warnbox'><b>It fails on completeness and traceability.</b> "
+        f"{lost} of {up} results the runs actually produced never reached the "
+        f"writing agent at all — they fell outside the 1,000-character window, "
+        f"and in one run all three did, leaving a writer with a training log and "
+        f"no results. And <b>0 of {up}</b> carry anything binding them to the run "
+        f"that produced them: no trace id, no code hash. A number that reproduces "
+        f"by luck and a number that was measured are indistinguishable to the "
+        f"reader.</div>"
+        f"<p>With Gate 1, {gv} of {gv} results reached the writer and {gt} of "
+        f"{gv} carry a trace id and a code hash. The registry is not truncated, "
+        f"which is the whole point of replacing the channel rather than widening "
+        f"it.</p>"
+    )

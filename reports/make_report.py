@@ -253,6 +253,20 @@ def img(name: str) -> str:
     return f'<img src="data:image/png;base64,{data}">'
 
 
+def _accuracy_section() -> str:
+    """Both arms' reports, measured off `rig/report_accuracy.py`'s record.
+
+    Absent rather than assumed: if the measurement has not been run, this says
+    so instead of rendering an empty table that would read as a zero.
+    """
+    path = Path(RUNS_ROOT) / "report_accuracy.json"
+    if not path.exists():
+        return ("<p class='small'>Report-accuracy measurement not present. "
+                "Generate it with <code>python -m rig.report_accuracy</code>.</p>")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return rt.report_accuracy_table(data) + rt.report_accuracy_note(data)
+
+
 def run_section(run, run_dir):
     """The measured run: what each arm produced, and whether it holds up."""
     runs = agg.Aggregate(agg.load_runs(RUNS_ROOT))
@@ -260,6 +274,7 @@ def run_section(run, run_dir):
         agg.summary_table(runs) + agg.per_run_table(runs)
         if runs.n else "<p class='small'>No run records found.</p>"
     )
+    accuracy_section = _accuracy_section()
     if not run:
         return ("<h2>2. The run</h2><p class='small'>No ablation run record "
                 "found. Sections 2-5 are generated from one.</p>")
@@ -303,7 +318,7 @@ OpenAI-compatible endpoint. A code model writes the same program in 42 seconds.
 The gate roles are unaffected because their output is short. Both arms use the
 same two models, so neither is advantaged.</p>
 
-<div class="hero"><span class="big">{g_rate}</span> of the numbers the Gate 1 arm reported reproduced when its accepted code was re-executed, against <span class="big">{u_n}</span> numbers the ungated arm recorded through any contract — so nothing it would hand the writer can be checked against an execution at all.</div>
+<div class="hero"><span class="big">{g_rate}</span> of the numbers the Gate 1 arm reported reproduced when its accepted code was re-executed. The ungated arm recorded <span class="big">{u_n}</span> through any contract — its numbers are printed, so they can still be read off the log, but nothing binds one to the execution that produced it. Section 3.1 measures both arms' reports side by side.</div>
 
 {img("accuracy.png")}
 
@@ -321,6 +336,17 @@ same two models, so neither is advantaged.</p>
 <code>{RUNS_ROOT}</code> is aggregated here; a run that predates a measurement is
 reported as <i>not measured</i> rather than as zero.</p>
 {aggregate_section}
+
+<h3>3.1 What each arm's report actually says</h3>
+<p>Both arms produce a report; they are measured here the same way, on three
+properties that are genuinely different and are kept apart because collapsing
+them would hide the real result. <b>Completeness</b> — did the result reach the
+writing agent at all? <b>Traceability</b> — does anything bind it to the
+execution that produced it? <b>Accuracy</b> — does it reproduce when the accepted
+code is re-run? For the gated arm the report is its registry. For the ungated arm
+it is whatever numbers appear in the 1,000 characters upstream hands the writer,
+because those are the only ones the writer can copy.</p>
+{accuracy_section}
 
 <h2>4. Every check that ran</h2>
 <p>Not the catalogue of what Gate 1 <i>could</i> check — the record of what it
@@ -354,7 +380,14 @@ ever reach the agent</h3>
 
 def build_html(bench, run, run_dir):
     today = date.today().isoformat()
-    audit_table = agg.audit(agg.Aggregate(agg.load_runs(RUNS_ROOT)))
+    audit_table = agg.audit(
+        agg.Aggregate(agg.load_runs(RUNS_ROOT)),
+        extra={
+            "Report completeness, traceability and reproduction, both arms":
+                "rig/report_accuracy.py over every attempt on disk; "
+                "ungated arm re-executed to check",
+        },
+    )
     return f"""<html><head><meta charset="utf-8"><title>Gate 1 Report</title>
 <style>{CSS}</style></head><body>
 
