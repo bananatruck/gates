@@ -168,6 +168,35 @@ debugging aid.
 pip install -e ".[dev]" && pytest
 ```
 
+## Seeing the loop run
+
+The checks are testable one at a time; the thing they compose into is a loop, and
+`rig/` drives that loop end to end with a scripted engineer standing in for the
+model. Every code path is the shipped one — only the source of the code is fake,
+which is what makes it free to run on every change.
+
+```bash
+python -m rig.gate1_loop              # every scenario, full transcript
+python -m rig.gate1_loop archived-run # replay the audited run: 3 turns, no paper
+python -m rig.gate1_loop --quiet      # summary table only
+```
+
+Five scenarios cover the failure modes Gate 1 claims: the audited run replayed,
+a rejection the agent answers by inventing numbers, three executions inside one
+engineer turn, a run that passes with four warnings, and a namespace leak. Each
+declares the checks it must fail, the turns it must consume and its terminal
+state, so a scenario cannot drift from its own description. Exit status is
+non-zero on any mismatch.
+
+The rig also reconstructs the host scaffold's own failure detector — a substring
+search over a 1,000-character slice, so it reproduces exactly — and reports which
+attempts Gate 1 rejected that upstream would have accepted. It does **not**
+reconstruct `get_score`; that is an LLM at temperature 0.6, so the ledger's
+reward column stays `null` unless a real model is passed to `run_loop`.
+
+Remaining Gate 1 work, all of it measurement rather than code:
+[`docs/GATE1_COMPLETION.md`](docs/GATE1_COMPLETION.md).
+
 ## License
 
 MIT.

@@ -4,9 +4,10 @@
 single question with no model in the loop: *did this code actually run to completion, and were
 the numbers it reports produced by this run rather than inherited, hardcoded, or invented?*
 
-Status: **implemented, tested, wired into Agent-Researcher.** 67 gate tests, 10 integration
-tests. Requirement-by-requirement traceability against the project documents is in
-[`GATE1_REQUIREMENTS.md`](GATE1_REQUIREMENTS.md).
+Status: **implemented, tested, wired into Agent-Researcher.** 67 gate tests, 18 loop tests, 10
+integration tests. Requirement-by-requirement traceability against the project documents is in
+[`GATE1_REQUIREMENTS.md`](GATE1_REQUIREMENTS.md); what remains before Gate 1 can be written up —
+all of it measurement, none of it code — is in [`GATE1_COMPLETION.md`](GATE1_COMPLETION.md).
 
 ---
 
@@ -270,6 +271,13 @@ environment the host already has.
 ---
 
 ## 8. Not yet done
+
+The loop these checks compose into is exercised end to end by `rig/gate1_loop.py`, with a
+scripted engineer in place of the model — five scenarios, including the audited run replayed turn
+by turn, and the host scaffold's own 1,000-character failure detector reconstructed alongside so
+the divergence is measured rather than asserted. What is left for Gate 1 after that is the
+archive re-run and the channel-fidelity writer arm, scheduled in
+[`GATE1_COMPLETION.md`](GATE1_COMPLETION.md).
 
 Gate 2 (source ↔ result coherence) and Gate 3 (report validity) are specified in
 [`PLAN.md`](PLAN.md) and not implemented. Gate 1 does not check whether results are *plausible*
