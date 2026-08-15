@@ -484,3 +484,59 @@ def report_accuracy_note(data: dict) -> str:
         f"which is the whole point of replacing the channel rather than widening "
         f"it.</p>"
     )
+
+
+# --------------------------------------------------------------------------- #
+# the papers themselves
+# --------------------------------------------------------------------------- #
+
+
+def paper_audit_table(data: dict) -> str:
+    """Every numeric claim in each paper, and whether anything backs it.
+
+    This is the end of the chain the rest of the report measures piecewise. A
+    reader does not see a registry or a trace id; they see a paper. So the
+    question that matters is how many of the numbers in it can be tied to an
+    execution -- and for the archived paper the answer is none of them.
+    """
+    def row(label: str, a: dict) -> str:
+        if a.get("note") and not a.get("n_claims"):
+            return (f"<tr><td>{label}</td>"
+                    f"<td colspan=4 class='small'>{a['note']}</td></tr>")
+        n = a.get("n_claims", 0)
+        srcd = a.get("sourced", 0)
+        rate = f"{100 * srcd / n:.0f}%" if n else "—"
+        cls = "ok" if n and srcd == n else ("bad" if srcd == 0 else "warn")
+        return (
+            f"<tr><td>{label}</td><td>{n}</td>"
+            f"<td class='{cls}'><b>{srcd}</b></td>"
+            f"<td class='{cls}'>{rate}</td>"
+            f"<td>{a.get('record_result_calls', 0)}</td></tr>"
+        )
+
+    body = "".join(row(k, v) for k, v in data.items())
+    return (
+        "<table><tr><th style='width:30%'>paper</th>"
+        "<th>numeric claims</th><th>sourced to a recorded result</th>"
+        "<th>sourced</th><th><code>record_result</code> calls</th></tr>"
+        + body + "</table>"
+    )
+
+
+def paper_claims_list(data: dict, label: str, limit: int = 10) -> str:
+    """The unsourced claims themselves, quoted, so the reader can check."""
+    a = data.get(label, {})
+    claims = [c for c in a.get("claims", []) if c.get("status") == "unsourced"]
+    if not claims:
+        return ""
+    rows = "".join(
+        f"<tr><td class='mono'>{c['value']:g}</td>"
+        f"<td class='small'>…{_escape(c['context'])}…</td></tr>"
+        for c in claims[:limit]
+    )
+    more = (f"<p class='small'>and {len(claims) - limit} more.</p>"
+            if len(claims) > limit else "")
+    return (
+        f"<table><tr><th style='width:12%'>value</th>"
+        f"<th>as the paper states it</th></tr>{rows}</table>{more}"
+    )

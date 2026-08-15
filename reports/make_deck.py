@@ -311,6 +311,43 @@ def _slide_report_accuracy(prs):
            "look identical to a reader. That is the gap.", 12, False, ORANGE)])
 
 
+def _slide_papers(prs):
+    """The end of the chain: what the reader actually gets handed."""
+    path = Path(RUNS_ROOT) / "paper_audit.json"
+    if not path.exists():
+        return
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not data:
+        return
+
+    s = blank(prs)
+    header(s, "the papers", "Of the numbers a paper states, how many are sourced")
+    rows = [["paper", "numeric claims", "sourced to a result", "record_result calls"]]
+    for label, a in data.items():
+        if a.get("note") and not a.get("n_claims"):
+            rows.append([label, a["note"], "—", "—"])
+            continue
+        n, srcd = a.get("n_claims", 0), a.get("sourced", 0)
+        rate = f"{100 * srcd / n:.0f}%" if n else "—"
+        rows.append([label, n, f"{srcd}  ({rate})", a.get("record_result_calls", 0)])
+    _table(s, Inches(0.6), Inches(1.75), Inches(12.1), rows,
+           [Inches(3.6), Inches(3.0), Inches(3.0), Inches(2.5)],
+           size=13, rh=Inches(0.5))
+
+    ungated = data.get("without Gate 1", {})
+    n = ungated.get("n_claims", 0)
+    text(s, Inches(0.6), Inches(4.2), Inches(12.1), Inches(2.4),
+         [("The archived paper reads well. That is the problem.", 15, True, INK),
+          (f"It states {n} numeric findings and sources none of them: "
+           f"81.60% test accuracy, a 13.61x speedup, a 39.20% collapse. Its "
+           f"saved code calls record_result zero times and contains none of "
+           f"those numbers. The run behind it raised NameError on every "
+           f"attempt and scored 1.0.", 13, False, INK2),
+          ("Nothing in the pipeline could tell the difference between a "
+           "measurement and a sentence. That is what a validity layer is for.",
+           13, False, ORANGE)])
+
+
 def _slide_checks_fired(prs, run):
     s = blank(prs)
     header(s, "checks", "Every check that ran, turn by turn")
@@ -460,6 +497,7 @@ def build(bench, run):
         _slide_all_runs(prs)
         _slide_accuracy(prs, run)
         _slide_report_accuracy(prs)
+        _slide_papers(prs)
         _slide_checks_fired(prs, run)
         _slide_logs(prs, run)
         _slide_taxonomy(prs, run)

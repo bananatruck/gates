@@ -267,6 +267,41 @@ def _accuracy_section() -> str:
     return rt.report_accuracy_table(data) + rt.report_accuracy_note(data)
 
 
+def _paper_section() -> str:
+    """Both generated papers, audited claim by claim."""
+    path = Path(RUNS_ROOT) / "paper_audit.json"
+    if not path.exists():
+        return ("<p class='small'>Paper audit not present. Generate it with "
+                "<code>python -m rig.audit_papers</code>.</p>")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    out = [rt.paper_audit_table(data)]
+    ungated = data.get("without Gate 1", {})
+    if ungated.get("claims"):
+        out.append(
+            "<div class='warnbox'><b>The archived paper states "
+            f"{ungated['n_claims']} numeric findings and sources none of them.</b> "
+            "Its saved experiment code calls <code>record_result</code> zero "
+            "times, and the run that produced it raised "
+            "<code>NameError</code> on every attempt while scoring 1.0. The "
+            "paper is fluent, specific, and unfalsifiable from its own "
+            "artifacts — which is the failure mode a validity layer exists to "
+            "make impossible rather than unlikely.</div>"
+        )
+        out.append("<p class='small'>A sample of the unsourced claims, quoted "
+                   "as the paper states them:</p>")
+        out.append(rt.paper_claims_list(data, "without Gate 1", limit=10))
+    gated = data.get("with Gate 1", {})
+    if gated.get("note") and not gated.get("n_claims"):
+        out.append(
+            "<p class='small'><b>The Gate 1 paper is not in this build.</b> "
+            f"{gated['note']}. It is left absent rather than estimated: an "
+            "empty column here would read as a measurement, and this report "
+            "has no business making that mistake in a section about "
+            "unsourced numbers.</p>"
+        )
+    return "\n".join(out)
+
+
 def run_section(run, run_dir):
     """The measured run: what each arm produced, and whether it holds up."""
     runs = agg.Aggregate(agg.load_runs(RUNS_ROOT))
@@ -275,6 +310,7 @@ def run_section(run, run_dir):
         if runs.n else "<p class='small'>No run records found.</p>"
     )
     accuracy_section = _accuracy_section()
+    paper_section = _paper_section()
     if not run:
         return ("<h2>2. The run</h2><p class='small'>No ablation run record "
                 "found. Sections 2-5 are generated from one.</p>")
@@ -347,6 +383,16 @@ code is re-run? For the gated arm the report is its registry. For the ungated ar
 it is whatever numbers appear in the 1,000 characters upstream hands the writer,
 because those are the only ones the writer can copy.</p>
 {accuracy_section}
+
+<h3>3.2 The papers</h3>
+<p>Everything above measures a link in the chain. A reader sees none of it —
+they see a paper. So the last question is the only one that reaches them: of the
+numbers a generated paper states as its findings, how many can be tied back to
+an execution? Both papers are put through the same audit, with the same claim
+filter and the same rounding tolerance; the only asymmetry is the one being
+measured, which is that one run has a registry to check against and the other
+recorded nothing.</p>
+{paper_section}
 
 <h2>4. Every check that ran</h2>
 <p>Not the catalogue of what Gate 1 <i>could</i> check — the record of what it
