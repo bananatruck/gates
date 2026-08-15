@@ -331,21 +331,27 @@ def _slide_papers(prs):
         rate = f"{100 * srcd / n:.0f}%" if n else "—"
         rows.append([label, n, f"{srcd}  ({rate})", a.get("record_result_calls", 0)])
     _table(s, Inches(0.6), Inches(1.75), Inches(12.1), rows,
-           [Inches(3.6), Inches(3.0), Inches(3.0), Inches(2.5)],
-           size=13, rh=Inches(0.5))
+           [Inches(4.6), Inches(2.6), Inches(2.7), Inches(2.2)],
+           size=12, rh=Inches(0.5))
 
-    ungated = data.get("without Gate 1", {})
-    n = ungated.get("n_claims", 0)
-    text(s, Inches(0.6), Inches(4.2), Inches(12.1), Inches(2.4),
-         [("The archived paper reads well. That is the problem.", 15, True, INK),
-          (f"It states {n} numeric findings and sources none of them: "
-           f"81.60% test accuracy, a 13.61x speedup, a 39.20% collapse. Its "
-           f"saved code calls record_result zero times and contains none of "
-           f"those numbers. The run behind it raised NameError on every "
-           f"attempt and scored 1.0.", 13, False, INK2),
+    archived = data.get("archived run (different topic, no gate)", {})
+    n = archived.get("n_claims", 0)
+    y = Inches(1.75) + Inches(0.5) * len(rows) + Inches(0.3)
+    text(s, Inches(0.6), y, Inches(12.1), Inches(2.6),
+         [("The first two rows are the ablation: same question, same model, "
+           "same prompts — the gate is the only difference.", 13, True, INK),
+          ("The third is the archived Agent Laboratory run on its own topic. "
+           "One controlled pair shows what the gate changes; an independent "
+           "instance shows the failure was not manufactured for the occasion.",
+           12, False, INK2),
+          ("", 8, False, INK2),
+          (f"That archived paper states {n} numeric findings and sources none "
+           f"of them: 81.60% test accuracy, a 13.61x speedup, a 39.20% "
+           f"collapse. Its saved code calls record_result zero times and "
+           f"contains none of those numbers. The run behind it raised "
+           f"NameError on every attempt and scored 1.0.", 12, False, INK2),
           ("Nothing in the pipeline could tell the difference between a "
-           "measurement and a sentence. That is what a validity layer is for.",
-           13, False, ORANGE)])
+           "measurement and a sentence.", 13, True, ORANGE)])
 
 
 def _slide_checks_fired(prs, run):

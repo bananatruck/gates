@@ -312,37 +312,53 @@ def _models_note(runs) -> str:
     )
 
 
+ARCHIVED_KEY = "archived run (different topic, no gate)"
+
+
 def _paper_section() -> str:
-    """Both generated papers, audited claim by claim."""
+    """Every generated paper, audited claim by claim on identical criteria."""
     path = Path(RUNS_ROOT) / "paper_audit.json"
     if not path.exists():
         return ("<p class='small'>Paper audit not present. Generate it with "
                 "<code>python -m rig.audit_papers</code>.</p>")
     data = json.loads(path.read_text(encoding="utf-8"))
-    out = [rt.paper_audit_table(data)]
-    ungated = data.get("without Gate 1", {})
-    if ungated.get("claims"):
+    out = [
+        "<p>Three papers. The first two are the ablation: the same research "
+        "question, the same engineer model and the same prompts, differing only "
+        "in whether Gate 1 arbitrates — the host is run as shipped via "
+        "<code>GATES_GATE1=off</code>, so the gate is the single variable. The "
+        "third is the archived Agent Laboratory run on its own topic, included "
+        "because one controlled pair shows what the gate changes and an "
+        "independent instance shows the failure was not manufactured for the "
+        "occasion.</p>",
+        rt.paper_audit_table(data),
+    ]
+    archived = data.get(ARCHIVED_KEY, {})
+    if archived.get("claims"):
         out.append(
             "<div class='warnbox'><b>The archived paper states "
-            f"{ungated['n_claims']} numeric findings and sources none of them.</b> "
-            "Its saved experiment code calls <code>record_result</code> zero "
-            "times, and the run that produced it raised "
-            "<code>NameError</code> on every attempt while scoring 1.0. The "
-            "paper is fluent, specific, and unfalsifiable from its own "
+            f"{archived['n_claims']} numeric findings and sources none of "
+            "them.</b> Its saved experiment code calls "
+            "<code>record_result</code> zero times, and the run that produced "
+            "it raised <code>NameError</code> on every attempt while scoring "
+            "1.0. The paper is fluent, specific, and unfalsifiable from its own "
             "artifacts — which is the failure mode a validity layer exists to "
             "make impossible rather than unlikely.</div>"
         )
         out.append("<p class='small'>A sample of the unsourced claims, quoted "
                    "as the paper states them:</p>")
-        out.append(rt.paper_claims_list(data, "without Gate 1", limit=10))
-    gated = data.get("with Gate 1", {})
-    if gated.get("note") and not gated.get("n_claims"):
+        out.append(rt.paper_claims_list(data, ARCHIVED_KEY, limit=10))
+    pending = [
+        name for name in ("with Gate 1", "without Gate 1")
+        if data.get(name, {}).get("note") and not data.get(name, {}).get("n_claims")
+    ]
+    if pending:
         out.append(
-            "<p class='small'><b>The Gate 1 paper is not in this build.</b> "
-            f"{gated['note']}. It is left absent rather than estimated: an "
-            "empty column here would read as a measurement, and this report "
-            "has no business making that mistake in a section about "
-            "unsourced numbers.</p>"
+            "<p class='small'><b>Not in this build: "
+            f"{', '.join(pending)}.</b> Those runs had not finished when this "
+            "report was generated. They are left absent rather than estimated — "
+            "an empty column would read as a measurement, and a section about "
+            "unsourced numbers is the wrong place to make that mistake.</p>"
         )
     return "\n".join(out)
 

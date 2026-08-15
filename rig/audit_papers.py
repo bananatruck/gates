@@ -22,8 +22,17 @@ from pathlib import Path
 from rig.paper_audit import PaperAudit, audit, render
 
 HOST = Path("/home/kesh/AgentLaboratory-Gemini")
-UNGATED_RUN = HOST / "results" / "gemini_3_5_flash_run_1"
+ARCHIVED_RUN = HOST / "results" / "gemini_3_5_flash_run_1"
 GATED_DIR = HOST / "research_dir"
+
+#: The like-for-like baseline: the same task and the same models as the gated
+#: run, with GATES_GATE1=off. The archived paper is a different topic, so on its
+#: own it can only show that the failure happens -- not that Gate 1 is what
+#: prevents it. This pair is what makes the comparison an ablation.
+UNGATED_DIR = Path(
+    "/tmp/claude-1000/-home-kesh/976cef29-0afd-479c-a716-6c557e07b6cb"
+    "/scratchpad/ungated_run/research_dir"
+)
 
 
 def last_passing_registry(gate_root: Path) -> Path | None:
@@ -43,13 +52,22 @@ def last_passing_registry(gate_root: Path) -> Path | None:
     return best
 
 
-def audit_ungated() -> PaperAudit:
-    paper = UNGATED_RUN / "research_dir" / "report.txt"
-    code_path = UNGATED_RUN / "research_dir" / "src" / "run_experiments.py"
+def audit_archived() -> PaperAudit:
+    """The shipped scaffold's own output, on its own topic (SGC/Cora)."""
+    paper = ARCHIVED_RUN / "research_dir" / "report.txt"
+    code_path = ARCHIVED_RUN / "research_dir" / "src" / "run_experiments.py"
     code = code_path.read_text(errors="replace") if code_path.exists() else ""
     # No registry: the run never recorded anything, which is the finding.
     # No execution capture either -- only a workflow transcript, which
     # `audit` refuses, so nothing here is scored as "printed".
+    return audit(paper, code_text=code)
+
+
+def audit_ungated() -> PaperAudit:
+    """Same task and models as the gated run, gate switched off."""
+    paper = UNGATED_DIR / "report.txt"
+    code_path = UNGATED_DIR / "src" / "run_experiments.py"
+    code = code_path.read_text(errors="replace") if code_path.exists() else ""
     return audit(paper, code_text=code)
 
 
@@ -63,7 +81,12 @@ def audit_gated() -> PaperAudit:
 
 def main() -> None:
     out = {}
-    for name, fn in (("without Gate 1", audit_ungated), ("with Gate 1", audit_gated)):
+    # Order matters for the rendered table: the two arms of the ablation first,
+    # since they are the controlled comparison, then the archived run as the
+    # independent instance of the same failure on a different topic.
+    for name, fn in (("with Gate 1", audit_gated),
+                     ("without Gate 1", audit_ungated),
+                     ("archived run (different topic, no gate)", audit_archived)):
         result = fn()
         out[name] = result.to_dict()
         print(f"--- {name} ---")
