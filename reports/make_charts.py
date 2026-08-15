@@ -162,23 +162,34 @@ def chart_compression():
     return save(fig, "compression.png")
 
 
-def chart_ablation():
-    """The live ablation: gate on vs gate off, qwen3:8b, same task."""
+def chart_ablation(run: dict | None = None):
+    """The live ablation: gate on vs gate off, same task and models."""
+    if run:
+        g, u = run["arms"]["gated"], run["arms"]["ungated"]
+        turns = [g["turns"], u["turns"]]
+        gv, uv = g["verification"], u["verification"]
+        notes = [
+            f"accepted at turn {g['accepted_at']}\n{len(gv['matched'])} of "
+            f"{len(gv['reported'])} values reproduced" if g["accepted"]
+            else "never accepted",
+            f"accepted at turn {u['accepted_at']}\n{len(uv['reported'])} values "
+            f"recorded" if u["accepted"] else "never accepted",
+        ]
+    else:
+        turns, notes = [2, 3], ["converged", "never converged"]
     fig, ax = plt.subplots(figsize=(7.2, 3.2))
     arms = ["Gate 1 on", "Gate 1 off\n(upstream rule)"]
-    turns = [2, 3]
     colours = [BLUE, ORANGE]
     bars = ax.bar(arms, turns, 0.5, color=colours, edgecolor=SURFACE, linewidth=2)
-    notes = ["converged\n(both keys recorded)", "never converged\nin 3 turns"]
     for bar, v, note in zip(bars, turns, notes):
         ax.text(bar.get_x() + bar.get_width() / 2, v + 0.08, f"{v} turns",
                 ha="center", va="bottom", fontsize=10, fontweight="bold", color=INK)
         ax.text(bar.get_x() + bar.get_width() / 2, v / 2, note, ha="center",
                 va="center", fontsize=8.5, color="white")
-    ax.set_ylim(0, 4)
+    ax.set_ylim(0, max(turns) + 2)
     ax.set_ylabel("engineer turns used")
-    _finish(ax, "Live ablation — identical task, model and engineer (qwen3:8b)",
-            "n=1, temperature 0. Suggestive of a convergence difference, not yet a rate")
+    _finish(ax, "Live ablation — identical task, models and engineer",
+            "deepseek-v4-flash engineer, local qwen3:8b gates. n=1, temperature 0")
     return save(fig, "ablation.png")
 
 
@@ -277,7 +288,8 @@ def chart_accuracy(run: dict | None):
     top = max(reported + [1])
     ax.set_ylim(0, top * 1.35)
     _finish(ax, "How much of each arm's report can be checked",
-            "One run, data-efficiency task, qwen3:8b on both arms")
+            "One run, data-efficiency task. deepseek-v4-flash engineer, local "
+            "qwen3:8b gates")
     ax.legend(frameon=False, fontsize=8.5, loc="upper center",
               bbox_to_anchor=(0.5, -0.14), ncol=3)
     return save(fig, "accuracy.png")
@@ -299,7 +311,7 @@ def main():
     chart_check_inventory()
     chart_scanner(bench)
     chart_compression()
-    chart_ablation()
+    chart_ablation(run)
     chart_literature()
     chart_call_split()
     if chart_accuracy(run) is None:

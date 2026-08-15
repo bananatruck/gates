@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Evidence-backed audit of the G.A.T.E.S. main, feedback-loop, and Zura16 verification-layer branches.">
+  <title>G.A.T.E.S. Branch Audit — Evidence Report</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='32' fill='%2314202b'/%3E%3Ctext x='32' y='43' text-anchor='middle' font-family='Georgia' font-size='36' fill='%23fffdf8'%3EG%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to report</a>
+
+  <header class="masthead" id="top">
+    <nav class="topbar" aria-label="Primary navigation">
+      <a class="brand" href="#top" aria-label="G.A.T.E.S. branch audit home">
+        <span class="brand-mark" aria-hidden="true">G</span>
+        <span><strong>G.A.T.E.S.</strong><small>branch audit</small></span>
+      </a>
+      <div class="top-actions">
+        <span class="as-of">As of Aug 15, 2026</span>
+        <button class="quiet-button" id="copy-link" type="button">Copy link</button>
+        <button class="print-button" type="button" onclick="window.print()">Print report</button>
+      </div>
+    </nav>
+
+    <div class="hero wrap">
+      <div class="hero-copy">
+        <p class="eyebrow">Independent implementation and claims review</p>
+        <h1>Three gate names.<br><em>Not three validity layers.</em></h1>
+        <p class="dek">A source-level comparison of Keshav’s two branches and Zura16’s
+          <code>feature/verification-layer</code>, tested against the project’s own architecture,
+          direct adversarial probes, committed result artifacts, and the papers cited by the branch.</p>
+        <div class="hero-actions">
+          <a class="primary-link" href="#verdict">Read the verdict</a>
+          <a class="secondary-link" href="#references">Inspect references</a>
+        </div>
+      </div>
+
+      <aside class="verdict-card" aria-label="Audit verdict summary">
+        <div class="signal signal-red"><span></span> Do not merge as complete</div>
+        <p class="verdict-label">Audit conclusion</p>
+        <p class="verdict-title">Prototype-shaped simulator</p>
+        <p class="verdict-detail">The branch contains three evaluator classes, but it does not
+          preserve the real Gate 1 foundation, close actual agent feedback loops, or produce
+          defensible comparative results.</p>
+        <dl class="mini-facts">
+          <div><dt>Gate 1</dt><dd>Regressed</dd></div>
+          <div><dt>Gate 2</dt><dd>Toy checker</dd></div>
+          <div><dt>Gate 3</dt><dd>Bypassable</dd></div>
+          <div><dt>Evidence</dt><dd>Synthetic</dd></div>
+        </dl>
+      </aside>
+    </div>
+  </header>
+
+  <div class="report-shell wrap">
+    <aside class="rail" aria-label="Report sections">
+      <p class="rail-title">In this report</p>
+      <a href="#verdict">01 Verdict</a>
+      <a href="#branches">02 Branch state</a>
+      <a href="#matrix">03 Claim matrix</a>
+      <a href="#gates">04 Gate audit</a>
+      <a href="#loops">05 Feedback loops</a>
+      <a href="#results">06 Results audit</a>
+      <a href="#probes">07 Reproduced probes</a>
+      <a href="#completion">08 Completion gap</a>
+      <a href="#method">09 Method</a>
+      <a href="#references">10 References</a>
+      <div class="rail-note">
+        <span>Scope</span>
+        Read-only audit. No project branch or source file was changed to reach the findings.
+      </div>
+    </aside>
+
+    <main id="main">
+      <section class="section lead-section" id="verdict" data-section="Verdict">
+        <div class="section-number">01</div>
+        <div class="section-head">
+          <p class="kicker">Executive verdict</p>
+          <h2>The branch does not complete G.A.T.E.S.</h2>
+        </div>
+        <div class="callout critical">
+          <div class="callout-icon" aria-hidden="true">!</div>
+          <div>
+            <strong>Bottom line</strong>
+            <p>Zura16’s branch should not be treated as a completed implementation or as valid
+              empirical evidence. It replaces execution with caller-supplied dictionaries, replaces
+              source coherence with hardcoded intervals, replaces report verification with regexes
+              and a mock entailment rule, and then benchmarks those mechanisms using fixtures designed
+              to produce the advertised outcome.</p>
+          </div>
+        </div>
+        <div class="three-up findings">
+          <article>
+            <span class="finding-index">A</span>
+            <h3>Unrelated history</h3>
+            <p>The Zura16 branch has no merge base with <code>main</code>. It is an orphan history,
+              not work layered onto the G.A.T.E.S. implementation.</p>
+            <a href="#ref-git-history">Evidence R1</a>
+          </article>
+          <article>
+            <span class="finding-index">B</span>
+            <h3>Validity is caller-asserted</h3>
+            <p>The “AgentLab adapter” accepts prewritten code, results, drafts, and mock rewards.
+              It does not execute AgentLaboratory or bind results to a run.</p>
+            <a href="#ref-z-adapter">Evidence R6</a>
+          </article>
+          <article>
+            <span class="finding-index">C</span>
+            <h3>Metrics are circular</h3>
+            <p>Success is relabeled as grounding, fabrication is set to zero in code, and competing
+              system scores are typed directly into comparison tables.</p>
+            <a href="#ref-z-head">Evidence R10</a>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="branches" data-section="Branch state">
+        <div class="section-number">02</div>
+        <div class="section-head">
+          <p class="kicker">Repository state</p>
+          <h2>What was compared</h2>
+          <p>The two Keshav branches are one implementation line. The feature branch was merged;
+            <code>main</code> is the authoritative superset. Zura16’s branch is a separate root.</p>
+        </div>
+
+        <div class="branch-map" role="img" aria-label="Branch relationship diagram">
+          <div class="branch-row">
+            <div class="branch-line main-line"></div>
+            <div class="branch-node main-node"></div>
+            <div class="branch-copy">
+              <span class="owner-badge owner-k">Keshav</span>
+              <h3>main <code>3841c7a</code></h3>
+              <p>Authoritative branch. Includes the Gate 1 feature merge and four later correctness/reporting fixes.</p>
+            </div>
+          </div>
+          <div class="branch-row child-row">
+            <div class="branch-line feature-line"></div>
+            <div class="branch-node feature-node"></div>
+            <div class="branch-copy">
+              <span class="owner-badge owner-k">Keshav</span>
+              <h3>feat/gate1-feedback-loop <code>f324000</code></h3>
+              <p>Fully merged into <code>main</code>; main is five commits ahead.</p>
+            </div>
+          </div>
+          <div class="branch-row orphan-row">
+            <div class="branch-line orphan-line"></div>
+            <div class="branch-node orphan-node"></div>
+            <div class="branch-copy">
+              <span class="owner-badge owner-z">AalindCS / Zura16</span>
+              <h3>feature/verification-layer <code>fb56ecb</code></h3>
+              <p>No common ancestor. Omits the package metadata, design documents, rig, reports, and test suite from the real project line.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="fact-grid">
+          <article class="fact">
+            <span class="fact-value">187</span>
+            <span class="fact-label">test functions on main</span>
+            <p>Zura16’s branch contains no test directory.</p>
+          </article>
+          <article class="fact">
+            <span class="fact-value">0</span>
+            <span class="fact-label">common commits</span>
+            <p>No merge base exists between the implementation lines.</p>
+          </article>
+          <article class="fact">
+            <span class="fact-value">5</span>
+            <span class="fact-label">main commits after feature</span>
+            <p>Including code-identity, API-shadowing, model-cost, and evidence-report corrections.</p>
+          </article>
+          <article class="fact">
+            <span class="fact-value">n=1</span>
+            <span class="fact-label">real local ablation</span>
+            <p>Useful mechanism evidence, explicitly not yet a population rate.</p>
+          </article>
+        </div>
+
+        <div class="local-state">
+          <h3>Local work not yet represented by a clean GitHub commit</h3>
+          <ul class="check-list neutral-list">
+            <li><span>G.A.T.E.S.</span> Modified report generators, PDF/deck binaries, and chart assets; no unpushed gate runtime changes.</li>
+            <li><span>AgentLaboratory-Gemini</span> One modified <code>tools_ablation.py</code> affecting token ceilings/reasoning effort.</li>
+            <li><span>Real ablation artifact</span> The local <code>ablation.json</code> records one gated/ungated comparison; <code>same_instructions=false</code>.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="section" id="matrix" data-section="Claim matrix">
+        <div class="section-number">03</div>
+        <div class="section-head">
+          <p class="kicker">Claims audit</p>
+          <h2>What the README says versus what the branch does</h2>
+        </div>
+        <div class="table-wrap">
+          <table class="audit-table">
+            <thead>
+              <tr><th>Claim</th><th>Verdict</th><th>Observed implementation</th><th>Evidence</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>“Deterministic 3-Gate Verification Layer”</td><td><span class="tag bad">Misleading</span></td><td>Three class names exist; the validity contracts do not.</td><td><a href="#ref-z-readme">R5</a>, <a href="#ref-z-gates">R7–R9</a></td></tr>
+              <tr><td>“Integrated with AgentLaboratory”</td><td><span class="tag bad">False</span></td><td>No AgentLaboratory import or live phase execution.</td><td><a href="#ref-z-adapter">R6</a></td></tr>
+              <tr><td>“Feedback-driven retry loops”</td><td><span class="tag bad">Simulated</span></td><td>Advances through prewritten attempt arrays.</td><td><a href="#ref-z-adapter">R6</a>, <a href="#ref-z-feedback">R13</a></td></tr>
+              <tr><td>“14 deterministic Gate 1 checks”</td><td><span class="tag bad">Incomplete</span></td><td>Unbound names, banned exits, identity, real execution, and provenance are absent or inert.</td><td><a href="#ref-z-gates">R7</a></td></tr>
+              <tr><td>“CORE-Bench reference intervals”</td><td><span class="tag bad">Unsupported</span></td><td>Three handwritten ranges; no CORE-Bench corpus or interval derivation.</td><td><a href="#ref-z-gates">R8</a>, <a href="#ref-core">R20</a></td></tr>
+              <tr><td>“MiniCheck claim entailment”</td><td><span class="tag bad">False</span></td><td>Source labels it a “Mock MiniCheck” and uses a phrase heuristic.</td><td><a href="#ref-z-gates">R9</a></td></tr>
+              <tr><td>“100% grounding / 0% fabrication”</td><td><span class="tag bad">Circular</span></td><td>Passed cases are labeled grounded and fabrication is assigned 0.0.</td><td><a href="#ref-z-head">R10</a></td></tr>
+              <tr><td>“68.4% PaperBench replication”</td><td><span class="tag bad">No run</span></td><td>68.4 is a literal in a static list; no PaperBench task executes.</td><td><a href="#ref-z-comp">R11</a>, <a href="#ref-paperbench">R21</a></td></tr>
+              <tr><td>“Python 3.10+”</td><td><span class="tag warn">Broken here</span></td><td>Both advertised benchmarks crash on Python 3.14 at <code>ast.Num</code>.</td><td><a href="#probes">Probe P1</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" id="gates" data-section="Gate audit">
+        <div class="section-number">04</div>
+        <div class="section-head">
+          <p class="kicker">Implementation review</p>
+          <h2>Gate-by-gate findings</h2>
+        </div>
+
+        <article class="gate-card gate-one">
+          <header>
+            <span class="gate-label">Gate 1</span>
+            <div><h3>Execution validity</h3><p>Question: did this code run, and did this run produce these values?</p></div>
+            <span class="status-pill red">Regressed</span>
+          </header>
+          <div class="gate-body">
+            <div>
+              <h4>Required by the base design</h4>
+              <ul class="check-list positive-list">
+                <li>Fresh child process and process-group timeout</li>
+                <li>Full, separate stdout and stderr capture</li>
+                <li>Child-computed code identity</li>
+                <li>Typed results with call-site provenance</li>
+                <li>Trace IDs and causal registry chain</li>
+                <li>Deterministic verdict plus grounded feedback</li>
+              </ul>
+            </div>
+            <div>
+              <h4>What Zura16 implements</h4>
+              <ul class="check-list negative-list">
+                <li>Trusts a caller-provided <code>execution_result</code></li>
+                <li>Defaults a missing exit code to success</li>
+                <li>Does not implement unbound-name analysis</li>
+                <li>Does not ban forged clean exits</li>
+                <li>Code-identity mismatch branch contains only <code>pass</code></li>
+                <li>Accepts unbound code plus fabricated <code>results_json</code></li>
+              </ul>
+            </div>
+          </div>
+          <footer><a href="#ref-main-gate1">Base contract R3–R4</a><a href="#ref-z-gates">Branch source R7</a></footer>
+        </article>
+
+        <article class="gate-card gate-two">
+          <header>
+            <span class="gate-label">Gate 2</span>
+            <div><h3>Source ↔ result coherence</h3><p>Question: do measured results cohere with the cited method, dataset, setting, and claims?</p></div>
+            <span class="status-pill red">Toy checker</span>
+          </header>
+          <div class="gate-body">
+            <div>
+              <h4>Required by the base design</h4>
+              <ul class="check-list positive-list">
+                <li>Gate 1’s verified value registry</li>
+                <li>Retrieved full-text literature corpus</li>
+                <li>Plan’s declared claims and settings</li>
+                <li>Principled prediction/tolerance intervals</li>
+                <li>Measured semantic-tier accuracy and confidence interval</li>
+                <li>Two-turn loop with declared limitation on exhaustion</li>
+              </ul>
+            </div>
+            <div>
+              <h4>What Zura16 implements</h4>
+              <ul class="check-list negative-list">
+                <li>No source documents or plan claims enter the evaluator</li>
+                <li>Three hardcoded method/dataset ranges</li>
+                <li>Unknown methods silently skip source checks</li>
+                <li>Negative loss and speedup can pass</li>
+                <li>Fallback “LLM” is one SGC/Cora heuristic</li>
+                <li><code>OPTION_C</code> lets a model directly fail the verdict</li>
+              </ul>
+            </div>
+          </div>
+          <footer><a href="#ref-main-plan">Base contract R2</a><a href="#ref-z-gates">Branch source R8</a></footer>
+        </article>
+
+        <article class="gate-card gate-three">
+          <header>
+            <span class="gate-label">Gate 3</span>
+            <div><h3>Report validity</h3><p>Question: does every manuscript number, citation, figure, and claim resolve to evidence?</p></div>
+            <span class="status-pill red">Bypassable</span>
+          </header>
+          <div class="gate-body">
+            <div>
+              <h4>Required by the base design</h4>
+              <ul class="check-list positive-list">
+                <li>No raw result numerals in result contexts</li>
+                <li>Every result token resolves to a citable value</li>
+                <li>Rendered values match the registry exactly</li>
+                <li>Bibliography generated from fetched metadata</li>
+                <li>Figures exist and trace to gated runs</li>
+                <li>Measured model-assisted claim entailment</li>
+              </ul>
+            </div>
+            <div>
+              <h4>What Zura16 implements</h4>
+              <ul class="check-list negative-list">
+                <li>Scans only decimal literals inside table blocks</li>
+                <li>One result token disables raw-number checks for the table</li>
+                <li>Rounds <code>0.815</code> to <code>0.81</code></li>
+                <li>Checks citation strings against a hardcoded set</li>
+                <li>Searches prose “Figure 1,” not <code>\includegraphics</code></li>
+                <li>Empty paper and unsupported prose both pass at 1.0 entailment</li>
+              </ul>
+            </div>
+          </div>
+          <footer><a href="#ref-main-plan">Base contract R2</a><a href="#ref-z-gates">Branch source R9</a></footer>
+        </article>
+      </section>
+
+      <section class="section" id="loops" data-section="Feedback loops">
+        <div class="section-number">05</div>
+        <div class="section-head">
+          <p class="kicker">Closed-loop test</p>
+          <h2>A list iterator is not an agent feedback loop</h2>
+        </div>
+
+        <div class="loop-compare">
+          <article class="loop-panel expected">
+            <span class="panel-label">Required loop</span>
+            <div class="loop-flow">
+              <div>Agent writes artifact</div><span>→</span><div>Gate evaluates real evidence</div><span>→</span><div>Feedback is generated</div><span>→</span><div>Agent revises</div>
+            </div>
+            <p>The revision is causally produced from the gate report; budgets count actual agent turns, and exhaustion has a defined terminal state.</p>
+          </article>
+          <article class="loop-panel observed">
+            <span class="panel-label">Observed branch loop</span>
+            <div class="loop-flow">
+              <div>Fixture A</div><span>→</span><div>Print failure</div><span>→</span><div>Advance index</div><span>→</span><div>Fixture B</div>
+            </div>
+            <p>All attempts, execution results, paper drafts, and reward scores already exist before the pipeline begins.</p>
+          </article>
+        </div>
+
+        <div class="issue-grid compact-grid">
+          <article><span>Budget defect</span><p>No enforced three-turn Gate 1 budget or two-turn Gate 2 budget.</p></article>
+          <article><span>Terminal defect</span><p>Gate 2 exhaustion emits no paper, contradicting the base plan’s “carry limitations forward” rule.</p></article>
+          <article><span>Artifact defect</span><p>No per-gate machine report and no generated feedback artifact are persisted.</p></article>
+          <article><span>Audit defect</span><p>The process ledger’s “action taken” history is manually authored after execution.</p></article>
+        </div>
+      </section>
+
+      <section class="section" id="results" data-section="Results audit">
+        <div class="section-number">06</div>
+        <div class="section-head">
+          <p class="kicker">Empirical evidence</p>
+          <h2>The comparisons are fixtures, not experiments</h2>
+        </div>
+
+        <div class="metric-strip">
+          <div><span class="metric-big">10</span><span>handwritten head-to-head tasks</span></div>
+          <div><span class="metric-big">3</span><span>gated tasks that actually succeed</span></div>
+          <div><span class="metric-big">30%</span><span>own committed citation-validity result</span></div>
+          <div><span class="metric-big">6×</span><span>same fixtures duplicated in ledger</span></div>
+        </div>
+
+        <div class="evidence-columns">
+          <article>
+            <h3>How the “head-to-head” is constructed</h3>
+            <ol class="number-list">
+              <li>Give the simulated baseline a hand-selected high reward.</li>
+              <li>Preload its manuscript with wrong numbers or a fake citation.</li>
+              <li>Supply the gated side a caller-asserted execution result.</li>
+              <li>Label every successful gated pipeline as grounded.</li>
+              <li>Set its fabrication rate to <code>0.0</code> directly.</li>
+            </ol>
+          </article>
+          <article>
+            <h3>What the committed artifacts reveal</h3>
+            <ul class="check-list negative-list">
+              <li>Grounding is 100% only after conditioning on accepted cases.</li>
+              <li>Seven rejected gated cases disappear from that denominator.</li>
+              <li>Citation validity is 30%, contradicting the README’s 100% story.</li>
+              <li>Current source no longer reproduces some committed status names.</li>
+              <li>Repeated JSONL rows are reruns of identical fixtures, not independent samples.</li>
+            </ul>
+          </article>
+        </div>
+
+        <h3 class="subhead">Published numbers are repeatedly relabeled</h3>
+        <div class="table-wrap">
+          <table class="audit-table source-table">
+            <thead><tr><th>Branch presentation</th><th>What the source actually reports</th><th>Assessment</th></tr></thead>
+            <tbody>
+              <tr><td>MLReplicate → AgentLab “59% fabrication / 41% grounding”</td><td>59% of automated-reviewer-accepted papers contained fabricated or unsupported claims across six systems.</td><td><span class="tag bad">Wrong attribution</span></td></tr>
+              <tr><td>MLR-Bench → AgentLab “80% fabrication / 20% success”</td><td>Coding agents frequently produced fabricated or invalidated experimental results in roughly 80% of cases.</td><td><span class="tag bad">Wrong system</span></td></tr>
+              <tr><td>SAGE → “92% grounding” and “52% PaperBench”</td><td>Metrics-bearing outputs rose 42%→92%; blind artifact scores were 52.0 versus 48.2.</td><td><span class="tag bad">Wrong metric</span></td></tr>
+              <tr><td>CORE-Bench → this branch “88.5%”</td><td>The paper reports 21% for the best baseline on the hardest task.</td><td><span class="tag bad">No supporting run</span></td></tr>
+              <tr><td>PaperBench → this branch “68.4%”</td><td>The paper reports 21.0% for its best tested agent.</td><td><span class="tag bad">No supporting run</span></td></tr>
+              <tr><td>AutoResearchClaw → 75/25/15/42/85 score row</td><td>The abstract reports a 54.7% relative improvement over AI Scientist v2 on ARC-Bench.</td><td><span class="tag bad">Invented dimensions</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout note">
+          <div class="callout-icon" aria-hidden="true">i</div>
+          <div><strong>The PPO “paper” is not an experiment</strong><p>The script assigns
+            <code>mean_return = 985.4</code>, <code>baseline_return = 620.1</code>, and
+            <code>sample_efficiency_steps = 150000</code>, then describes them as executed training results.</p></div>
+        </div>
+      </section>
+
+      <section class="section" id="probes" data-section="Reproduced probes">
+        <div class="section-number">07</div>
+        <div class="section-head">
+          <p class="kicker">Direct reproduction</p>
+          <h2>Adversarial probes run against the branch</h2>
+          <p>These are observed outcomes from the fetched <code>fb56ecb</code> tree, not inferred possibilities.</p>
+        </div>
+
+        <div class="probe-grid">
+          <article class="probe"><header><code>P1</code><span class="tag bad">Crash</span></header><h3>Advertised benchmark</h3><p><code>benchmark_runner.py</code> and the head-to-head script crash immediately on Python 3.14 because <code>ast.Num</code> no longer exists.</p></article>
+          <article class="probe"><header><code>P2</code><span class="tag bad">Passed</span></header><h3>Unbound variable</h3><p>Gate 1 accepted <code>result = definitely_missing_name</code> when paired with caller-supplied metrics.</p></article>
+          <article class="probe"><header><code>P3</code><span class="tag bad">Passed</span></header><h3>Forged clean exit</h3><p>Gate 1 accepted <code>sys.exit(0)</code>; the advertised banned-call check does not exist.</p></article>
+          <article class="probe"><header><code>P4</code><span class="tag bad">Passed</span></header><h3>Bad physics, no source</h3><p>Gate 2 accepted an invented method with <code>loss=-999</code> and <code>speedup=-5</code>.</p></article>
+          <article class="probe"><header><code>P5</code><span class="tag bad">Passed</span></header><h3>Raw fabricated results</h3><p>Gate 3 accepted “improved from 1.23 to 99.9%” outside a table.</p></article>
+          <article class="probe"><header><code>P6</code><span class="tag bad">Passed</span></header><h3>Mixed-token bypass</h3><p>A table containing both <code>999.99</code> and one valid result token passed.</p></article>
+          <article class="probe"><header><code>P7</code><span class="tag bad">Passed</span></header><h3>Missing figure</h3><p><code>\includegraphics{does_not_exist.png}</code> passed.</p></article>
+          <article class="probe"><header><code>P8</code><span class="tag bad">1.0</span></header><h3>Unsupported claim</h3><p>“We proved a revolutionary method beats every baseline” received entailment rate 1.0.</p></article>
+          <article class="probe"><header><code>P9</code><span class="tag warn">Rounded</span></header><h3>Not byte-identical</h3><p>Registry value <code>0.815</code> rendered as <code>0.81</code>, contradicting exact-value binding.</p></article>
+        </div>
+
+        <details class="raw-output">
+          <summary>View compact probe output</summary>
+          <pre><code>Gate 1 / unbound name                      PASS
+Gate 1 / sys.exit(0)                       PASS
+Gate 1 / no execution, supplied results    PASS
+Gate 2 / negative loss and speedup          PASS
+Gate 2 / model controls OPTION_C verdict   FAIL (model-created blocking check)
+Gate 3 / empty report                       PASS, entailment 1.0
+Gate 3 / raw numbers outside table          PASS
+Gate 3 / mixed raw number + result token    PASS
+Gate 3 / missing includegraphics            PASS
+Gate 3 / unsupported prose                  PASS, entailment 1.0
+Gate 3 / registry 0.815                     rendered 0.81</code></pre>
+        </details>
+      </section>
+
+      <section class="section" id="completion" data-section="Completion gap">
+        <div class="section-number">08</div>
+        <div class="section-head">
+          <p class="kicker">What “complete” would require</p>
+          <h2>The honest project status—and the path forward</h2>
+        </div>
+
+        <div class="status-board">
+          <article class="status-row">
+            <div><span class="status-index">1</span><h3>Gate 1</h3></div>
+            <p>Real implementation on <code>main</code>: process execution, checks, registry, evidence bundle, adapter seam, rig, and model-assisted feedback outside the verdict.</p>
+            <span class="status-pill green">Implemented</span>
+          </article>
+          <article class="status-row">
+            <div><span class="status-index">2</span><h3>Gate 2</h3></div>
+            <p>Must consume real literature, settings, claims, and Gate 1 provenance; requires a tested bounded loop and measured semantic tier.</p>
+            <span class="status-pill amber">Designed</span>
+          </article>
+          <article class="status-row">
+            <div><span class="status-index">3</span><h3>Gate 3</h3></div>
+            <p>Must enforce result/citation/figure binding across the actual report pipeline and measure unsupported-claim detection.</p>
+            <span class="status-pill amber">Designed</span>
+          </article>
+          <article class="status-row">
+            <div><span class="status-index">E</span><h3>Evaluation</h3></div>
+            <p>Needs paired real-agent runs, multiple seeds, human fabrication labels, confidence intervals, and generated tables from append-only evidence.</p>
+            <span class="status-pill amber">Open</span>
+          </article>
+        </div>
+
+        <div class="two-up finish-grid">
+          <article>
+            <h3>What can be retained from Zura16’s branch</h3>
+            <ul class="check-list neutral-list">
+              <li>The high-level three-gate naming aligns with the plan.</li>
+              <li>Some tiny fixtures illustrate intended failure categories.</li>
+              <li>The report-token idea is directionally aligned with Gate 3.</li>
+              <li>The code can serve as disposable pseudocode—not evidence.</li>
+            </ul>
+          </article>
+          <article>
+            <h3>Minimum acceptance criteria for a replacement</h3>
+            <ul class="check-list positive-list">
+              <li>Branch from current <code>main</code> and preserve its tests.</li>
+              <li>Use the verified Gate 1 registry, never caller-supplied numbers.</li>
+              <li>Wire real AgentLaboratory phases and actual agent revisions.</li>
+              <li>Add requirement-to-test traceability for Gates 2 and 3.</li>
+              <li>Generate comparisons only from real run artifacts.</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="callout honest">
+          <div class="callout-icon" aria-hidden="true">✓</div>
+          <div><strong>The base project is credible because it states its limits</strong><p>
+            The current project does not pretend Gates 2 and 3 are complete. Its one live Gate 1
+            comparison is labeled <code>n=1</code>. That distinction—implemented versus designed,
+            mechanism evidence versus a measured rate—is exactly what the Zura16 branch erases.</p></div>
+        </div>
+      </section>
+
+      <section class="section" id="method" data-section="Method">
+        <div class="section-number">09</div>
+        <div class="section-head">
+          <p class="kicker">Audit method and limits</p>
+          <h2>How this report was produced</h2>
+        </div>
+        <div class="method-grid">
+          <article><span>01</span><h3>Resolve branches</h3><p>Fetched all three remote branches, inspected authorship, ancestry, commit graphs, and local uncommitted state.</p></article>
+          <article><span>02</span><h3>Extract contract</h3><p>Used <code>README</code>, <code>PLAN</code>, and Gate 1 traceability documents as the base specification.</p></article>
+          <article><span>03</span><h3>Inspect implementation</h3><p>Read every Zura16 gate, adapter, benchmark, demo, result artifact, and relevant commit.</p></article>
+          <article><span>04</span><h3>Reproduce</h3><p>Ran advertised scripts in an isolated snapshot and executed adversarial evaluator probes.</p></article>
+          <article><span>05</span><h3>Check sources</h3><p>Compared hardcoded literature claims against the cited papers’ primary arXiv records.</p></article>
+          <article><span>06</span><h3>Check base behavior</h3><p>Ran the real Gate 1 scenario rig; every documented scenario completed as expected.</p></article>
+        </div>
+        <div class="limits-box">
+          <h3>Limits</h3>
+          <p><code>pytest</code> was not installed in the local Python environment, so the 187 source test
+            functions were counted but not executed as a pytest suite. The shipped Gate 1 scenario rig did
+            execute successfully. Zura16’s benchmarks failed on Python 3.14; a temporary in-memory
+            compatibility alias was used only to observe the remaining head-to-head logic. No repository
+            source was patched to make that run.</p>
+        </div>
+      </section>
+
+      <section class="section references" id="references" data-section="References">
+        <div class="section-number">10</div>
+        <div class="section-head">
+          <p class="kicker">Evidence library</p>
+          <h2>Primary references</h2>
+          <p>References point to immutable commit SHAs where possible.</p>
+        </div>
+
+        <div class="reference-toolbar">
+          <label for="reference-search">Filter references</label>
+          <input id="reference-search" type="search" placeholder="Try “Gate 3”, “PaperBench”, or “adapter”">
+        </div>
+
+        <div class="reference-list" id="reference-list">
+          <article id="ref-git-history" data-search="git history branches merge base main feature verification layer"><span>R1</span><div><h3>Repository branch history</h3><p>Local Git graph and merge-base inspection: main <code>3841c7a</code>, Gate 1 feature <code>f324000</code>, Zura16 <code>fb56ecb</code>.</p><a href="https://github.com/bananatruck/gates/branches" target="_blank" rel="noreferrer">GitHub branches ↗</a></div></article>
+          <article id="ref-main-plan" data-search="main plan design invariant gate 2 gate 3 requirements"><span>R2</span><div><h3>G.A.T.E.S. architecture and invariants</h3><p>Deterministic authority, artifact, bounded-loop, Gate 2, and Gate 3 contracts.</p><a href="https://github.com/bananatruck/gates/blob/3841c7a409daa4391660df020bbeb1aa05b05894/docs/PLAN.md" target="_blank" rel="noreferrer">PLAN.md ↗</a></div></article>
+          <article id="ref-main-gate1" data-search="main gate 1 requirements traceability runner registry implementation"><span>R3</span><div><h3>Gate 1 requirement traceability</h3><p>Source requirements mapped to checks and tests.</p><a href="https://github.com/bananatruck/gates/blob/3841c7a409daa4391660df020bbeb1aa05b05894/docs/GATE1_REQUIREMENTS.md" target="_blank" rel="noreferrer">Requirements ↗</a></div></article>
+          <article data-search="main gate1 source runner child process registry adapter rig"><span>R4</span><div><h3>Real Gate 1 implementation</h3><p>Gate evaluator, child runner, registry, and tested loop rig.</p><p class="multi-link"><a href="https://github.com/bananatruck/gates/blob/3841c7a409daa4391660df020bbeb1aa05b05894/gates/gate1.py" target="_blank" rel="noreferrer">gate1.py</a><a href="https://github.com/bananatruck/gates/blob/3841c7a409daa4391660df020bbeb1aa05b05894/gates/runner.py" target="_blank" rel="noreferrer">runner.py</a><a href="https://github.com/bananatruck/gates/blob/3841c7a409daa4391660df020bbeb1aa05b05894/gates/registry.py" target="_blank" rel="noreferrer">registry.py</a><a href="https://github.com/bananatruck/gates/tree/3841c7a409daa4391660df020bbeb1aa05b05894/rig" target="_blank" rel="noreferrer">rig/</a></p></div></article>
+          <article id="ref-z-readme" data-search="zura readme claims three gates 100 grounding fabrication"><span>R5</span><div><h3>Zura16 README claims</h3><p>Three-gate completion, AgentLaboratory integration, feedback loops, and benchmark claims.</p><a href="https://github.com/bananatruck/gates/blob/fb56ecb3bb0ab1793ad033b3ab90fef6d7c6248d/README.md" target="_blank" rel="noreferrer">README at fb56ecb ↗</a></div></article>
+          <article id="ref-z-adapter" data-search="zura adapter agentlab pipeline mock rewards attempts feedback loop"><span>R6</span><div><h3>Zura16 AgentLab adapter</h3><p>Prewritten attempts, supplied execution dictionaries, mock rewards, and list-based retries.</p><a href="https://github.com/bananatruck/gates/blob/fb56ecb3bb0ab1793ad033b3ab90fef6d7c6248d/adapters/agentlab.py" target="_blank" rel="noreferrer">adapter source ↗</a></div></article>
+          <article id="ref-z-gates" data-search="zura gate 1 gate 2 gate 3 source evaluator mock minicheck"><span>R7–R9</span><div><h3>Zura16 gate evaluators</h3><p>The complete implementations audited in sections 4 and 7.</p><p class="multi-link"><a href="https://github.com/bananatruck/gates/blob/fb56ecb3bb0ab1793ad033b3ab90fef6d7c6248d/gates/gate1.py" target="_blank" rel="noreferrer">Gate 1</a><a href="https://github.com/bananatruck/gates/blob/fb56ecb3bb0ab1793ad033b3ab90fef6d7c6248d/gates/gate2.py" target="_blank" rel="noreferrer">Gate 2</a><a href="https://github.com/bananatruck/gates/blob/fb56ecb3bb0ab1793ad033b3ab90fef6d7c6248d/gates/gate3.py" target="_blank" rel="noreferrer">Gate 3</a></p></div></article>
+          <article id="ref-z-head" data-search="zura head to head benchmark mock baseline grounding fabrication zero citation 30"><span>R10</span><div><h3>Head-to-head comparison script</h3><p>Mock baseline scoring, supplied results, conditional grounding, and literal zero fabrication rate.</p><a href="https://github.com/bananatruck/gates/blob/fb56ecb3bb0ab1793ad033b3ab90fef6d7c6248d/run_head_to_head_comparison.py" target="_blank" rel="noreferrer">comparison source ↗</a></div></article>
+          <article id="ref-z-comp" data-search="zura architecture competition hardcoded numbers paperbench 68.4"><span>R11</span><div><h3>Architecture competition script</h3><p>Static result rows, including the unsupported 68.4% claim.</p><a href="https://github.com/bananatruck/gates/blob/fb56ecb3bb0ab1793ad033b3ab90fef6d7c6248d/run_full_architecture_competition.py" target="_blank" rel="noreferrer">competition source ↗</a></div></article>
+          <article data-search="zura ppo demo hardcoded returns generated paper"><span>R12</span><div><h3>PPO demonstration</h3><p>Hardcoded “training” metrics passed into the simulated pipeline.</p><a href="https://github.com/bananatruck/gates/blob/fb56ecb3bb0ab1793ad033b3ab90fef6d7c6248d/run_ppo_reward_norm_demo.py" target="_blank" rel="noreferrer">PPO source ↗</a></div></article>
+          <article id="ref-z-feedback" data-search="zura feedback inspector manual audit ledger action taken"><span>R13</span><div><h3>Feedback-process inspector</h3><p>Manually authored feedback and “action taken” history.</p><a href="https://github.com/bananatruck/gates/blob/fb56ecb3bb0ab1793ad033b3ab90fef6d7c6248d/run_feedback_process_inspector.py" target="_blank" rel="noreferrer">inspector source ↗</a></div></article>
+          <article id="ref-mlreplicate" data-search="paper mlreplicate 59 fabricated unsupported claims"><span>R18</span><div><h3>MLReplicate</h3><p>59% of automated-reviewer-accepted outputs contained fabricated or unsupported claims across evaluated systems.</p><a href="https://arxiv.org/abs/2605.16616" target="_blank" rel="noreferrer">arXiv 2605.16616 ↗</a></div></article>
+          <article id="ref-mlr" data-search="paper mlr bench 80 coding agents fabricated invalid results"><span>R19</span><div><h3>MLR-Bench</h3><p>Open-ended ML research benchmark and its reported fabricated/invalidated-result failure rate.</p><a href="https://arxiv.org/abs/2505.19955" target="_blank" rel="noreferrer">arXiv 2505.19955 ↗</a></div></article>
+          <article id="ref-core" data-search="paper core bench 21 hardest reproducibility"><span>R20</span><div><h3>CORE-Bench</h3><p>Computational reproducibility benchmark; 21% best-agent accuracy on its hardest task.</p><a href="https://arxiv.org/abs/2409.11363" target="_blank" rel="noreferrer">arXiv 2409.11363 ↗</a></div></article>
+          <article id="ref-paperbench" data-search="paper paperbench 21 replication"><span>R21</span><div><h3>PaperBench</h3><p>20-paper replication benchmark; 21.0% best tested agent in the cited paper.</p><a href="https://arxiv.org/abs/2504.01848" target="_blank" rel="noreferrer">arXiv 2504.01848 ↗</a></div></article>
+          <article id="ref-sage" data-search="paper sage 92 metrics bearing 52 48.2"><span>R22</span><div><h3>SAGE</h3><p>42%→92% metrics-bearing outputs and blind score 52.0 versus 48.2.</p><a href="https://arxiv.org/abs/2606.31478" target="_blank" rel="noreferrer">arXiv 2606.31478 ↗</a></div></article>
+          <article id="ref-claw" data-search="paper autoresearchclaw 54.7 arc bench"><span>R23</span><div><h3>AutoResearchClaw</h3><p>54.7% relative improvement over AI Scientist v2 on ARC-Bench.</p><a href="https://arxiv.org/abs/2605.20025" target="_blank" rel="noreferrer">arXiv 2605.20025 ↗</a></div></article>
+        </div>
+        <p class="no-results" id="no-results" hidden>No references match that filter.</p>
+      </section>
+    </main>
+  </div>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <div><span class="footer-mark">G</span><p><strong>G.A.T.E.S. branch audit</strong><br>Evidence before assertion.</p></div>
+      <p>Generated from repository state inspected on August 15, 2026.<br>Static, dependency-free, and print-ready.</p>
+      <a href="#top">Back to top ↑</a>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite">Link copied</div>
+  <script src="app.js"></script>
+</body>
+</html>

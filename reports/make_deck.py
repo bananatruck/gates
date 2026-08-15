@@ -24,6 +24,7 @@ RUN_JSON = Path(
     "/home/kesh/AgentLaboratory-Gemini/ablation_runs/data_efficiency/ablation.json"
 )
 RUN_DIR = RUN_JSON.parent
+RUNS_ROOT = RUN_DIR.parent
 
 BENCH = Path(
     "/tmp/claude-1000/-home-kesh/976cef29-0afd-479c-a716-6c557e07b6cb"
@@ -159,13 +160,16 @@ def _table(slide, x, y, w, rows, col_w, header=True, size=11, rh=Inches(0.34)):
 def _slide_run(prs, run):
     s = blank(prs)
     header(s, "the run", "Data efficiency, with and without Gate 1")
-    text(s, Inches(0.6), Inches(1.55), Inches(12.1), Inches(0.9),
+    text(s, Inches(0.6), Inches(1.5), Inches(12.1), Inches(1.0),
          [("Question given to the agent: how much labelled data does a classifier "
-           "actually need? Report test accuracy at 5/10/25/50/100% of the training "
-           "pool, the smallest fraction reaching 95% of full-data accuracy, and the "
-           "training wallclock — seven values.", 13, False, INK2),
-          ("Engineer and gate both on a local qwen3:8b. The arms differ only in what "
-           "decides that an experiment succeeded.", 11, False, MUTED)])
+           "need? Train the same model on 25% of the pool and on all of it, and "
+           "report both test accuracies and their ratio — three values.",
+           13, False, INK2),
+          ("Engineer: deepseek-v4-flash (reasoning_effort=low). Gate 1's own two "
+           "jobs: a local qwen3:8b, free per call and never consulted for a "
+           "verdict. Both arms use both models, so neither is advantaged — they "
+           "differ only in what decides that an experiment succeeded.",
+           11, False, MUTED)])
 
     g, u = run["arms"]["gated"], run["arms"]["ungated"]
     gv, uv = g["verification"], u["verification"]
@@ -189,6 +193,40 @@ def _slide_run(prs, run):
     stat(s, Inches(9.2), Inches(6.0), Inches(3.5),
          str(len(gv["matched"]) + len(gv["mismatched"])),
          "of the gated arm's numbers are checkable at all", BLUE)
+
+
+def _slide_all_runs(prs):
+    """Every run on disk, not the one that was rendered."""
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import aggregate as agg
+
+    runs = agg.Aggregate(agg.load_runs(RUNS_ROOT))
+    if not runs.n:
+        return
+    s = blank(prs)
+    header(s, "across all runs", f"Every ablation record on disk — n = {runs.n}")
+    g, u = runs.arm_stats("gated"), runs.arm_stats("ungated")
+    if not g.get("n"):
+        return
+    rate = lambda x: "—" if x is None else f"{100*x:.0f}%"
+    rows = [[f"across {g['n']} run(s)", "with Gate 1", "without Gate 1"],
+            ["accepted a run", f"{g['accepted']} of {g['n']}", f"{u['accepted']} of {u['n']}"],
+            ["mean turns used", f"{g['turns_mean']:.1f}", f"{u['turns_mean']:.1f}"],
+            ["numbers reported", g["reported_total"], u["reported_total"]],
+            ["numbers checkable", g["checkable_total"], u["checkable_total"]],
+            ["reproduced on re-execution",
+             f"{g['reproduced_total']} ({rate(g['reproduction_rate'])})",
+             f"{u['reproduced_total']} ({rate(u['reproduction_rate'])})"],
+            ["accepted what the other arm rejected",
+             g["false_success_total"], u["false_success_total"]]]
+    _table(s, Inches(0.6), Inches(1.8), Inches(12.1), rows,
+           [Inches(5.5), Inches(3.3), Inches(3.3)], size=13, rh=Inches(0.5))
+    text(s, Inches(0.6), Inches(5.9), Inches(12.1), Inches(1.0),
+         [("A run that predates a measurement is reported as not measured, never "
+           "as zero — the distinction cost us once already.", 12, False, ORANGE),
+          ("Repeats are at temperature 0.7: at 0.0 a repeat is the same "
+           "experiment run twice, not a second sample.", 11, False, MUTED)])
 
 
 def _slide_accuracy(prs, run):
@@ -370,6 +408,7 @@ def build(bench, run):
     # 2 — the run and what each arm produced
     if run:
         _slide_run(prs, run)
+        _slide_all_runs(prs)
         _slide_accuracy(prs, run)
         _slide_checks_fired(prs, run)
         _slide_logs(prs, run)
