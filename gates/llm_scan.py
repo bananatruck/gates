@@ -140,8 +140,16 @@ def scan_with_model(
     # the evidence the engineer reads.
     rows = [(s.stream, s.lineno, s.line) for s in shapes]
 
+    # One number per row, deliberately. An earlier format showed both the row
+    # index and the file line -- "3<TAB>[stdout:202]<TAB>Skipping 3 of 10 folds"
+    # -- and qwen3:8b reported 202, the file line, which is out of range as an
+    # index and was silently discarded by the grounding check. The finding was
+    # correct and the recall was lost to prompt ambiguity. gemini-3.5-flash
+    # happened to read it the intended way, which is exactly why a weaker model
+    # is worth testing against. The file line is not information the model needs
+    # to judge a line, and this side resolves it anyway.
     numbered = "\n".join(
-        f"{i}\t[{s.stream}:{s.lineno}]\t{s.render()}"
+        f"{i}\t[{s.stream}]\t{s.render()}"
         for i, s in enumerate(shapes, start=1)
     )
     # Retrieval-augmented few-shot: the exemplars nearest this particular log,
@@ -156,9 +164,10 @@ def scan_with_model(
             system = f"{_SYSTEM}\n\n{block}"
 
     call = layer.ask(
-        "Experiment log. Lines identical in shape have been collapsed into one "
-        "row, marked [xN]; the line number shown is the first occurrence. The "
-        "number in the first column is the index to report back.\n\n"
+        "Experiment log, one row per distinct line. Rows identical in shape "
+        "have been collapsed into one and marked [xN].\n\n"
+        "The first column is the ROW NUMBER. Report row numbers from that "
+        f"column and nothing else; valid values are 1 to {len(shapes)}.\n\n"
         f"{numbered}",
         system,
     )

@@ -308,3 +308,62 @@ def test_deterministic_log_findings_also_reach_the_writer(config):
     )
     bundle = build_evidence_bundle(run_gate1(src, config()))
     assert "invalid value encountered" in bundle
+
+
+def test_the_prompt_offers_exactly_one_number_per_row():
+    """Found by qwen3:8b.
+
+    The rows used to carry both a row index and the file line -- "3<TAB>
+    [stdout:202]<TAB>Skipping 3 of 10 folds" -- and qwen3 reported 202, which is
+    out of range as an index and was silently discarded. The finding was right
+    and the recall was lost to prompt ambiguity. gemini-3.5-flash happened to
+    read it the intended way, which is why testing against a weaker model earns
+    its keep.
+    """
+    import re
+
+    seen = {}
+
+    def capture(prompt, system):
+        seen["prompt"] = prompt
+        return "[]"
+
+    stdout = "alpha\nbravo\ncharlie"
+    scan_with_model(ModelLayer(capture), stdout, "")
+    rows = [ln for ln in seen["prompt"].splitlines() if "\t" in ln]
+    assert rows
+    for row in rows:
+        index, stream = row.split("\t")[0], row.split("\t")[1]
+        assert index.isdigit()
+        # the stream tag carries no digits that could be mistaken for the index
+        assert not re.search(r"\d", stream), row
+    assert "valid values are 1 to 3" in seen["prompt"]
+
+
+def test_findings_still_resolve_to_the_real_file_line(config):
+    """Dropping the line number from the prompt must not lose it internally."""
+    src = (
+        "for i in range(30):\n"
+        "    print(f'epoch {i}')\n"
+        "print('Skipping 2 of 10 folds that raised')\n"
+        "record_metadata('seed', 0)\n"
+        "v = 0.5\n"
+        "record_result('a', v * 2)\n"
+    )
+
+    def pick_skipping(prompt, system):
+        import re
+
+        if "JSON array" not in system:
+            return "1. nothing"
+        for line in prompt.splitlines():
+            m = re.match(r"(\d+)\t", line)
+            if m and "Skipping" in line:
+                return f'[{{"line": {m.group(1)}, "why": "replicates dropped"}}]'
+        return "[]"
+
+    report = run_gate1(src, config(consult_model=pick_skipping))
+    check = next(c for c in report.checks if c.id == CHECK_ID)
+    finding = check.evidence["findings"][0]
+    assert finding["lineno"] == 31  # the real line in the capture, not the row
+    assert "Skipping 2 of 10 folds" in finding["line"]
