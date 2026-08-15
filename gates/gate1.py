@@ -13,7 +13,7 @@ import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import log_checks, static_checks
+from . import llm_scan, log_checks, static_checks
 from .llm import (
     DEFAULT_MAX_PROMPT_CHARS,
     DEFAULT_TIMEOUT_S as DEFAULT_MODEL_TIMEOUT_S,
@@ -141,6 +141,26 @@ def run_gate1(source: str, config: Gate1Config, attempt: int = 1) -> GateReport:
             _check_code_identity(execution, report.code_sha256),
             _check_no_swallowed_traceback(execution, stdout, stderr),
             _check_log_error_signals(stdout, stderr),
+        ]
+    )
+
+    # The model reads what the patterns did not flag. WARN-severity by
+    # construction, and appended before decide() only because ordering the
+    # report by tier reads better than ordering it by author — decide() is
+    # blind to everything here either way.
+    scan_check = llm_scan.build_check(
+        llm_scan.scan_with_model(
+            model,
+            stdout,
+            stderr,
+            already_flagged=log_checks.scan_streams(stdout, stderr),
+        )
+    )
+    if scan_check is not None:
+        checks.append(scan_check)
+
+    checks.extend(
+        [
             _check_clean_namespace(execution),
             _check_seed_recorded(execution, config),
             _check_contract_present(execution, config),

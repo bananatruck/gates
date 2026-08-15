@@ -178,6 +178,42 @@ def deterministic_scanner(line: str, stream: str) -> bool:
     return bool(log_checks.scan(line, stream))
 
 
+def model_scanner(model_fn, **layer_kw) -> ScannerFn:
+    """The model tier as a line-level scanner, for measurement only.
+
+    One call per line is not how ``llm_scan`` runs in the gate — there it sends
+    the unflagged lines in one batch — but scoring needs a per-line verdict, and
+    a batch that returns indices cannot be attributed line by line without it.
+    The prompt is the shipped one, so what is measured is the shipped judgement,
+    at a cost this is not asking anyone to pay in production.
+    """
+    from gates.llm import ModelLayer
+    from gates.llm_scan import scan_with_model
+
+    layer = ModelLayer(model_fn, **layer_kw)
+
+    def scan_one(line: str, stream: str) -> bool:
+        text = line if stream == "stdout" else ""
+        err = line if stream == "stderr" else ""
+        return bool(scan_with_model(layer, text, err).findings)
+
+    return scan_one
+
+
+def combined_scanner(model_fn, **layer_kw) -> ScannerFn:
+    """Deterministic first, model only on what it did not flag.
+
+    This is the arrangement the gate actually runs, and therefore the one whose
+    precision and recall belong in the paper.
+    """
+    model = model_scanner(model_fn, **layer_kw)
+
+    def scan_one(line: str, stream: str) -> bool:
+        return deterministic_scanner(line, stream) or model(line, stream)
+
+    return scan_one
+
+
 def render(name: str, result: Score) -> str:
     lo_p, hi_p = result.interval("precision")
     lo_r, hi_r = result.interval("recall")

@@ -181,6 +181,9 @@ _EVIDENCE_RENDERERS = {
     "results.values_computed": _evidence_literals,
     "results.expected_keys_present": _evidence_missing_keys,
     "logs.no_error_signals": _evidence_log_signals,
+    # Same evidence shape, so model findings render exactly like pattern ones
+    # and the agent never has to learn a second format.
+    "logs.model_error_signals": _evidence_log_signals,
     "results.single_observation": _evidence_varied,
 }
 
