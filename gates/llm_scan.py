@@ -33,6 +33,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
+from . import log_digest
 from .llm import ModelLayer, model_warning
 from .log_checks import LogFinding
 from .schema import CheckResult, Severity
@@ -79,6 +80,15 @@ class ScanOutcome:
     ok: bool
     error: str | None = None
     raw: str = ""
+    #: Distinct shapes sent, after collapsing. The difference between this and
+    #: ``lines_examined`` is what repetition was costing.
+    shapes_sent: int = 0
+
+    @property
+    def compression(self) -> float:
+        if not self.lines_examined:
+            return 0.0
+        return 1.0 - (self.shapes_sent / self.lines_examined)
 
 
 def scan_with_model(
@@ -115,25 +125,39 @@ def scan_with_model(
     if not candidates:
         return ScanOutcome([], 0, skipped, ok=True)
 
+    # Collapse before sending. A 200-epoch loop is one shape, and the model
+    # reads the two lines that matter instead of hunting for them.
+    shapes = log_digest.digest(candidates)
+    # Findings resolve against the real first line, not the rendered row: the
+    # "[x200 identical]" annotation is prompt scaffolding and has no business in
+    # the evidence the engineer reads.
+    rows = [(s.stream, s.lineno, s.line) for s in shapes]
+
     numbered = "\n".join(
-        f"{i}\t[{stream}:{lineno}]\t{line}"
-        for i, (stream, lineno, line) in enumerate(candidates, start=1)
+        f"{i}\t[{s.stream}:{s.lineno}]\t{s.render()}"
+        for i, s in enumerate(shapes, start=1)
     )
     call = layer.ask(
-        f"Experiment log, one line per row. The number in the first column is "
-        f"the index to report back.\n\n{numbered}",
+        "Experiment log. Lines identical in shape have been collapsed into one "
+        "row, marked [xN]; the line number shown is the first occurrence. The "
+        "number in the first column is the index to report back.\n\n"
+        f"{numbered}",
         _SYSTEM,
     )
     if not call.ok:
-        return ScanOutcome([], len(candidates), skipped, ok=False, error=call.error)
+        return ScanOutcome(
+            [], len(candidates), skipped, ok=False, error=call.error,
+            shapes_sent=len(shapes),
+        )
 
-    findings = _parse(call.text, candidates)
+    findings = _parse(call.text, [(s, ln, t) for s, ln, t in rows])
     return ScanOutcome(
         findings=findings,
         lines_examined=len(candidates),
         lines_skipped=skipped,
         ok=True,
         raw=call.text,
+        shapes_sent=len(shapes),
     )
 
 
