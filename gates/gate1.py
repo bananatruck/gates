@@ -14,6 +14,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import log_checks, static_checks
+from .llm import (
+    DEFAULT_MAX_PROMPT_CHARS,
+    DEFAULT_TIMEOUT_S as DEFAULT_MODEL_TIMEOUT_S,
+    ModelFn,
+    ModelLayer,
+)
 from .registry import write_registry
 from .runner import DEFAULT_TIMEOUT_S, code_sha256, run_experiment
 from .schema import (
@@ -62,6 +68,13 @@ class Gate1Config:
     #: Left on by default: a run with no seed cannot be re-executed to check its
     #: own numbers.
     require_seed: bool = True
+    #: The LLM layer's model. Supplied by the host adapter — ``gates`` imports no
+    #: client. Absent, the gate still issues a full verdict and falls back to the
+    #: deterministic feedback template, saying that it did. See ``llm.py`` for
+    #: why a required model layer does not put a model in the verdict.
+    consult_model: ModelFn | None = None
+    model_timeout_s: float = DEFAULT_MODEL_TIMEOUT_S
+    max_prompt_chars: int = DEFAULT_MAX_PROMPT_CHARS
 
     def attempt_dir(self, attempt: int) -> Path:
         return Path(self.artifact_root) / "gate1" / f"attempt_{attempt:02d}"
@@ -75,6 +88,15 @@ def run_gate1(source: str, config: Gate1Config, attempt: int = 1) -> GateReport:
     """
     artifact_dir = config.attempt_dir(attempt)
     artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    # The LLM layer is constructed for every run, model or not: callers get the
+    # same object either way, and an absent model is an ordinary degraded path
+    # rather than a branch every call site has to remember.
+    model = ModelLayer(
+        config.consult_model,
+        timeout_s=config.model_timeout_s,
+        max_prompt_chars=config.max_prompt_chars,
+    )
 
     checks: list[CheckResult] = []
     bound = frozenset({"record_result", "record_metadata"}) | config.extra_bound_names
@@ -139,7 +161,11 @@ def run_gate1(source: str, config: Gate1Config, attempt: int = 1) -> GateReport:
 
     report.checks = checks
     report.execution = execution
+    # Verdict is fixed here, from deterministic checks alone. Anything the model
+    # contributed above is WARN-severity by construction and cannot reach this.
     report.verdict = decide(checks)
+    if model.available or model.budget.calls:
+        report.model = model.budget.to_dict()
     _write_report(report, artifact_dir)
     # Written for passing and failing runs alike; the file records which it was,
     # and a rejected registry reports itself as not citable.
