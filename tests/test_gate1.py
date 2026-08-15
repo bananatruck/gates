@@ -528,3 +528,81 @@ def test_timeout_message_does_not_blame_the_contract(config):
     assert not report.passed
     check = next(c for c in report.checks if c.id == "results.contract_present")
     assert "killed at the timeout" in check.message
+
+
+# --------------------------------------------------------------------------- #
+# the recording API must not be shadowed — found live
+# --------------------------------------------------------------------------- #
+
+SHADOWED = (
+    "import numpy as np\n"
+    "\n"
+    "def record_result(key, value, unit=None):\n"
+    "    print(f'{key}: {value}')\n"
+    "\n"
+    "acc = 0.33\n"
+    "record_result('exp1.test_acc', acc)\n"
+)
+
+
+def test_redefining_the_recording_api_is_caught_statically(config):
+    """Observed live: a code model wrote its own record_result that printed,
+    called it four times, exited 0, and recorded nothing.
+
+    The run was rejected on results.contract_present -- "the experiment never
+    called record_result()" -- which is true of the harness's function and tells
+    the agent the wrong thing about its own code. Caught before execution now.
+    """
+    report = run_gate1(SHADOWED, config())
+    assert not report.passed
+    assert report.execution is None, "must be rejected before it costs a run"
+    check = next(
+        c for c in report.checks if c.id == "results.contract_not_shadowed"
+    )
+    assert not check.passed
+    assert check.evidence["shadowed"][0]["name"] == "record_result"
+    assert check.evidence["shadowed"][0]["kind"] == "function"
+    assert check.evidence["shadowed"][0]["lineno"] == 3
+
+
+def test_the_feedback_names_the_real_mistake(config):
+    text = render_feedback(run_gate1(SHADOWED, config()))
+    assert "record_result" in text
+    assert "Delete your own definition" in text
+    assert "redefined as a function at line 3" in text
+
+
+@pytest.mark.parametrize(
+    "src",
+    [
+        "record_result = print\nrecord_result('a', 1)\n",
+        "from mymod import record_metadata\n",
+        "import json as record_result\n",
+    ],
+)
+def test_assignment_and_import_shadowing_are_caught_too(src, config):
+    report = run_gate1(src, config())
+    assert "results.contract_not_shadowed" in {
+        c.id for c in report.failed_checks()
+    }
+
+
+def test_ordinary_use_of_the_api_is_not_flagged(config):
+    src = (
+        "record_metadata('seed', 0)\n"
+        "v = 408 / 500\n"
+        "record_result('exp1.acc', v, unit='ratio')\n"
+    )
+    report = run_gate1(src, config())
+    assert report.passed, render_summary(report)
+
+
+def test_a_local_variable_named_similarly_is_not_flagged(config):
+    """The check looks for the injected names, not anything resembling them."""
+    src = (
+        "record_results_later = True\n"
+        "v = 0.5\n"
+        "record_metadata('seed', 1)\n"
+        "record_result('exp1.acc', v * 2)\n"
+    )
+    assert run_gate1(src, config()).passed

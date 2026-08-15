@@ -174,6 +174,15 @@ def _evidence_banned(check: CheckResult) -> list[str]:
     ]
 
 
+def _evidence_shadowed(check: CheckResult) -> list[str]:
+    return [
+        f"  {row['name']} redefined as a {row['kind']} at line {row['lineno']}"
+        + (f"\n    {row['lineno']} | {row['source_line'].strip()}"
+           if row.get("source_line") else "")
+        for row in check.evidence.get("shadowed", [])[:_MAX_EVIDENCE_ROWS]
+    ]
+
+
 def _evidence_log_signals(check: CheckResult) -> list[str]:
     out = []
     seen: set[str] = set()
@@ -202,6 +211,7 @@ _EVIDENCE_RENDERERS = {
     "static.syntax_valid": _evidence_syntax,
     "static.no_unbound_names": _evidence_unbound,
     "static.no_banned_calls": _evidence_banned,
+    "results.contract_not_shadowed": _evidence_shadowed,
     "exec.no_uncaught_exception": _evidence_exception,
     "results.values_computed": _evidence_literals,
     "results.expected_keys_present": _evidence_missing_keys,
@@ -248,6 +258,12 @@ _FIXES = {
     ),
     "results.expected_keys_present": (
         "Add a record_result call for each missing key listed above."
+    ),
+    "results.contract_not_shadowed": (
+        "Delete your own definition of record_result / record_metadata. They "
+        "are already available in your namespace. Values passed to a function "
+        "you defined yourself are printed, not recorded, and the paper cannot "
+        "cite them."
     ),
     "results.values_computed": (
         "Pass the variable holding the measured value, not a number you typed. "

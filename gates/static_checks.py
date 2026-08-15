@@ -154,6 +154,60 @@ def find_banned_calls(source: str, filename: str = "<experiment>") -> list[Banne
     return found
 
 
+@dataclass(frozen=True)
+class ShadowedName:
+    """A harness-injected name the experiment defined for itself."""
+
+    name: str
+    lineno: int
+    kind: str  # "function" | "assignment" | "import"
+    source_line: str
+
+
+def find_shadowed_harness_names(
+    source: str,
+    names: frozenset[str] = frozenset({"record_result", "record_metadata"}),
+    filename: str = "<experiment>",
+) -> list[ShadowedName]:
+    """Definitions that shadow the API the harness injected.
+
+    Observed live, and it is the reason this check exists. A code model wrote:
+
+        def record_result(key, value, unit=None):
+            print(f"{key}: {value}")
+
+    then called it four times and exited 0. Every value went to its own stub,
+    the harness recorded nothing, and the run was rejected on
+    ``results.contract_present`` -- "the experiment never called
+    record_result()". True of the harness's function, and misleading about what
+    the agent did: it called one, its own, and believed it was recording.
+
+    Caught statically, so the rejection costs no execution and the message can
+    name the actual mistake.
+    """
+    tree = parse(source, filename)
+    lines = source.splitlines()
+    found: list[ShadowedName] = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.name in names:
+                found.append(ShadowedName(node.name, node.lineno, "function",
+                                          _line_at(lines, node.lineno)))
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id in names:
+                    found.append(ShadowedName(target.id, node.lineno, "assignment",
+                                              _line_at(lines, node.lineno)))
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                bound = alias.asname or alias.name.split(".")[0]
+                if bound in names:
+                    found.append(ShadowedName(bound, node.lineno, "import",
+                                              _line_at(lines, node.lineno)))
+    return sorted(found, key=lambda f: f.lineno)
+
+
 def classify_record_calls(
     source: str, filename: str = "<experiment>", func_name: str = "record_result"
 ) -> dict[int, str]:

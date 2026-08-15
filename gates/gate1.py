@@ -106,6 +106,7 @@ def run_gate1(source: str, config: Gate1Config, attempt: int = 1) -> GateReport:
     if syntax.passed:
         checks.append(_check_unbound_names(source, bound))
         checks.append(_check_banned_calls(source))
+        checks.append(_check_contract_not_shadowed(source))
 
     report = GateReport(
         gate=GATE_NAME,
@@ -289,6 +290,43 @@ def _check_unbound_names(source: str, bound: frozenset[str]) -> CheckResult:
                     "source_line": u.source_line,
                 }
                 for u in unbound
+            ]
+        },
+    )
+
+
+def _check_contract_not_shadowed(source: str) -> CheckResult:
+    """The experiment must use the harness's recording API, not its own.
+
+    Found live: an agent defined its own ``record_result`` that printed, called
+    it four times, and exited 0. Nothing was recorded, and the run was rejected
+    for "never calling record_result()" -- which was true of the harness's
+    function and told the agent the wrong thing about its own code. Static, so
+    it costs no execution, and specific, so the feedback names the real mistake.
+    """
+    shadowed = static_checks.find_shadowed_harness_names(source)
+    if not shadowed:
+        return CheckResult(
+            id="results.contract_not_shadowed",
+            passed=True,
+            severity=Severity.FAIL,
+            message="the harness recording API is not redefined",
+        )
+    names = ", ".join(sorted({s.name for s in shadowed}))
+    return CheckResult(
+        id="results.contract_not_shadowed",
+        passed=False,
+        severity=Severity.FAIL,
+        message=(
+            f"the experiment defines its own {names} — values passed to it go "
+            f"nowhere the gate can see. {names} is already provided; remove the "
+            f"definition and call it directly"
+        ),
+        evidence={
+            "shadowed": [
+                {"name": s.name, "lineno": s.lineno, "kind": s.kind,
+                 "source_line": s.source_line}
+                for s in shadowed
             ]
         },
     )
