@@ -11,9 +11,10 @@ scan, so a large bank would mostly be dead weight, and every entry here has to
 earn its place by teaching a distinction the model gets wrong without it.
 
 Negatives matter more than positives. Precision is the floor — a false positive
-costs the ML engineer a rewrite for nothing — and the failure mode a model falls
-into unprompted is flagging anything containing the word "error". Roughly half
-the bank is therefore noise that looks alarming.
+cannot force a rewrite — these findings are WARN — but it does put a non-issue
+into the section of the report the writer is told it must disclose. The failure
+mode a model falls into unprompted is flagging anything containing the word
+"error", so roughly half the bank is noise that looks alarming.
 """
 
 from __future__ import annotations

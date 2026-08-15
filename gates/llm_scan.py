@@ -14,8 +14,11 @@ than what they appear to mean. Reading that is what a model is for.
 
 Two constraints shape everything here:
 
-**Precision is the floor, not recall.** A false positive costs the ML engineer a
-rewrite for nothing. The corpus deliberately includes TensorFlow's "Unable to
+**Precision is the floor, not recall.** A false positive here cannot force a
+rewrite -- these findings are WARN and ``decide()`` fails only on blocking checks
+-- but it does put a non-issue into the "must be stated in the report" section
+the writer receives, so the manuscript discloses a problem that never happened.
+The corpus deliberately includes TensorFlow's "Unable to
 register cuFFT factory" and oneDNN's round-off banner — E-level, CUDA-adjacent,
 mentioning "errors", and present on every healthy run. A scanner that raises
 recall by flagging those has made the gate worse.
@@ -65,8 +68,8 @@ _SYSTEM = (
     "Do NOT report routine framework noise. Library registration messages, "
     "deprecation and future warnings, progress bars, ordinary training logs, and "
     "metric names that merely contain the word 'error' are not signals. A false "
-    "positive costs an engineer a wasted rewrite, so when a line is merely "
-    "noisy, leave it out.\n\n"
+    "positive puts a non-issue into the paper, so when a line is merely noisy, "
+    "leave it out.\n\n"
     "Respond with a JSON array and nothing else. Each element: "
     '{"line": <the line number as given>, "why": "<at most 20 words on what it '
     'means for the reported numbers>"}. '

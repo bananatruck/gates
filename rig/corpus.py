@@ -13,9 +13,11 @@ numerical, device and convergence shapes the pattern set was written for, the
 hard negatives it was tuned against, and the gap shapes it was never going to
 catch.
 
-Precision is the number that governs. A false positive costs the ML engineer a
-rewrite for nothing, so a scanner that improves recall by flagging TensorFlow's
-plugin-registration noise has made the gate worse, not better.
+Precision is the number that governs, though for a reason worth stating
+precisely: these findings are WARN and cannot force a rewrite, so a false
+positive's real cost is that the writer is told to disclose a problem that never
+happened. A scanner that improves recall by flagging TensorFlow's
+plugin-registration noise has made the paper worse, not the compute bill.
 """
 
 from __future__ import annotations

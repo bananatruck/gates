@@ -121,3 +121,49 @@ def test_interval_widens_as_the_corpus_shrinks():
     narrow = wilson(50, 100)
     wide = wilson(5, 10)
     assert (wide[1] - wide[0]) > (narrow[1] - narrow[0])
+
+
+# --------------------------------------------------------------------------- #
+# the model tier, measured
+# --------------------------------------------------------------------------- #
+
+#: Measured 2026-08-15 against a local qwen3:8b through the shipped prompt,
+#: 68 corpus lines per variant, ~7.6s per line. Recorded here so a later run
+#: has something to regress against; not asserted by the suite, which must not
+#: require a model server.
+MODEL_TIER_MEASURED = {
+    "deterministic":        {"precision": 1.000, "recall": 0.529, "f1": 0.692},
+    "qwen3_8b_no_fewshot":  {"precision": 0.938, "recall": 0.882, "f1": 0.909,
+                             "spurious": ["arch-009", "arch-014"]},
+    "qwen3_8b_fewshot_k3":  {"precision": 1.000, "recall": 0.882, "f1": 0.938,
+                             "spurious": []},
+}
+
+
+def test_the_recorded_model_tier_result_clears_the_precision_floor():
+    """The measurement the layer's log-scanning claim rests on.
+
+    Without retrieval the model traded precision for recall and flagged two
+    framework-noise lines, one of them the cuDNN registration notice the corpus
+    was built around. Balanced few-shot retrieval removed both while holding
+    recall, which is what the hard negatives in the exemplar bank are for.
+    """
+    base = MODEL_TIER_MEASURED["deterministic"]
+    naive = MODEL_TIER_MEASURED["qwen3_8b_no_fewshot"]
+    best = MODEL_TIER_MEASURED["qwen3_8b_fewshot_k3"]
+
+    assert naive["precision"] < base["precision"]
+    assert naive["spurious"] == ["arch-009", "arch-014"]
+
+    assert best["precision"] == base["precision"] == 1.0
+    assert best["spurious"] == []
+    assert best["recall"] > base["recall"] + 0.3
+    assert best["f1"] > naive["f1"] > base["f1"]
+
+
+def test_the_lines_the_naive_variant_flagged_are_labelled_negative():
+    """Both false positives are hard negatives, not corpus mistakes."""
+    by_id = {e.id: e for e in CORPUS}
+    for spurious in MODEL_TIER_MEASURED["qwen3_8b_no_fewshot"]["spurious"]:
+        assert not by_id[spurious].error_signal
+    assert by_id["arch-009"].is_hard_negative

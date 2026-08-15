@@ -12,8 +12,14 @@ clean result.
 
 Findings here never block. They are surfaced so the report states them.
 
-Patterns are chosen for precision over coverage, because a false positive costs
-the agent a rewrite for nothing. In particular the exception-name pattern
+Patterns are chosen for precision over coverage. Note what a false positive
+actually costs, because it is smaller than it first appears and the distinction
+matters: findings here are WARN, and ``decide()`` fails only on blocking checks,
+so a spurious one cannot force a rewrite. What it does is put a non-issue in
+front of the engineer and, worse, into the "these must be stated in the report"
+section the writer receives -- so the manuscript discloses a problem that never
+happened. That is a credibility cost rather than a compute one. In particular
+the exception-name pattern
 requires CamelCase before the colon, so ``ValueError:`` matches while
 ``Mean Squared Error:`` — ordinary ML prose — does not.
 """
