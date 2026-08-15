@@ -98,9 +98,33 @@ class ArmResult:
         return sum(1 for a in self.attempts if a.accepted and not a.recorded)
 
 
-def _ask(model: ModelFn, task: str, feedback: str | None, gated: bool) -> str:
+def _ask(
+    model: ModelFn,
+    task: str,
+    feedback: str | None,
+    gated: bool,
+    *,
+    contract: bool | None = None,
+) -> str:
+    """Build the engineer's prompt.
+
+    ``contract`` controls whether the results-contract instructions are
+    included, and the choice is a real methodological fork rather than a knob:
+
+    * ``None`` (default) follows the arm. The ungated arm gets no contract,
+      which is faithful — upstream has none — but it makes "accepted a run that
+      recorded nothing" true of the ungated arm *by construction*, so that
+      column stops being evidence.
+    * ``True`` gives both arms the same instructions, so the arms differ only in
+      the decision rule and the channel width. Weaker headline, cleaner claim,
+      and immune to the objection that the comparison was won by withholding
+      instructions from one side.
+
+    Report which one produced a given table.
+    """
+    include_contract = gated if contract is None else contract
     parts = [f"TASK\n{task}"]
-    if gated:
+    if include_contract:
         parts.append(MLE_GATE_INSTRUCTIONS)
     if feedback:
         parts.append(
@@ -128,6 +152,7 @@ def run_gated(
     max_turns: int = 3,
     timeout_s: int = 180,
     consult_model: ModelFn | None = None,
+    contract: bool | None = None,
 ) -> ArmResult:
     result = ArmResult(arm="gated")
     config = Gate1Config(
@@ -140,7 +165,7 @@ def run_gated(
     )
     feedback = None
     for turn in range(1, max_turns + 1):
-        code = _ask(model, task, feedback, gated=True)
+        code = _ask(model, task, feedback, gated=True, contract=contract)
         report = run_gate1(code, config, attempt=turn)
         execution = report.execution
         attempt = Attempt(
@@ -175,12 +200,13 @@ def run_ungated(
     *,
     max_turns: int = 3,
     timeout_s: int = 180,
+    contract: bool | None = None,
 ) -> ArmResult:
     """Upstream's loop: execute, slice to 1,000 chars, search for the marker."""
     result = ArmResult(arm="ungated")
     feedback = None
     for turn in range(1, max_turns + 1):
-        code = _ask(model, task, feedback, gated=False)
+        code = _ask(model, task, feedback, gated=False, contract=contract)
         execution = run_experiment(
             code, workdir / f"attempt_{turn:02d}", timeout_s=timeout_s
         )
