@@ -200,7 +200,25 @@ def make_context(
     )
 
 
-def make_gate_model(model_str: str, api_key: str | None = None, temp: float = 0.0):
+#: Gate output is a short JSON array or four numbered sentences. Nothing it
+#: produces legitimately runs long, so the cap is generous rather than tight and
+#: exists to bound the pathological case rather than to shape the answer.
+GATE_MAX_TOKENS = 1024
+
+#: Models that reason at length unless told not to. Both of the gate's jobs are
+#: classification and short instruction-writing; extended reasoning buys nothing
+#: and costs a great deal. Measured on qwen3:8b before this was applied: 630
+#: output tokens on average and 21,858 on the worst call, which at 26 tokens a
+#: second is fourteen minutes spent on a request whose answer was "[]".
+_NO_THINK_PREFIXES = ("qwen3",)
+
+
+def make_gate_model(
+    model_str: str,
+    api_key: str | None = None,
+    temp: float = 0.0,
+    max_tokens: int | None = GATE_MAX_TOKENS,
+):
     """Adapt this scaffold's ``query_model`` to the layer's two-argument seam.
 
     The import is deliberately lazy. ``adapters/`` is where host knowledge is
@@ -210,10 +228,20 @@ def make_gate_model(model_str: str, api_key: str | None = None, temp: float = 0.
 
     ``temp=0.0``: this model writes a validity report, not prose. The upstream
     reward model runs at 0.6 and that is part of what Gate 1 exists to answer.
+
+    Model-specific quirks belong here rather than in ``gates/``, which stays
+    ignorant of who is answering it. ``/no_think`` is qwen3's own switch and is
+    inert text to any other model.
     """
     from inference import query_model  # noqa: PLC0415 — see docstring
 
+    quiet = model_str.split(":")[0].split("-")[0].lower().startswith(
+        _NO_THINK_PREFIXES
+    )
+
     def call(prompt: str, system_prompt: str) -> str:
+        if quiet:
+            system_prompt = f"{system_prompt}\n/no_think"
         return query_model(
             model_str=model_str,
             prompt=prompt,
@@ -221,6 +249,7 @@ def make_gate_model(model_str: str, api_key: str | None = None, temp: float = 0.
             openai_api_key=api_key,
             temp=temp,
             print_cost=False,
+            max_tokens=max_tokens,
         )
 
     return call
