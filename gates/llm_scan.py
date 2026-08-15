@@ -33,7 +33,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from . import log_digest
+from . import log_digest, retrieval
 from .llm import ModelLayer, model_warning
 from .log_checks import LogFinding
 from .schema import CheckResult, Severity
@@ -47,6 +47,10 @@ DEFAULT_MAX_LINES = 400
 #: Findings kept. Beyond a handful the report stops being small, and the ML
 #: engineer stops reading it.
 MAX_FINDINGS = 6
+
+#: Retrieved exemplars per class. Zero disables few-shot entirely, which is
+#: the arm the bench compares against.
+DEFAULT_FEW_SHOT = 3
 
 _SYSTEM = (
     "You audit the logs of a machine-learning experiment that already finished. "
@@ -83,6 +87,8 @@ class ScanOutcome:
     #: Distinct shapes sent, after collapsing. The difference between this and
     #: ``lines_examined`` is what repetition was costing.
     shapes_sent: int = 0
+    #: Exemplars retrieved into the prompt, for the bench to attribute by.
+    exemplars_used: int = 0
 
     @property
     def compression(self) -> float:
@@ -98,6 +104,7 @@ def scan_with_model(
     *,
     already_flagged: list[LogFinding] | None = None,
     max_lines: int = DEFAULT_MAX_LINES,
+    few_shot: int = DEFAULT_FEW_SHOT,
 ) -> ScanOutcome:
     """Ask the model about the lines the pattern set did not already flag.
 
@@ -137,12 +144,23 @@ def scan_with_model(
         f"{i}\t[{s.stream}:{s.lineno}]\t{s.render()}"
         for i, s in enumerate(shapes, start=1)
     )
+    # Retrieval-augmented few-shot: the exemplars nearest this particular log,
+    # balanced across signal and noise. The bank is disjoint from the evaluation
+    # corpus, so this teaches the boundary rather than leaking the answers.
+    system = _SYSTEM
+    exemplars: list = []
+    if few_shot:
+        exemplars = retrieval.select(numbered, k_each=few_shot)
+        block = retrieval.render(exemplars)
+        if block:
+            system = f"{_SYSTEM}\n\n{block}"
+
     call = layer.ask(
         "Experiment log. Lines identical in shape have been collapsed into one "
         "row, marked [xN]; the line number shown is the first occurrence. The "
         "number in the first column is the index to report back.\n\n"
         f"{numbered}",
-        _SYSTEM,
+        system,
     )
     if not call.ok:
         return ScanOutcome(
@@ -158,6 +176,7 @@ def scan_with_model(
         ok=True,
         raw=call.text,
         shapes_sent=len(shapes),
+        exemplars_used=len(exemplars),
     )
 
 

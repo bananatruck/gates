@@ -178,7 +178,7 @@ def deterministic_scanner(line: str, stream: str) -> bool:
     return bool(log_checks.scan(line, stream))
 
 
-def model_scanner(model_fn, **layer_kw) -> ScannerFn:
+def model_scanner(model_fn, *, few_shot: int = 3, **layer_kw) -> ScannerFn:
     """The model tier as a line-level scanner, for measurement only.
 
     One call per line is not how ``llm_scan`` runs in the gate — there it sends
@@ -195,23 +195,56 @@ def model_scanner(model_fn, **layer_kw) -> ScannerFn:
     def scan_one(line: str, stream: str) -> bool:
         text = line if stream == "stdout" else ""
         err = line if stream == "stderr" else ""
-        return bool(scan_with_model(layer, text, err).findings)
+        return bool(
+            scan_with_model(layer, text, err, few_shot=few_shot).findings
+        )
 
     return scan_one
 
 
-def combined_scanner(model_fn, **layer_kw) -> ScannerFn:
+def combined_scanner(model_fn, *, few_shot: int = 3, **layer_kw) -> ScannerFn:
     """Deterministic first, model only on what it did not flag.
 
     This is the arrangement the gate actually runs, and therefore the one whose
     precision and recall belong in the paper.
     """
-    model = model_scanner(model_fn, **layer_kw)
+    model = model_scanner(model_fn, few_shot=few_shot, **layer_kw)
 
     def scan_one(line: str, stream: str) -> bool:
         return deterministic_scanner(line, stream) or model(line, stream)
 
     return scan_one
+
+
+def bench_variants(
+    model_fn, variants: dict[str, dict] | None = None
+) -> str:
+    """Score prompt variants against the corpus, side by side.
+
+    This is what makes prompt engineering an engineering activity rather than a
+    matter of taste: each change is a row, and precision is the column that
+    decides. A variant that lifts recall while precision falls has not improved
+    the scanner, it has moved the cost from missed signals to wasted rewrites.
+
+    Needs a real model. Each variant is one pass over the corpus — 68 calls.
+    """
+    variants = variants or {
+        "no few-shot": {"few_shot": 0},
+        "few-shot k=2": {"few_shot": 2},
+        "few-shot k=3": {"few_shot": 3},
+    }
+    baseline = score(deterministic_scanner)
+    out = [render("deterministic only (baseline)", baseline), ""]
+    for name, kwargs in variants.items():
+        result = score(combined_scanner(model_fn, **kwargs))
+        out.append(render(f"deterministic + model, {name}", result))
+        out.append("")
+    out.append(
+        "  Precision is the floor. A variant that raises recall while precision\n"
+        "  falls has moved the cost from missed signals to wasted rewrites, and\n"
+        "  the engineer pays either way."
+    )
+    return "\n".join(out)
 
 
 def render(name: str, result: Score) -> str:
