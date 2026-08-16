@@ -159,6 +159,9 @@ class GatedExecution:
         counterfactual — what would the reward model have scored, given the
         channel the scaffold actually had? — instead of guessing at it.
         """
+        if self.report is None:
+            # The gate-off control already holds exactly this view.
+            return self.evidence_bundle
         execution = self.report.execution
         if execution is None:
             return ""

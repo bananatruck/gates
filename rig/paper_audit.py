@@ -47,6 +47,16 @@ _SKIP_LINE = re.compile(
     r"begin\{equation|end\{equation|section|subsection)"
 )
 
+#: Citation identifiers, removed before claims are extracted.
+#:
+#: "arXiv 2410.21676v4" contains "2410.21", which the number pattern was happily
+#: reporting as an unsourced empirical claim. On the gated paper that inflated
+#: the unsourced count by two and made the arm look worse than it is -- an error
+#: in the flattering direction for the argument this project is making, which is
+#: precisely the direction to be suspicious of. An arXiv id is a citation, not a
+#: measurement, so it never enters the claim set.
+_CITATION = re.compile(r"arxiv[:\s]*\d{4}\.\d{4,5}(v\d+)?", re.IGNORECASE)
+
 
 @dataclass
 class Claim:
@@ -75,14 +85,24 @@ class PaperAudit:
     def sourced_rate(self) -> float | None:
         return self.count("sourced") / len(self.claims) if self.claims else None
 
+    @property
+    def traceable_rate(self) -> float | None:
+        """Sourced or checkably derived from something sourced."""
+        if not self.claims:
+            return None
+        n = self.count("sourced") + self.count("derived")
+        return n / len(self.claims)
+
     def to_dict(self) -> dict:
         return {
             "paper": self.paper,
             "n_claims": len(self.claims),
             "sourced": self.count("sourced"),
+            "derived": self.count("derived"),
             "printed": self.count("printed"),
             "unsourced": self.count("unsourced"),
             "sourced_rate": self.sourced_rate,
+            "traceable_rate": self.traceable_rate,
             "registry_keys": self.registry_keys,
             "record_result_calls": self.record_result_calls,
             "note": self.note,
@@ -116,6 +136,7 @@ def extract_claims(paper_text: str) -> list[Claim]:
             continue
         if not any(s in section for s in _CLAIM_SECTIONS):
             continue
+        line = _CITATION.sub(" ", line)
         for token in _NUMBER.findall(line):
             if not _is_claim(token):
                 continue
@@ -141,6 +162,38 @@ def _close(a: float, b: float) -> bool:
         if abs(a - x) <= max(0.011 * abs(a), 1e-6):
             return True
     return False
+
+
+def derived_from(value: float, registry: dict[str, float]) -> str | None:
+    """Whether `value` is simple arithmetic over recorded results.
+
+    A paper that records accuracy and then writes "the error drops from 0.11 to
+    0.03" has not invented anything: 1 - 0.89 and 1 - 0.97 are the recorded
+    numbers, restated. Scoring those as unsourced puts a legitimate derivation
+    in the same bucket as a fabricated one, and the whole argument here rests on
+    that distinction being real.
+
+    So the arithmetic is *checked*, never assumed -- only a relationship that
+    actually holds earns the label, and anything else stays unsourced. The set
+    is deliberately small: complement, difference, ratio, and percentage. A
+    wider search would eventually "explain" any number at all, which would make
+    the category meaningless in the direction that flatters the gated arm.
+    """
+    items = list(registry.items())
+    for key, v in items:
+        if _close(value, 1.0 - v):
+            return f"1 - {key}"
+    for a, va in items:
+        for b, vb in items:
+            if a == b:
+                continue
+            if _close(value, va - vb):
+                return f"{a} - {b}"
+            if vb and _close(value, va / vb):
+                return f"{a} / {b}"
+            if vb and _close(value, (1.0 - va) / (1.0 - vb)) and vb != 1.0:
+                return f"(1-{a}) / (1-{b})"
+    return None
 
 
 def load_registry(path: str | Path) -> dict[str, float]:
@@ -210,6 +263,10 @@ def audit(paper_path: str | Path, *, registry_path: str | Path | None = None,
             continue
         if any(_close(claim.value, p) for p in printed):
             claim.status, claim.source = "printed", "stdout, untraceable"
+            continue
+        how = derived_from(claim.value, registry)
+        if how:
+            claim.status, claim.source = "derived", how
     return result
 
 
@@ -218,6 +275,7 @@ def render(a: PaperAudit) -> str:
         f"paper: {a.paper}",
         f"  numeric claims in findings sections : {len(a.claims)}",
         f"  sourced to a recorded result        : {a.count('sourced')}",
+        f"  derived from recorded results       : {a.count('derived')}",
         f"  printed but untraceable             : {a.count('printed')}",
         f"  unsourced (no origin at all)        : {a.count('unsourced')}",
         f"  record_result calls in the code     : {a.record_result_calls}",

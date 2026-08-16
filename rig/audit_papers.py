@@ -23,16 +23,20 @@ from rig.paper_audit import PaperAudit, audit, render
 
 HOST = Path("/home/kesh/AgentLaboratory-Gemini")
 ARCHIVED_RUN = HOST / "results" / "gemini_3_5_flash_run_1"
-GATED_DIR = HOST / "research_dir"
+#: The completed full-workflow ablation: both arms, same task, same models.
+ABLATION = HOST / "full_ablation_runs" / "deepseek_common_20260815"
+GATED_DIR = ABLATION / "gated" / "research_dir"
 
 #: The like-for-like baseline: the same task and the same models as the gated
 #: run, with GATES_GATE1=off. The archived paper is a different topic, so on its
 #: own it can only show that the failure happens -- not that Gate 1 is what
 #: prevents it. This pair is what makes the comparison an ablation.
-UNGATED_DIR = Path(
-    "/tmp/claude-1000/-home-kesh/976cef29-0afd-479c-a716-6c557e07b6cb"
-    "/scratchpad/ungated_run/research_dir"
-)
+#: The first ungated arm died mid-run (a None report reached the ledger); the
+#: retry is the one that carried through, so it is what gets audited. Falls back
+#: to the original arm if the retry is absent.
+_RETRY = HOST / "full_ablation_runs" / (
+    "deepseek_common_20260815_ungated_retry") / "ungated" / "research_dir"
+UNGATED_DIR = _RETRY if _RETRY.exists() else ABLATION / "ungated" / "research_dir"
 
 
 def last_passing_registry(gate_root: Path) -> Path | None:
