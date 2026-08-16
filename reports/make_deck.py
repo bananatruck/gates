@@ -321,37 +321,34 @@ def _slide_papers(prs):
         return
 
     s = blank(prs)
-    header(s, "the papers", "Of the numbers a paper states, how many are sourced")
-    rows = [["paper", "numeric claims", "sourced to a result", "record_result calls"]]
-    for label, a in data.items():
-        if a.get("note") and not a.get("n_claims"):
-            rows.append([label, a["note"], "—", "—"])
-            continue
-        n, srcd = a.get("n_claims", 0), a.get("sourced", 0)
-        rate = f"{100 * srcd / n:.0f}%" if n else "—"
-        rows.append([label, n, f"{srcd}  ({rate})", a.get("record_result_calls", 0)])
-    _table(s, Inches(0.6), Inches(1.75), Inches(12.1), rows,
-           [Inches(4.6), Inches(2.6), Inches(2.7), Inches(2.2)],
-           size=12, rh=Inches(0.5))
-
-    archived = data.get("archived run (different topic, no gate)", {})
-    n = archived.get("n_claims", 0)
-    y = Inches(1.75) + Inches(0.5) * len(rows) + Inches(0.3)
-    text(s, Inches(0.6), y, Inches(12.1), Inches(2.6),
-         [("The first two rows are the ablation: same question, same model, "
-           "same prompts — the gate is the only difference.", 13, True, INK),
-          ("The third is the archived Agent Laboratory run on its own topic. "
-           "One controlled pair shows what the gate changes; an independent "
-           "instance shows the failure was not manufactured for the occasion.",
-           12, False, INK2),
-          ("", 8, False, INK2),
-          (f"That archived paper states {n} numeric findings and sources none "
-           f"of them: 81.60% test accuracy, a 13.61x speedup, a 39.20% "
-           f"collapse. Its saved code calls record_result zero times and "
-           f"contains none of those numbers. The run behind it raised "
-           f"NameError on every attempt and scored 1.0.", 12, False, INK2),
-          ("Nothing in the pipeline could tell the difference between a "
-           "measurement and a sentence.", 13, True, ORANGE)])
+    header(s, "the papers", "Three full workflows, audited on identical criteria")
+    picture(s, "papers.png", Inches(0.6), Inches(1.5), Inches(7.5),
+            max_h=Inches(4.3))
+    panel(s, Inches(8.4), Inches(1.5), Inches(4.3), Inches(4.9))
+    text(s, Inches(8.65), Inches(1.7), Inches(3.8), Inches(4.5),
+         [("The gate-off arm did not fabricate.", 14, True, INK),
+          ("Its Results section says so itself: \u201cthe decisive "
+           "measurements \u2026 are not present in the evidence window. The "
+           "captured log was truncated at the legacy 1,000-character "
+           "boundary.\u201d It then reports the loss curve it could see.",
+           10.5, False, INK2),
+          ("", 7, False, INK2),
+          ("An honest paper about a truncated log.", 11, True, ORANGE),
+          ("", 7, False, INK2),
+          ("So two things are doing work, and only one of them is the gate. "
+           "The prompt \u2014 shared by both arms \u2014 forbids describing an "
+           "unrecorded quantity, and that is what stops fabrication. Gate 1 is "
+           "what gets the results to the writer, bound to the run.",
+           10.5, False, INK2),
+          ("", 7, False, INK2),
+          ("Instruction without delivery: an honest paper with no findings. "
+           "Delivery without instruction: the archived paper, 65 of 65 "
+           "unsourced.", 10.5, True, BLUE)])
+    text(s, Inches(0.6), Inches(6.0), Inches(7.6), Inches(1.2),
+         [("The gate-off arm is credited for every value its run recorded to "
+           "disk \u2014 none of which reached the writer. The comparison is "
+           "generous on purpose; the gap that survives is the claim.",
+           10, False, MUTED)])
 
 
 def _slide_checks_fired(prs, run):

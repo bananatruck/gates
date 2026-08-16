@@ -438,6 +438,64 @@ def chart_headline(accuracy: dict | None, agg_stats: dict | None):
     return save(fig, "headline.png")
 
 
+def chart_papers(papers: dict | None):
+    """The three finished papers, by where each number came from.
+
+    The result this chart has to carry honestly is not the one that was
+    expected. The gate-off arm did not fabricate: it wrote a Results section
+    saying, correctly, that the decisive measurements were truncated away. What
+    it could not do is report them. So the bars are not "honest vs dishonest" --
+    they are how much of a paper can be tied to the run behind it, and the
+    gate-off paper is short because there was nothing to tie.
+    """
+    if not papers:
+        return None
+    order = ["with Gate 1", "without Gate 1",
+             "archived run (different topic, no gate)"]
+    rows = [(k, papers[k]) for k in order
+            if k in papers and papers[k].get("n_claims")]
+    if not rows:
+        return None
+
+    labels = ["Gate 1\n(same task)", "no gate\n(same task)",
+              "no gate, original prompts\n(archived, other topic)"][:len(rows)]
+    sourced = [r[1].get("sourced", 0) for r in rows]
+    derived = [r[1].get("derived", 0) for r in rows]
+    unsourced = [r[1].get("unsourced", 0) for r in rows]
+
+    fig, ax = plt.subplots(figsize=(7.6, 3.8))
+    y = range(len(rows))
+    h = 0.55
+    left = [0] * len(rows)
+    for values, colour, label in (
+        (sourced, BLUE, "sourced to a recorded result"),
+        (derived, AQUA, "derived from one, arithmetic checked"),
+        (unsourced, ORANGE, "unsourced — no origin found"),
+    ):
+        ax.barh(list(y), values, h, left=left, color=colour, label=label,
+                edgecolor=SURFACE, linewidth=2)
+        for i, v in enumerate(values):
+            if v:
+                ax.text(left[i] + v / 2, i, str(v), ha="center", va="center",
+                        fontsize=10, fontweight="bold", color=SURFACE)
+        left = [a + b for a, b in zip(left, values)]
+
+    ax.set_yticks(list(y))
+    ax.set_yticklabels(labels, fontsize=9)
+    ax.invert_yaxis()
+    ax.set_xlabel("numeric claims in the paper's findings sections")
+    ax.set_xlim(0, max(left) * 1.04)
+    ax.grid(axis="x", color=GRID, linewidth=0.8)
+    ax.grid(axis="y", visible=False)
+    _finish(ax, "Where each generated paper's numbers came from",
+            "full Agent Laboratory workflow, literature review through paper "
+            "writing")
+    ax.grid(axis="y", visible=False)
+    ax.legend(frameon=False, fontsize=8.5, loc="upper center",
+              bbox_to_anchor=(0.5, -0.22), ncol=3)
+    return save(fig, "papers.png")
+
+
 def main():
     bench_path = Path(
         "/tmp/claude-1000/-home-kesh/976cef29-0afd-479c-a716-6c557e07b6cb"
@@ -468,7 +526,12 @@ def main():
     except Exception as exc:  # a missing aggregate must not kill every chart
         print(f"  (aggregate unavailable: {exc})")
 
+    pa_path = runs_root / "paper_audit.json"
+    papers = json.loads(pa_path.read_text()) if pa_path.exists() else None
+
     print("charts:")
+    if chart_papers(papers) is None:
+        print("  (no paper_audit.json — papers chart skipped)")
     if chart_headline(accuracy, agg_stats) is None:
         print("  (no report_accuracy.json — headline chart skipped)")
     if chart_benchmark(accuracy) is None:

@@ -323,15 +323,39 @@ def _paper_section() -> str:
                 "<code>python -m rig.audit_papers</code>.</p>")
     data = json.loads(path.read_text(encoding="utf-8"))
     out = [
-        "<p>Three papers. The first two are the ablation: the same research "
-        "question, the same engineer model and the same prompts, differing only "
-        "in whether Gate 1 arbitrates — the host is run as shipped via "
-        "<code>GATES_GATE1=off</code>, so the gate is the single variable. The "
-        "third is the archived Agent Laboratory run on its own topic, included "
-        "because one controlled pair shows what the gate changes and an "
-        "independent instance shows the failure was not manufactured for the "
-        "occasion.</p>",
+        "<p>Three papers, each produced by a complete Agent Laboratory workflow "
+        "— literature review through paper writing. The first two are the "
+        "ablation: same research question, same engineer model, same prompts, "
+        "differing only in whether Gate 1 arbitrates, with the host run as "
+        "shipped via <code>GATES_GATE1=off</code>. The third is the archived run "
+        "on its own topic and under the original prompts.</p>",
+        img("papers.png"),
         rt.paper_audit_table(data),
+        "<p class='small'>The gate-off arm is audited against what its own run "
+        "recorded on disk, which is deliberately generous: "
+        "<code>record_result</code> works without the gate, so the values "
+        "existed — they simply never reached the writer. Crediting the arm for "
+        "numbers it could not see keeps the comparison symmetric and makes the "
+        "gap that survives the harder claim.</p>",
+        "<div class='callout'><b>The result is not the one the framing "
+        "predicts, and it is more useful than that one.</b> The gate-off arm did "
+        "not fabricate. Its Results section says, correctly and in its own "
+        "words, that <i>“the decisive measurements — <code>eff.acc_at_25</code>, "
+        "<code>eff.acc_at_100</code>, <code>eff.efficiency_ratio</code>, and "
+        "<code>eff.train_s</code> — are not present in the evidence window. The "
+        "captured log was truncated at the legacy 1,000-character "
+        "boundary.”</i> It then fills the section with the training-loss values "
+        "it could see. It is an honest paper about a truncated log.</div>",
+        "<p>That is why the honest reading separates two contributions rather "
+        "than crediting one. <b>The prompt</b> — shared by both arms, and "
+        "rewritten for this study to forbid describing a quantity that was not "
+        "recorded — is what stops the fabrication; the archived run, under the "
+        "original prompts and with no gate, invented all 65 of its figures. "
+        "<b>Gate 1</b> is what makes the results reach the writer bound to the "
+        "run that produced them. Neither alone yields a paper that is complete "
+        "<i>and</i> traceable: instruction without delivery gives an honest "
+        "paper with no findings, and delivery without instruction is the "
+        "archived paper.</p>",
     ]
     archived = data.get(ARCHIVED_KEY, {})
     if archived.get("claims"):
@@ -341,13 +365,12 @@ def _paper_section() -> str:
             "them.</b> Its saved experiment code calls "
             "<code>record_result</code> zero times, and the run that produced "
             "it raised <code>NameError</code> on every attempt while scoring "
-            "1.0. The paper is fluent, specific, and unfalsifiable from its own "
-            "artifacts — which is the failure mode a validity layer exists to "
-            "make impossible rather than unlikely.</div>"
+            "1.0. That is the failure mode a validity layer exists to make "
+            "impossible rather than unlikely.</div>"
         )
-        out.append("<p class='small'>A sample of the unsourced claims, quoted "
+        out.append("<p class='small'>A sample of its unsourced claims, quoted "
                    "as the paper states them:</p>")
-        out.append(rt.paper_claims_list(data, ARCHIVED_KEY, limit=10))
+        out.append(rt.paper_claims_list(data, ARCHIVED_KEY, limit=8))
     pending = [
         name for name in ("with Gate 1", "without Gate 1")
         if data.get(name, {}).get("note") and not data.get(name, {}).get("n_claims")
@@ -356,9 +379,7 @@ def _paper_section() -> str:
         out.append(
             "<p class='small'><b>Not in this build: "
             f"{', '.join(pending)}.</b> Those runs had not finished when this "
-            "report was generated. They are left absent rather than estimated — "
-            "an empty column would read as a measurement, and a section about "
-            "unsourced numbers is the wrong place to make that mistake.</p>"
+            "report was generated, and are left absent rather than estimated.</p>"
         )
     return "\n".join(out)
 

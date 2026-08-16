@@ -67,12 +67,28 @@ def audit_archived() -> PaperAudit:
     return audit(paper, code_text=code)
 
 
+def last_ungated_results(gate_root: Path) -> Path | None:
+    """The last `results.json` the gate-off arm's executions left behind."""
+    found = [d / "results.json" for d in sorted(gate_root.glob("ungated_*"))
+             if (d / "results.json").exists()]
+    return found[-1] if found else None
+
+
 def audit_ungated() -> PaperAudit:
-    """Same task and models as the gated run, gate switched off."""
+    """Same task and models as the gated run, gate switched off.
+
+    Audited against what its own run recorded on disk -- which is deliberately
+    generous, because none of it reached the writing agent. `record_result`
+    still works without the gate; what the gate adds is delivery, so the values
+    sat in results.json while the writer saw 1,000 characters of training log.
+    Crediting the arm for numbers it could not see keeps the comparison
+    symmetric and makes the gap that survives the harder claim.
+    """
     paper = UNGATED_DIR / "report.txt"
     code_path = UNGATED_DIR / "src" / "run_experiments.py"
     code = code_path.read_text(errors="replace") if code_path.exists() else ""
-    return audit(paper, code_text=code)
+    registry = last_ungated_results(UNGATED_DIR / "gate_artifacts")
+    return audit(paper, registry_path=registry, code_text=code)
 
 
 def audit_gated() -> PaperAudit:
