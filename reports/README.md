@@ -1,46 +1,43 @@
-# Gate 1 report and deck
+# Gate 1 validation report
 
-Two artifacts, one set of numbers:
+One package: the finalized submission and everything it cites.
 
-| file | what it is |
+[`finalized-report-and-results/`](finalized-report-and-results/) — start at
+[`GATE1_FINAL_REPORT.pdf`](finalized-report-and-results/GATE1_FINAL_REPORT.pdf).
+
+| Path | Contents |
 |---|---|
-| `GATE1_REPORT.pdf` | the extensive report — checks, metrics, logs, runs, impact, benchmark comparison, defects, limits |
-| `GATE1_DECK.pptx` | the same material as a deck, one claim per slide |
-| `assets/*.png` | figures, generated from measurements |
+| `GATE1_FINAL_REPORT.pdf` / `.html` | the combined report |
+| `GATE1_FINAL_PRESENTATION.pdf` / `.pptx` | the 16-slide deck |
+| `SUBMISSION_MANIFEST.json` | headline results, canonical run paths, config hash |
+| `SHA256SUMS.txt` | checksum for every file in the package |
+| `verification/evidence/` | campaign analysis, feedback-loop repeats, deterministic scenario repeats, shadow audit, log-scanner benchmark |
+| `verification/execution-artifacts/` | per-attempt gate reports, registries, captured stdout/stderr |
+| `verification/papers/` | the generated manuscript from each arm |
+| `verification/logs/`, `verification/run-metadata/` | workflow logs and run manifests |
+| `verification/source-reports/` | the two independent validation reports the combined one is built from |
+| `verification/benchmark/` | the MLR-Bench PDF the comparison cites |
 
-## Rebuilding
+The headline numbers, and the boundary they do **not** support, are summarised in
+the [top-level README](../README.md#measured-results).
+
+## Provenance
+
+`build_final_submission.py` is retained as the build record for this package: it
+is how the figures, tables and copied evidence got here. It is **not runnable
+from a fresh clone** — it read a three-folder report tree (`claude-research/`,
+`codex-research/`) that has since been collapsed into this single package. The
+outputs it produced, and every input it copied, are in `verification/`.
+
+The campaign itself is reproducible from the host scaffold. From
+`/home/kesh/AgentLaboratory-Gemini`, reading the key through a non-echoing
+prompt so it never reaches argv, a config file or a log:
 
 ```bash
-python reports/make_charts.py     # figures from recorded measurements
-python reports/make_report.py     # HTML -> PDF (via libreoffice)
-python reports/make_deck.py       # PPTX
+.venv/bin/python tools_full_gate1_ablation.py --prompt-key \
+  --config experiment_configs/gate1_common_deepseek.yaml \
+  --outdir full_ablation_runs/<new-run>
 ```
 
-## Where the numbers come from
-
-Nothing in either artifact is illustrative. Each figure is either a measurement
-recorded in this repository or a number quoted from a paper in the source set,
-and each is attributed at the point of use.
-
-Measurements in this repository:
-
-- check inventory — counted from `gates/gate1.py`
-- scanner precision/recall — `rig/corpus.py` against `tests/fixtures/log_corpus.jsonl`
-- prompt compression — `gates/log_digest.py`, measured on a 203-line capture
-- ablation — `rig/ablation.py`, one live run against a local `qwen3:8b`
-- call and token split — instrumented over five executions of one solver phase
-
-Published sources (in `Documents/AI Research/Sources`):
-
-- MLR-Bench, arXiv 2505.19955 — hallucination taxonomy and frequencies
-- BadScientist, arXiv 2510.18003 — fabricated-paper acceptance rate
-- CORE-Bench, arXiv 2409.11363 — reproducibility accuracy, prediction-interval tolerance
-- PaperBench, arXiv 2504.01848 — replication scores
-- RE-Bench, arXiv 2411.15114 — frontier R&D against human experts
-
-## Colour
-
-The categorical palette is validated rather than chosen by eye: worst adjacent
-pair deutan ΔE 9.2, normal-vision ΔE 27.6 on the light surface. The aqua slot
-falls below 3:1 contrast against that surface, so every bar using it carries a
-visible value label.
+No file in this tree contains a provider credential; both run manifests record
+`credential_persisted: false`.

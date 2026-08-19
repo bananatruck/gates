@@ -1,0 +1,154 @@
+{
+  "method": "post-hoc deterministic re-execution; no model consulted",
+  "attempts": [
+    {
+      "source": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815_ungated_retry/ungated/research_dir/gate_artifacts/ungated_01/experiment.py",
+      "attempt": 1,
+      "verdict": "PASS",
+      "failed": [],
+      "warned": [],
+      "recorded_keys": [
+        "eff.acc_at_100",
+        "eff.acc_at_25",
+        "eff.efficiency_ratio",
+        "eff.train_s"
+      ],
+      "stdout_bytes": 14782
+    },
+    {
+      "source": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815_ungated_retry/ungated/research_dir/gate_artifacts/ungated_02/experiment.py",
+      "attempt": 2,
+      "verdict": "PASS",
+      "failed": [],
+      "warned": [],
+      "recorded_keys": [
+        "eff.acc_at_100",
+        "eff.acc_at_25",
+        "eff.efficiency_ratio",
+        "eff.train_s"
+      ],
+      "stdout_bytes": 15456
+    },
+    {
+      "source": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815_ungated_retry/ungated/research_dir/gate_artifacts/ungated_03/experiment.py",
+      "attempt": 3,
+      "verdict": "PASS",
+      "failed": [],
+      "warned": [],
+      "recorded_keys": [
+        "eff.acc_at_100",
+        "eff.acc_at_25",
+        "eff.efficiency_ratio",
+        "eff.train_s"
+      ],
+      "stdout_bytes": 15878
+    },
+    {
+      "source": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815_ungated_retry/ungated/research_dir/gate_artifacts/ungated_04/experiment.py",
+      "attempt": 4,
+      "verdict": "PASS",
+      "failed": [],
+      "warned": [],
+      "recorded_keys": [
+        "eff.acc_at_100",
+        "eff.acc_at_25",
+        "eff.efficiency_ratio",
+        "eff.train_s"
+      ],
+      "stdout_bytes": 16147
+    },
+    {
+      "source": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815_ungated_retry/ungated/research_dir/gate_artifacts/ungated_05/experiment.py",
+      "attempt": 5,
+      "verdict": "FAIL",
+      "failed": [
+        "static.syntax_valid"
+      ],
+      "warned": [],
+      "recorded_keys": [],
+      "stdout_bytes": 0
+    },
+    {
+      "source": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815_ungated_retry/ungated/research_dir/gate_artifacts/ungated_06/experiment.py",
+      "attempt": 6,
+      "verdict": "PASS",
+      "failed": [],
+      "warned": [],
+      "recorded_keys": [
+        "eff.acc_at_100",
+        "eff.acc_at_25",
+        "eff.efficiency_ratio",
+        "eff.train_s"
+      ],
+      "stdout_bytes": 17222
+    },
+    {
+      "source": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815_ungated_retry/ungated/research_dir/gate_artifacts/ungated_07/experiment.py",
+      "attempt": 7,
+      "verdict": "PASS",
+      "failed": [],
+      "warned": [],
+      "recorded_keys": [
+        "eff.acc_at_100",
+        "eff.acc_at_25",
+        "eff.efficiency_ratio",
+        "eff.train_s"
+      ],
+      "stdout_bytes": 17561
+    },
+    {
+      "source": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815_ungated_retry/ungated/research_dir/gate_artifacts/ungated_08/experiment.py",
+      "attempt": 8,
+      "verdict": "PASS",
+      "failed": [],
+      "warned": [],
+      "recorded_keys": [
+        "eff.acc_at_100",
+        "eff.acc_at_25",
+        "eff.efficiency_ratio",
+        "eff.train_s"
+      ],
+      "stdout_bytes": 17618
+    },
+    {
+      "source": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815_ungated_retry/ungated/research_dir/gate_artifacts/ungated_09/experiment.py",
+      "attempt": 9,
+      "verdict": "PASS",
+      "failed": [],
+      "warned": [],
+      "recorded_keys": [
+        "eff.acc_at_100",
+        "eff.acc_at_25",
+        "eff.acc_gap",
+        "eff.efficiency_ratio",
+        "eff.saturation.asymptotic_acc",
+        "eff.saturation.beta",
+        "eff.saturation.fit_rmse",
+        "eff.saturation.gamma",
+        "eff.saturation.stss",
+        "eff.train_s"
+      ],
+      "stdout_bytes": 19989
+    },
+    {
+      "source": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815_ungated_retry/ungated/research_dir/gate_artifacts/ungated_10/experiment.py",
+      "attempt": 10,
+      "verdict": "PASS",
+      "failed": [],
+      "warned": [],
+      "recorded_keys": [
+        "eff.acc_at_100",
+        "eff.acc_at_25",
+        "eff.acc_gap",
+        "eff.efficiency_ratio",
+        "eff.saturation.asymptotic_acc",
+        "eff.saturation.beta",
+        "eff.saturation.fit_rmse",
+        "eff.saturation.gamma",
+        "eff.saturation.stss",
+        "eff.train_s"
+      ],
+      "stdout_bytes": 19945
+    }
+  ]
+}

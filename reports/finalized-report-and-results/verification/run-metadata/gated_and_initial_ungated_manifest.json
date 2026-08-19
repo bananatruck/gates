@@ -1,0 +1,30 @@
+{
+  "config": "/home/kesh/AgentLaboratory-Gemini/experiment_configs/gate1_common_deepseek.yaml",
+  "config_sha256": "a0409cf020f37a9c773fe7d66b1f61ff46bb5ab0d0750823917071be7503de0e",
+  "credential_persisted": false,
+  "parallel": true,
+  "arms": {
+    "gated": {
+      "arm": "gated",
+      "gates_gate1": "on",
+      "return_code": 0,
+      "duration_s": 3670.47,
+      "workflow_log": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/gated/workflow.log",
+      "paper": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/gated/research_dir/report.txt",
+      "paper_present": true,
+      "gate_reports": 10,
+      "ungated_attempts": 0
+    },
+    "ungated": {
+      "arm": "ungated",
+      "gates_gate1": "off",
+      "return_code": 0,
+      "duration_s": 2122.262,
+      "workflow_log": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/ungated/workflow.log",
+      "paper": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/ungated/research_dir/report.txt",
+      "paper_present": false,
+      "gate_reports": 0,
+      "ungated_attempts": 10
+    }
+  }
+}

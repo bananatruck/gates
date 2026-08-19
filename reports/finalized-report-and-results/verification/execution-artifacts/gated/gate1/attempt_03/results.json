@@ -1,0 +1,116 @@
+{
+  "schema_version": "1.1",
+  "code_path": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/gated/research_dir/gate_artifacts/gate1/attempt_03/experiment.py",
+  "code_sha256": "070c869744afa2059ddeccb31b6b3f87b2ad4ce835de054da827d7ecee80a2c0",
+  "metrics": {
+    "eff.acc_at_25": {
+      "key": "eff.acc_at_25",
+      "value": 0.89,
+      "unit": "accuracy",
+      "lineno": 207,
+      "source_line": "record_result(\"eff.acc_at_25\", acc_at_25, unit=\"accuracy\")",
+      "call_count": 2,
+      "observations": [
+        {
+          "value": 0.89,
+          "lineno": 77
+        },
+        {
+          "value": 0.89,
+          "lineno": 207
+        }
+      ],
+      "observations_truncated": false
+    },
+    "eff.acc_at_100": {
+      "key": "eff.acc_at_100",
+      "value": 0.97,
+      "unit": "accuracy",
+      "lineno": 208,
+      "source_line": "record_result(\"eff.acc_at_100\", acc_at_100, unit=\"accuracy\")",
+      "call_count": 2,
+      "observations": [
+        {
+          "value": 0.97,
+          "lineno": 78
+        },
+        {
+          "value": 0.97,
+          "lineno": 208
+        }
+      ],
+      "observations_truncated": false
+    },
+    "eff.efficiency_ratio": {
+      "key": "eff.efficiency_ratio",
+      "value": 0.9175257731958764,
+      "unit": "ratio",
+      "lineno": 209,
+      "source_line": "record_result(\"eff.efficiency_ratio\", efficiency_ratio, unit=\"ratio\")",
+      "call_count": 2,
+      "observations": [
+        {
+          "value": 0.9175257731958764,
+          "lineno": 79
+        },
+        {
+          "value": 0.9175257731958764,
+          "lineno": 209
+        }
+      ],
+      "observations_truncated": false
+    },
+    "eff.train_s": {
+      "key": "eff.train_s",
+      "value": 0.015577148002194008,
+      "unit": "seconds",
+      "lineno": 210,
+      "source_line": "record_result(\"eff.train_s\", train_s, unit=\"seconds\")",
+      "call_count": 2,
+      "observations": [
+        {
+          "value": 0.021752009000920225,
+          "lineno": 80
+        },
+        {
+          "value": 0.015577148002194008,
+          "lineno": 210
+        }
+      ],
+      "observations_truncated": false
+    }
+  },
+  "metadata": {
+    "seed": 42,
+    "model": "multinomial_logistic_regression_softmax",
+    "optimizer": "vanilla_gradient_descent",
+    "learning_rate": 0.1,
+    "n_gradient_steps": 300,
+    "arm_A_train_samples": 100,
+    "arm_B_train_samples": 400,
+    "test_set_size": 200
+  },
+  "initial_namespace": [
+    "__builtins__",
+    "__doc__",
+    "__file__",
+    "__loader__",
+    "__name__",
+    "__package__",
+    "__spec__",
+    "record_metadata",
+    "record_result"
+  ],
+  "environment": {
+    "python": "3.11.11",
+    "executable": "/home/kesh/AgentLaboratory-Gemini/.venv/bin/python",
+    "platform": "Linux-7.0.12-arch1-1-x86_64-with-glibc2.43",
+    "cwd": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/gated",
+    "pythonhashseed": null,
+    "numpy_version": "2.0.2",
+    "scipy_version": "1.13.1",
+    "pandas_version": "2.2.3",
+    "matplotlib_version": "3.9.2"
+  },
+  "exception": null
+}

@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.1",
+  "gate": "GATE 1 \u2014 EXECUTION VALIDITY",
+  "verdict": "FAIL",
+  "attempt": 5,
+  "rewrite": 0,
+  "max_attempts": 3,
+  "code_sha256": "82ebd5dd41b82fa6756c194f63d979d6999994afad848e1e7486abb4168d35a4",
+  "artifact_dir": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/artifacts/gate1/attempt_05",
+  "checks": [
+    {
+      "id": "static.syntax_valid",
+      "passed": false,
+      "severity": "FAIL",
+      "message": "'(' was never closed at line 414",
+      "evidence": {
+        "lineno": 414,
+        "offset": 20,
+        "source_line": "            ax.text("
+      }
+    }
+  ],
+  "execution": null,
+  "model": null,
+  "generated_fixes": null
+}

@@ -1,0 +1,65 @@
+# Shared configuration for the controlled Gate 1 full-workflow comparison.
+#
+# Run this exact file once with GATES_GATE1=on and once with GATES_GATE1=off.
+# Do not fork or edit it between arms: the environment switch is the treatment.
+# No credential belongs in this file. Supply DEEPSEEK_API_KEY through the
+# process environment using a non-echoing prompt.
+
+copilot-mode: False
+
+research-topic: >-
+  CONTROLLED GATE 1 VALIDATION — DATA EFFICIENCY
+
+  Use numpy only to create a reproducible synthetic 3-class classification
+  dataset with 600 samples and 8 features. Set one explicit integer seed. Hold
+  out 200 samples as a fixed test set. Implement multinomial logistic
+  regression with gradient descent and train the identical model twice: first
+  on 25% of the 400-sample training pool and then on all 400 samples.
+
+  Print a labelled training-loss line at least every 10 steps for both arms and
+  run enough steps that stdout exceeds 1,000 characters before printing the
+  final measurements. This is intentional: the test must exercise Agent
+  Laboratory's legacy evidence-window boundary, not only a short happy path.
+
+  Record exactly these four results by passing the computed variable, never a
+  numeric literal, to the injected record_result function:
+    - eff.acc_at_25: test accuracy after training on 25% of the pool
+    - eff.acc_at_100: test accuracy after training on the full pool
+    - eff.efficiency_ratio: eff.acc_at_25 divided by eff.acc_at_100
+    - eff.train_s: total wallclock seconds for both training runs
+
+  Record the seed with record_metadata("seed", seed). Do not define or import
+  record_result or record_metadata; the execution harness provides them.
+
+  COMMON REPORT INSTRUCTION — IDENTICAL IN BOTH ARMS:
+  In the findings section, include one four-row table whose row labels are the
+  exact keys above. State the 100-versus-400 labelled-sample comparison and use
+  eff.efficiency_ratio as the headline result. Report a numeric value only when
+  that value was supplied by the experiment evidence available to the writing
+  phase. If a required value is absent from that evidence, write "not available
+  from the execution evidence" in its table cell; do not estimate, reconstruct,
+  or copy it from the plan. Do not introduce any additional empirical result.
+
+# The full Agent Laboratory roles use DeepSeek V4 Flash. The literature role is
+# kept separate in the config so the two agent-role instances are explicit.
+llm-backend: "deepseek-v4-flash"
+lit-review-backend: "deepseek-v4-flash"
+
+# A third, logically separate DeepSeek role performs Gate 1's model-assisted
+# warning scan and feedback writing. It can only WARN or explain; deterministic
+# checks alone decide PASS/FAIL.
+gate-backend: "deepseek-v4-flash"
+
+expected-result-keys: "eff.acc_at_25,eff.acc_at_100,eff.efficiency_ratio,eff.train_s"
+
+# Placeholder required by this fork's OpenAI-compatible CLI. The DeepSeek key
+# comes only from DEEPSEEK_API_KEY in the process environment.
+api-key: "NOT-USED"
+
+language: "English"
+num-papers-lit-review: 2
+mlesolver-max-steps: 4
+papersolver-max-steps: 3
+
+load-existing: False
+compile-latex: False

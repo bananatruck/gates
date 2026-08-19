@@ -1,15 +1,10 @@
 __pycache__/
 *.py[cod]
-.venv/
-venv/
 *.egg-info/
 build/
 dist/
 .pytest_cache/
 gate_artifacts/
-
-# report build intermediates
-reports/GATE1_REPORT.html
 
 # libreoffice lock files
 .~lock.*#

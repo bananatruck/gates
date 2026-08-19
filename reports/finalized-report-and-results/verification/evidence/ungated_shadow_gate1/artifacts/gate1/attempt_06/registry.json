@@ -1,0 +1,244 @@
+{
+  "schema_version": "1.1",
+  "gate": "GATE 1 \u2014 EXECUTION VALIDITY",
+  "verdict": "PASS",
+  "citable": true,
+  "attempt": 6,
+  "rewrite": 0,
+  "task_ref_sha256": "ffebcc80512dc2c6",
+  "run": {
+    "run_id": "a4f25b5cfb2c12a3",
+    "code_sha256": "d642d919ae770cecb9d81cc4f70d280b37361d7cebd3a3ffa6967ce5b2f298b9",
+    "code_sha256_as_executed": "d642d919ae770cecb9d81cc4f70d280b37361d7cebd3a3ffa6967ce5b2f298b9",
+    "code_sha256_verified": true,
+    "argv": [
+      "/home/kesh/AgentLaboratory-Gemini/.venv/bin/python",
+      "/home/kesh/gates/gates/harness.py",
+      "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/artifacts/gate1/attempt_06/experiment.py",
+      "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/artifacts/gate1/attempt_06"
+    ],
+    "started_at": "2026-08-16T02:53:25.915609+00:00",
+    "finished_at": "2026-08-16T02:53:29.295816+00:00",
+    "duration_s": 3.38,
+    "exit_code": 0,
+    "artifact_dir": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/artifacts/gate1/attempt_06",
+    "stdout_path": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/artifacts/gate1/attempt_06/stdout.txt",
+    "stderr_path": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/artifacts/gate1/attempt_06/stderr.txt",
+    "results_json_path": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/artifacts/gate1/attempt_06/results.json",
+    "seed": 42,
+    "metadata": {
+      "seed": 42
+    },
+    "environment": {
+      "python": "3.11.11",
+      "executable": "/home/kesh/AgentLaboratory-Gemini/.venv/bin/python",
+      "platform": "Linux-7.0.12-arch1-1-x86_64-with-glibc2.43",
+      "cwd": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/work",
+      "pythonhashseed": null,
+      "numpy_version": "2.0.2",
+      "scipy_version": "1.13.1",
+      "pandas_version": "2.2.3",
+      "matplotlib_version": "3.9.2"
+    }
+  },
+  "values": {
+    "eff.acc_at_25": {
+      "trace_id": "43294e11f61f45d9",
+      "value": 0.775,
+      "unit": null,
+      "type": "float",
+      "provenance": {
+        "run_id": "a4f25b5cfb2c12a3",
+        "code_sha256": "d642d919ae770cecb9d81cc4f70d280b37361d7cebd3a3ffa6967ce5b2f298b9",
+        "lineno": 92,
+        "source_line": "record_result(\"eff.acc_at_25\", acc_at_25)",
+        "arg_kind": "computed",
+        "call_count": 1,
+        "observations": [
+          {
+            "value": 0.775,
+            "lineno": 92
+          }
+        ],
+        "observations_truncated": false
+      },
+      "chain": [
+        {
+          "link": "task",
+          "ref": "ffebcc80512dc2c6",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "command",
+          "ref": "a4f25b5cfb2c12a3",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "log",
+          "ref": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/artifacts/gate1/attempt_06/stdout.txt",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "value",
+          "ref": "43294e11f61f45d9",
+          "resolved": true,
+          "why": null
+        }
+      ],
+      "chain_complete": true
+    },
+    "eff.acc_at_100": {
+      "trace_id": "be0e6fb501ec11bc",
+      "value": 0.81,
+      "unit": null,
+      "type": "float",
+      "provenance": {
+        "run_id": "a4f25b5cfb2c12a3",
+        "code_sha256": "d642d919ae770cecb9d81cc4f70d280b37361d7cebd3a3ffa6967ce5b2f298b9",
+        "lineno": 93,
+        "source_line": "record_result(\"eff.acc_at_100\", acc_at_100)",
+        "arg_kind": "computed",
+        "call_count": 1,
+        "observations": [
+          {
+            "value": 0.81,
+            "lineno": 93
+          }
+        ],
+        "observations_truncated": false
+      },
+      "chain": [
+        {
+          "link": "task",
+          "ref": "ffebcc80512dc2c6",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "command",
+          "ref": "a4f25b5cfb2c12a3",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "log",
+          "ref": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/artifacts/gate1/attempt_06/stdout.txt",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "value",
+          "ref": "be0e6fb501ec11bc",
+          "resolved": true,
+          "why": null
+        }
+      ],
+      "chain_complete": true
+    },
+    "eff.efficiency_ratio": {
+      "trace_id": "3a4cf276890e1347",
+      "value": 0.95679012345679,
+      "unit": null,
+      "type": "float",
+      "provenance": {
+        "run_id": "a4f25b5cfb2c12a3",
+        "code_sha256": "d642d919ae770cecb9d81cc4f70d280b37361d7cebd3a3ffa6967ce5b2f298b9",
+        "lineno": 94,
+        "source_line": "record_result(\"eff.efficiency_ratio\", efficiency_ratio)",
+        "arg_kind": "computed",
+        "call_count": 1,
+        "observations": [
+          {
+            "value": 0.95679012345679,
+            "lineno": 94
+          }
+        ],
+        "observations_truncated": false
+      },
+      "chain": [
+        {
+          "link": "task",
+          "ref": "ffebcc80512dc2c6",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "command",
+          "ref": "a4f25b5cfb2c12a3",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "log",
+          "ref": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/artifacts/gate1/attempt_06/stdout.txt",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "value",
+          "ref": "3a4cf276890e1347",
+          "resolved": true,
+          "why": null
+        }
+      ],
+      "chain_complete": true
+    },
+    "eff.train_s": {
+      "trace_id": "3ea20be3e2986c19",
+      "value": 0.10038962099861237,
+      "unit": null,
+      "type": "float",
+      "provenance": {
+        "run_id": "a4f25b5cfb2c12a3",
+        "code_sha256": "d642d919ae770cecb9d81cc4f70d280b37361d7cebd3a3ffa6967ce5b2f298b9",
+        "lineno": 95,
+        "source_line": "record_result(\"eff.train_s\", train_s)",
+        "arg_kind": "computed",
+        "call_count": 1,
+        "observations": [
+          {
+            "value": 0.10038962099861237,
+            "lineno": 95
+          }
+        ],
+        "observations_truncated": false
+      },
+      "chain": [
+        {
+          "link": "task",
+          "ref": "ffebcc80512dc2c6",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "command",
+          "ref": "a4f25b5cfb2c12a3",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "log",
+          "ref": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/artifacts/gate1/attempt_06/stdout.txt",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "value",
+          "ref": "3ea20be3e2986c19",
+          "resolved": true,
+          "why": null
+        }
+      ],
+      "chain_complete": true
+    }
+  },
+  "chain_integrity": {
+    "values": 4,
+    "complete_chains": 4,
+    "rate": 1.0,
+    "missing_links": {}
+  }
+}

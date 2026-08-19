@@ -1,0 +1,3229 @@
+{
+  "schema_version": "1.0",
+  "campaign_roots": {
+    "gated": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815",
+    "ungated": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815_ungated_retry"
+  },
+  "config_sha256": {
+    "gated": "a0409cf020f37a9c773fe7d66b1f61ff46bb5ab0d0750823917071be7503de0e",
+    "ungated": "a0409cf020f37a9c773fe7d66b1f61ff46bb5ab0d0750823917071be7503de0e"
+  },
+  "manifests": {
+    "gated": {
+      "config": "/home/kesh/AgentLaboratory-Gemini/experiment_configs/gate1_common_deepseek.yaml",
+      "config_sha256": "a0409cf020f37a9c773fe7d66b1f61ff46bb5ab0d0750823917071be7503de0e",
+      "credential_persisted": false,
+      "parallel": true,
+      "arms": {
+        "gated": {
+          "arm": "gated",
+          "gates_gate1": "on",
+          "return_code": 0,
+          "duration_s": 3670.47,
+          "workflow_log": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/gated/workflow.log",
+          "paper": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/gated/research_dir/report.txt",
+          "paper_present": true,
+          "gate_reports": 10,
+          "ungated_attempts": 0
+        },
+        "ungated": {
+          "arm": "ungated",
+          "gates_gate1": "off",
+          "return_code": 0,
+          "duration_s": 2122.262,
+          "workflow_log": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/ungated/workflow.log",
+          "paper": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/ungated/research_dir/report.txt",
+          "paper_present": false,
+          "gate_reports": 0,
+          "ungated_attempts": 10
+        }
+      }
+    },
+    "ungated": {
+      "config": "/home/kesh/AgentLaboratory-Gemini/experiment_configs/gate1_common_deepseek.yaml",
+      "config_sha256": "a0409cf020f37a9c773fe7d66b1f61ff46bb5ab0d0750823917071be7503de0e",
+      "credential_persisted": false,
+      "parallel": false,
+      "arms": {
+        "ungated": {
+          "arm": "ungated",
+          "gates_gate1": "off",
+          "return_code": 0,
+          "duration_s": 8772.163,
+          "workflow_log": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815_ungated_retry/ungated/workflow.log",
+          "paper": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815_ungated_retry/ungated/research_dir/report.txt",
+          "paper_present": true,
+          "gate_reports": 0,
+          "ungated_attempts": 10
+        }
+      }
+    }
+  },
+  "expected_keys": [
+    "eff.acc_at_25",
+    "eff.acc_at_100",
+    "eff.efficiency_ratio",
+    "eff.train_s"
+  ],
+  "gated": {
+    "workflow": {
+      "path": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/gated/workflow.log",
+      "bytes": 49595,
+      "numeric_scores": [
+        0.8,
+        1.0,
+        0.85,
+        0.9,
+        0.75,
+        0.93,
+        0.9,
+        0.8,
+        0.8,
+        2.8636363636363638,
+        3.886363636363635,
+        3.5454545454545454
+      ],
+      "score_none_count": 4,
+      "command_failure_count": 1,
+      "traceback_count": 1,
+      "completed_subtasks": [
+        "literature review",
+        "plan formulation",
+        "data preparation",
+        "running experiments",
+        "results interpretation",
+        "report writing"
+      ]
+    },
+    "attempts": [
+      {
+        "attempt": "attempt_01",
+        "stdout_bytes": 5948,
+        "stderr_bytes": 0,
+        "recorded_key_count": 4,
+        "extra_key_count": 0,
+        "required_keys_recorded": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "required_keys_visible_in_legacy_view": [],
+        "required_keys_visible_in_full_stdout": [],
+        "values": {
+          "eff.acc_at_25": 0.89,
+          "eff.acc_at_100": 0.97,
+          "eff.efficiency_ratio": 0.9175257731958764,
+          "eff.train_s": 0.016058803998021176
+        },
+        "verdict": "PASS",
+        "failed_checks": [],
+        "warning_checks": [
+          "results.single_observation"
+        ],
+        "checks": [
+          {
+            "id": "static.syntax_valid",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "compiles",
+            "evidence": {}
+          },
+          {
+            "id": "static.no_unbound_names",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every referenced name resolves",
+            "evidence": {}
+          },
+          {
+            "id": "static.no_banned_calls",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "no calls that forge an exit code",
+            "evidence": {}
+          },
+          {
+            "id": "results.contract_not_shadowed",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "the harness recording API is not redefined",
+            "evidence": {}
+          },
+          {
+            "id": "exec.completed_within_budget",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "finished in 8.0s",
+            "evidence": {
+              "timeout_s": 900,
+              "duration_s": 8.004
+            }
+          },
+          {
+            "id": "exec.exit_code_zero",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "exited 0",
+            "evidence": {
+              "exit_code": 0
+            }
+          },
+          {
+            "id": "exec.no_uncaught_exception",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "ran to completion",
+            "evidence": {}
+          },
+          {
+            "id": "env.code_identity",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "executed source matches the recorded hash (710d7bebe87f)",
+            "evidence": {
+              "expected": "710d7bebe87ff5392d43635de2d9d902655812c4c868180877af00bf01cc8262",
+              "as_executed": "710d7bebe87ff5392d43635de2d9d902655812c4c868180877af00bf01cc8262"
+            }
+          },
+          {
+            "id": "exec.no_swallowed_traceback",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no caught-and-ignored traceback in the logs",
+            "evidence": {}
+          },
+          {
+            "id": "logs.no_error_signals",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no error, warning or device-failure signals in the logs",
+            "evidence": {}
+          },
+          {
+            "id": "env.clean_namespace",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "started from an empty namespace",
+            "evidence": {
+              "unexpected": []
+            }
+          },
+          {
+            "id": "env.seed_recorded",
+            "passed": true,
+            "severity": "WARN",
+            "message": "seed recorded (42)",
+            "evidence": {
+              "seed": 42
+            }
+          },
+          {
+            "id": "results.contract_present",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "4 metric(s) recorded",
+            "evidence": {
+              "keys": [
+                "eff.acc_at_100",
+                "eff.acc_at_25",
+                "eff.efficiency_ratio",
+                "eff.train_s"
+              ]
+            }
+          },
+          {
+            "id": "results.expected_keys_present",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every declared key was recorded",
+            "evidence": {
+              "missing": [],
+              "recorded": [
+                "eff.acc_at_100",
+                "eff.acc_at_25",
+                "eff.efficiency_ratio",
+                "eff.train_s"
+              ]
+            }
+          },
+          {
+            "id": "results.values_computed",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every recorded value is the result of a computation",
+            "evidence": {
+              "unresolved": []
+            }
+          },
+          {
+            "id": "results.values_finite",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "all values are finite",
+            "evidence": {
+              "keys": []
+            }
+          },
+          {
+            "id": "results.single_observation",
+            "passed": false,
+            "severity": "WARN",
+            "message": "recorded more than once with a changing value: eff.train_s (2 calls) \u2014 the registry holds the last call, not the best one",
+            "evidence": {
+              "varied": [
+                {
+                  "key": "eff.train_s",
+                  "call_count": 2,
+                  "recorded_value": 0.016058803998021176,
+                  "first": 0.022257949000049848,
+                  "min": 0.016058803998021176,
+                  "max": 0.022257949000049848,
+                  "truncated": false
+                }
+              ]
+            }
+          },
+          {
+            "id": "results.non_degenerate",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no degenerate values",
+            "evidence": {
+              "suspicious": []
+            }
+          },
+          {
+            "id": "output.untruncated",
+            "passed": true,
+            "severity": "INFO",
+            "message": "5,948 bytes of stdout and 0 bytes of stderr captured in full",
+            "evidence": {
+              "stdout_bytes": 5948,
+              "stderr_bytes": 0,
+              "stdout_path": "research_dir/gate_artifacts/gate1/attempt_01/stdout.txt",
+              "stderr_path": "research_dir/gate_artifacts/gate1/attempt_01/stderr.txt"
+            }
+          },
+          {
+            "id": "env.provenance",
+            "passed": true,
+            "severity": "INFO",
+            "message": "execution environment recorded",
+            "evidence": {
+              "python": "3.11.11",
+              "executable": "/home/kesh/AgentLaboratory-Gemini/.venv/bin/python",
+              "platform": "Linux-7.0.12-arch1-1-x86_64-with-glibc2.43",
+              "cwd": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/gated",
+              "pythonhashseed": null,
+              "numpy_version": "2.0.2",
+              "scipy_version": "1.13.1",
+              "pandas_version": "2.2.3",
+              "matplotlib_version": "3.9.2"
+            }
+          }
+        ],
+        "citable": true
+      },
+      {
+        "attempt": "attempt_02",
+        "stdout_bytes": 6247,
+        "stderr_bytes": 0,
+        "recorded_key_count": 4,
+        "extra_key_count": 0,
+        "required_keys_recorded": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "required_keys_visible_in_legacy_view": [],
+        "required_keys_visible_in_full_stdout": [
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "values": {
+          "eff.acc_at_25": 0.89,
+          "eff.acc_at_100": 0.97,
+          "eff.efficiency_ratio": 0.9175257731958764,
+          "eff.train_s": 0.015439503997185966
+        },
+        "verdict": "PASS",
+        "failed_checks": [],
+        "warning_checks": [
+          "results.single_observation"
+        ],
+        "checks": [
+          {
+            "id": "static.syntax_valid",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "compiles",
+            "evidence": {}
+          },
+          {
+            "id": "static.no_unbound_names",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every referenced name resolves",
+            "evidence": {}
+          },
+          {
+            "id": "static.no_banned_calls",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "no calls that forge an exit code",
+            "evidence": {}
+          },
+          {
+            "id": "results.contract_not_shadowed",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "the harness recording API is not redefined",
+            "evidence": {}
+          },
+          {
+            "id": "exec.completed_within_budget",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "finished in 8.5s",
+            "evidence": {
+              "timeout_s": 900,
+              "duration_s": 8.51
+            }
+          },
+          {
+            "id": "exec.exit_code_zero",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "exited 0",
+            "evidence": {
+              "exit_code": 0
+            }
+          },
+          {
+            "id": "exec.no_uncaught_exception",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "ran to completion",
+            "evidence": {}
+          },
+          {
+            "id": "env.code_identity",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "executed source matches the recorded hash (d151a21adef1)",
+            "evidence": {
+              "expected": "d151a21adef17445dae8b9b27b38f32d0fc3f3e4ee92bfc335765b9042921676",
+              "as_executed": "d151a21adef17445dae8b9b27b38f32d0fc3f3e4ee92bfc335765b9042921676"
+            }
+          },
+          {
+            "id": "exec.no_swallowed_traceback",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no caught-and-ignored traceback in the logs",
+            "evidence": {}
+          },
+          {
+            "id": "logs.no_error_signals",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no error, warning or device-failure signals in the logs",
+            "evidence": {}
+          },
+          {
+            "id": "env.clean_namespace",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "started from an empty namespace",
+            "evidence": {
+              "unexpected": []
+            }
+          },
+          {
+            "id": "env.seed_recorded",
+            "passed": true,
+            "severity": "WARN",
+            "message": "seed recorded (42)",
+            "evidence": {
+              "seed": 42
+            }
+          },
+          {
+            "id": "results.contract_present",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "4 metric(s) recorded",
+            "evidence": {
+              "keys": [
+                "eff.acc_at_100",
+                "eff.acc_at_25",
+                "eff.efficiency_ratio",
+                "eff.train_s"
+              ]
+            }
+          },
+          {
+            "id": "results.expected_keys_present",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every declared key was recorded",
+            "evidence": {
+              "missing": [],
+              "recorded": [
+                "eff.acc_at_100",
+                "eff.acc_at_25",
+                "eff.efficiency_ratio",
+                "eff.train_s"
+              ]
+            }
+          },
+          {
+            "id": "results.values_computed",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every recorded value is the result of a computation",
+            "evidence": {
+              "unresolved": []
+            }
+          },
+          {
+            "id": "results.values_finite",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "all values are finite",
+            "evidence": {
+              "keys": []
+            }
+          },
+          {
+            "id": "results.single_observation",
+            "passed": false,
+            "severity": "WARN",
+            "message": "recorded more than once with a changing value: eff.train_s (2 calls) \u2014 the registry holds the last call, not the best one",
+            "evidence": {
+              "varied": [
+                {
+                  "key": "eff.train_s",
+                  "call_count": 2,
+                  "recorded_value": 0.015439503997185966,
+                  "first": 0.021688589000405045,
+                  "min": 0.015439503997185966,
+                  "max": 0.021688589000405045,
+                  "truncated": false
+                }
+              ]
+            }
+          },
+          {
+            "id": "results.non_degenerate",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no degenerate values",
+            "evidence": {
+              "suspicious": []
+            }
+          },
+          {
+            "id": "output.untruncated",
+            "passed": true,
+            "severity": "INFO",
+            "message": "6,247 bytes of stdout and 0 bytes of stderr captured in full",
+            "evidence": {
+              "stdout_bytes": 6247,
+              "stderr_bytes": 0,
+              "stdout_path": "research_dir/gate_artifacts/gate1/attempt_02/stdout.txt",
+              "stderr_path": "research_dir/gate_artifacts/gate1/attempt_02/stderr.txt"
+            }
+          },
+          {
+            "id": "env.provenance",
+            "passed": true,
+            "severity": "INFO",
+            "message": "execution environment recorded",
+            "evidence": {
+              "python": "3.11.11",
+              "executable": "/home/kesh/AgentLaboratory-Gemini/.venv/bin/python",
+              "platform": "Linux-7.0.12-arch1-1-x86_64-with-glibc2.43",
+              "cwd": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/gated",
+              "pythonhashseed": null,
+              "numpy_version": "2.0.2",
+              "scipy_version": "1.13.1",
+              "pandas_version": "2.2.3",
+              "matplotlib_version": "3.9.2"
+            }
+          }
+        ],
+        "citable": true
+      },
+      {
+        "attempt": "attempt_03",
+        "stdout_bytes": 6247,
+        "stderr_bytes": 0,
+        "recorded_key_count": 4,
+        "extra_key_count": 0,
+        "required_keys_recorded": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "required_keys_visible_in_legacy_view": [],
+        "required_keys_visible_in_full_stdout": [
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "values": {
+          "eff.acc_at_25": 0.89,
+          "eff.acc_at_100": 0.97,
+          "eff.efficiency_ratio": 0.9175257731958764,
+          "eff.train_s": 0.015577148002194008
+        },
+        "verdict": "PASS",
+        "failed_checks": [],
+        "warning_checks": [
+          "results.single_observation"
+        ],
+        "checks": [
+          {
+            "id": "static.syntax_valid",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "compiles",
+            "evidence": {}
+          },
+          {
+            "id": "static.no_unbound_names",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every referenced name resolves",
+            "evidence": {}
+          },
+          {
+            "id": "static.no_banned_calls",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "no calls that forge an exit code",
+            "evidence": {}
+          },
+          {
+            "id": "results.contract_not_shadowed",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "the harness recording API is not redefined",
+            "evidence": {}
+          },
+          {
+            "id": "exec.completed_within_budget",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "finished in 8.2s",
+            "evidence": {
+              "timeout_s": 900,
+              "duration_s": 8.157
+            }
+          },
+          {
+            "id": "exec.exit_code_zero",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "exited 0",
+            "evidence": {
+              "exit_code": 0
+            }
+          },
+          {
+            "id": "exec.no_uncaught_exception",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "ran to completion",
+            "evidence": {}
+          },
+          {
+            "id": "env.code_identity",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "executed source matches the recorded hash (070c869744af)",
+            "evidence": {
+              "expected": "070c869744afa2059ddeccb31b6b3f87b2ad4ce835de054da827d7ecee80a2c0",
+              "as_executed": "070c869744afa2059ddeccb31b6b3f87b2ad4ce835de054da827d7ecee80a2c0"
+            }
+          },
+          {
+            "id": "exec.no_swallowed_traceback",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no caught-and-ignored traceback in the logs",
+            "evidence": {}
+          },
+          {
+            "id": "logs.no_error_signals",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no error, warning or device-failure signals in the logs",
+            "evidence": {}
+          },
+          {
+            "id": "env.clean_namespace",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "started from an empty namespace",
+            "evidence": {
+              "unexpected": []
+            }
+          },
+          {
+            "id": "env.seed_recorded",
+            "passed": true,
+            "severity": "WARN",
+            "message": "seed recorded (42)",
+            "evidence": {
+              "seed": 42
+            }
+          },
+          {
+            "id": "results.contract_present",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "4 metric(s) recorded",
+            "evidence": {
+              "keys": [
+                "eff.acc_at_100",
+                "eff.acc_at_25",
+                "eff.efficiency_ratio",
+                "eff.train_s"
+              ]
+            }
+          },
+          {
+            "id": "results.expected_keys_present",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every declared key was recorded",
+            "evidence": {
+              "missing": [],
+              "recorded": [
+                "eff.acc_at_100",
+                "eff.acc_at_25",
+                "eff.efficiency_ratio",
+                "eff.train_s"
+              ]
+            }
+          },
+          {
+            "id": "results.values_computed",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every recorded value is the result of a computation",
+            "evidence": {
+              "unresolved": []
+            }
+          },
+          {
+            "id": "results.values_finite",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "all values are finite",
+            "evidence": {
+              "keys": []
+            }
+          },
+          {
+            "id": "results.single_observation",
+            "passed": false,
+            "severity": "WARN",
+            "message": "recorded more than once with a changing value: eff.train_s (2 calls) \u2014 the registry holds the last call, not the best one",
+            "evidence": {
+              "varied": [
+                {
+                  "key": "eff.train_s",
+                  "call_count": 2,
+                  "recorded_value": 0.015577148002194008,
+                  "first": 0.021752009000920225,
+                  "min": 0.015577148002194008,
+                  "max": 0.021752009000920225,
+                  "truncated": false
+                }
+              ]
+            }
+          },
+          {
+            "id": "results.non_degenerate",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no degenerate values",
+            "evidence": {
+              "suspicious": []
+            }
+          },
+          {
+            "id": "output.untruncated",
+            "passed": true,
+            "severity": "INFO",
+            "message": "6,247 bytes of stdout and 0 bytes of stderr captured in full",
+            "evidence": {
+              "stdout_bytes": 6247,
+              "stderr_bytes": 0,
+              "stdout_path": "research_dir/gate_artifacts/gate1/attempt_03/stdout.txt",
+              "stderr_path": "research_dir/gate_artifacts/gate1/attempt_03/stderr.txt"
+            }
+          },
+          {
+            "id": "env.provenance",
+            "passed": true,
+            "severity": "INFO",
+            "message": "execution environment recorded",
+            "evidence": {
+              "python": "3.11.11",
+              "executable": "/home/kesh/AgentLaboratory-Gemini/.venv/bin/python",
+              "platform": "Linux-7.0.12-arch1-1-x86_64-with-glibc2.43",
+              "cwd": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/gated",
+              "pythonhashseed": null,
+              "numpy_version": "2.0.2",
+              "scipy_version": "1.13.1",
+              "pandas_version": "2.2.3",
+              "matplotlib_version": "3.9.2"
+            }
+          }
+        ],
+        "citable": true
+      },
+      {
+        "attempt": "attempt_04",
+        "stdout_bytes": 6538,
+        "stderr_bytes": 0,
+        "recorded_key_count": 4,
+        "extra_key_count": 0,
+        "required_keys_recorded": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "required_keys_visible_in_legacy_view": [],
+        "required_keys_visible_in_full_stdout": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "values": {
+          "eff.acc_at_25": 0.89,
+          "eff.acc_at_100": 0.97,
+          "eff.efficiency_ratio": 0.9175257731958764,
+          "eff.train_s": 0.015442400002939394
+        },
+        "verdict": "PASS",
+        "failed_checks": [],
+        "warning_checks": [
+          "results.single_observation"
+        ],
+        "checks": [
+          {
+            "id": "static.syntax_valid",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "compiles",
+            "evidence": {}
+          },
+          {
+            "id": "static.no_unbound_names",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every referenced name resolves",
+            "evidence": {}
+          },
+          {
+            "id": "static.no_banned_calls",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "no calls that forge an exit code",
+            "evidence": {}
+          },
+          {
+            "id": "results.contract_not_shadowed",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "the harness recording API is not redefined",
+            "evidence": {}
+          },
+          {
+            "id": "exec.completed_within_budget",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "finished in 8.4s",
+            "evidence": {
+              "timeout_s": 900,
+              "duration_s": 8.355
+            }
+          },
+          {
+            "id": "exec.exit_code_zero",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "exited 0",
+            "evidence": {
+              "exit_code": 0
+            }
+          },
+          {
+            "id": "exec.no_uncaught_exception",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "ran to completion",
+            "evidence": {}
+          },
+          {
+            "id": "env.code_identity",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "executed source matches the recorded hash (ba0756a6205c)",
+            "evidence": {
+              "expected": "ba0756a6205c5ab1735d997d45a82fb40bb0d95b233a98d54a5b48badaad4f72",
+              "as_executed": "ba0756a6205c5ab1735d997d45a82fb40bb0d95b233a98d54a5b48badaad4f72"
+            }
+          },
+          {
+            "id": "exec.no_swallowed_traceback",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no caught-and-ignored traceback in the logs",
+            "evidence": {}
+          },
+          {
+            "id": "logs.no_error_signals",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no error, warning or device-failure signals in the logs",
+            "evidence": {}
+          },
+          {
+            "id": "env.clean_namespace",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "started from an empty namespace",
+            "evidence": {
+              "unexpected": []
+            }
+          },
+          {
+            "id": "env.seed_recorded",
+            "passed": true,
+            "severity": "WARN",
+            "message": "seed recorded (42)",
+            "evidence": {
+              "seed": 42
+            }
+          },
+          {
+            "id": "results.contract_present",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "4 metric(s) recorded",
+            "evidence": {
+              "keys": [
+                "eff.acc_at_100",
+                "eff.acc_at_25",
+                "eff.efficiency_ratio",
+                "eff.train_s"
+              ]
+            }
+          },
+          {
+            "id": "results.expected_keys_present",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every declared key was recorded",
+            "evidence": {
+              "missing": [],
+              "recorded": [
+                "eff.acc_at_100",
+                "eff.acc_at_25",
+                "eff.efficiency_ratio",
+                "eff.train_s"
+              ]
+            }
+          },
+          {
+            "id": "results.values_computed",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every recorded value is the result of a computation",
+            "evidence": {
+              "unresolved": []
+            }
+          },
+          {
+            "id": "results.values_finite",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "all values are finite",
+            "evidence": {
+              "keys": []
+            }
+          },
+          {
+            "id": "results.single_observation",
+            "passed": false,
+            "severity": "WARN",
+            "message": "recorded more than once with a changing value: eff.train_s (2 calls) \u2014 the registry holds the last call, not the best one",
+            "evidence": {
+              "varied": [
+                {
+                  "key": "eff.train_s",
+                  "call_count": 2,
+                  "recorded_value": 0.015442400002939394,
+                  "first": 0.019734437999431975,
+                  "min": 0.015442400002939394,
+                  "max": 0.019734437999431975,
+                  "truncated": false
+                }
+              ]
+            }
+          },
+          {
+            "id": "results.non_degenerate",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no degenerate values",
+            "evidence": {
+              "suspicious": []
+            }
+          },
+          {
+            "id": "output.untruncated",
+            "passed": true,
+            "severity": "INFO",
+            "message": "6,538 bytes of stdout and 0 bytes of stderr captured in full",
+            "evidence": {
+              "stdout_bytes": 6538,
+              "stderr_bytes": 0,
+              "stdout_path": "research_dir/gate_artifacts/gate1/attempt_04/stdout.txt",
+              "stderr_path": "research_dir/gate_artifacts/gate1/attempt_04/stderr.txt"
+            }
+          },
+          {
+            "id": "env.provenance",
+            "passed": true,
+            "severity": "INFO",
+            "message": "execution environment recorded",
+            "evidence": {
+              "python": "3.11.11",
+              "executable": "/home/kesh/AgentLaboratory-Gemini/.venv/bin/python",
+              "platform": "Linux-7.0.12-arch1-1-x86_64-with-glibc2.43",
+              "cwd": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/gated",
+              "pythonhashseed": null,
+              "numpy_version": "2.0.2",
+              "scipy_version": "1.13.1",
+              "pandas_version": "2.2.3",
+              "matplotlib_version": "3.9.2"
+            }
+          }
+        ],
+        "citable": true
+      },
+      {
+        "attempt": "attempt_05",
+        "stdout_bytes": 6538,
+        "stderr_bytes": 0,
+        "recorded_key_count": 4,
+        "extra_key_count": 0,
+        "required_keys_recorded": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "required_keys_visible_in_legacy_view": [],
+        "required_keys_visible_in_full_stdout": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "values": {
+          "eff.acc_at_25": 0.89,
+          "eff.acc_at_100": 0.97,
+          "eff.efficiency_ratio": 0.9175257731958764,
+          "eff.train_s": 0.016139248000399675
+        },
+        "verdict": "PASS",
+        "failed_checks": [],
+        "warning_checks": [
+          "results.single_observation"
+        ],
+        "checks": [
+          {
+            "id": "static.syntax_valid",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "compiles",
+            "evidence": {}
+          },
+          {
+            "id": "static.no_unbound_names",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every referenced name resolves",
+            "evidence": {}
+          },
+          {
+            "id": "static.no_banned_calls",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "no calls that forge an exit code",
+            "evidence": {}
+          },
+          {
+            "id": "results.contract_not_shadowed",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "the harness recording API is not redefined",
+            "evidence": {}
+          },
+          {
+            "id": "exec.completed_within_budget",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "finished in 8.1s",
+            "evidence": {
+              "timeout_s": 900,
+              "duration_s": 8.103
+            }
+          },
+          {
+            "id": "exec.exit_code_zero",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "exited 0",
+            "evidence": {
+              "exit_code": 0
+            }
+          },
+          {
+            "id": "exec.no_uncaught_exception",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "ran to completion",
+            "evidence": {}
+          },
+          {
+            "id": "env.code_identity",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "executed source matches the recorded hash (ba0756a6205c)",
+            "evidence": {
+              "expected": "ba0756a6205c5ab1735d997d45a82fb40bb0d95b233a98d54a5b48badaad4f72",
+              "as_executed": "ba0756a6205c5ab1735d997d45a82fb40bb0d95b233a98d54a5b48badaad4f72"
+            }
+          },
+          {
+            "id": "exec.no_swallowed_traceback",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no caught-and-ignored traceback in the logs",
+            "evidence": {}
+          },
+          {
+            "id": "logs.no_error_signals",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no error, warning or device-failure signals in the logs",
+            "evidence": {}
+          },
+          {
+            "id": "env.clean_namespace",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "started from an empty namespace",
+            "evidence": {
+              "unexpected": []
+            }
+          },
+          {
+            "id": "env.seed_recorded",
+            "passed": true,
+            "severity": "WARN",
+            "message": "seed recorded (42)",
+            "evidence": {
+              "seed": 42
+            }
+          },
+          {
+            "id": "results.contract_present",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "4 metric(s) recorded",
+            "evidence": {
+              "keys": [
+                "eff.acc_at_100",
+                "eff.acc_at_25",
+                "eff.efficiency_ratio",
+                "eff.train_s"
+              ]
+            }
+          },
+          {
+            "id": "results.expected_keys_present",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every declared key was recorded",
+            "evidence": {
+              "missing": [],
+              "recorded": [
+                "eff.acc_at_100",
+                "eff.acc_at_25",
+                "eff.efficiency_ratio",
+                "eff.train_s"
+              ]
+            }
+          },
+          {
+            "id": "results.values_computed",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every recorded value is the result of a computation",
+            "evidence": {
+              "unresolved": []
+            }
+          },
+          {
+            "id": "results.values_finite",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "all values are finite",
+            "evidence": {
+              "keys": []
+            }
+          },
+          {
+            "id": "results.single_observation",
+            "passed": false,
+            "severity": "WARN",
+            "message": "recorded more than once with a changing value: eff.train_s (2 calls) \u2014 the registry holds the last call, not the best one",
+            "evidence": {
+              "varied": [
+                {
+                  "key": "eff.train_s",
+                  "call_count": 2,
+                  "recorded_value": 0.016139248000399675,
+                  "first": 0.02067802600140567,
+                  "min": 0.016139248000399675,
+                  "max": 0.02067802600140567,
+                  "truncated": false
+                }
+              ]
+            }
+          },
+          {
+            "id": "results.non_degenerate",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no degenerate values",
+            "evidence": {
+              "suspicious": []
+            }
+          },
+          {
+            "id": "output.untruncated",
+            "passed": true,
+            "severity": "INFO",
+            "message": "6,538 bytes of stdout and 0 bytes of stderr captured in full",
+            "evidence": {
+              "stdout_bytes": 6538,
+              "stderr_bytes": 0,
+              "stdout_path": "research_dir/gate_artifacts/gate1/attempt_05/stdout.txt",
+              "stderr_path": "research_dir/gate_artifacts/gate1/attempt_05/stderr.txt"
+            }
+          },
+          {
+            "id": "env.provenance",
+            "passed": true,
+            "severity": "INFO",
+            "message": "execution environment recorded",
+            "evidence": {
+              "python": "3.11.11",
+              "executable": "/home/kesh/AgentLaboratory-Gemini/.venv/bin/python",
+              "platform": "Linux-7.0.12-arch1-1-x86_64-with-glibc2.43",
+              "cwd": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/gated",
+              "pythonhashseed": null,
+              "numpy_version": "2.0.2",
+              "scipy_version": "1.13.1",
+              "pandas_version": "2.2.3",
+              "matplotlib_version": "3.9.2"
+            }
+          }
+        ],
+        "citable": true
+      },
+      {
+        "attempt": "attempt_06",
+        "stdout_bytes": 6538,
+        "stderr_bytes": 0,
+        "recorded_key_count": 4,
+        "extra_key_count": 0,
+        "required_keys_recorded": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "required_keys_visible_in_legacy_view": [],
+        "required_keys_visible_in_full_stdout": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "values": {
+          "eff.acc_at_25": 0.89,
+          "eff.acc_at_100": 0.97,
+          "eff.efficiency_ratio": 0.9175257731958764,
+          "eff.train_s": 0.01562939400173491
+        },
+        "verdict": "PASS",
+        "failed_checks": [],
+        "warning_checks": [
+          "results.single_observation"
+        ],
+        "checks": [
+          {
+            "id": "static.syntax_valid",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "compiles",
+            "evidence": {}
+          },
+          {
+            "id": "static.no_unbound_names",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every referenced name resolves",
+            "evidence": {}
+          },
+          {
+            "id": "static.no_banned_calls",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "no calls that forge an exit code",
+            "evidence": {}
+          },
+          {
+            "id": "results.contract_not_shadowed",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "the harness recording API is not redefined",
+            "evidence": {}
+          },
+          {
+            "id": "exec.completed_within_budget",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "finished in 8.0s",
+            "evidence": {
+              "timeout_s": 900,
+              "duration_s": 8.004
+            }
+          },
+          {
+            "id": "exec.exit_code_zero",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "exited 0",
+            "evidence": {
+              "exit_code": 0
+            }
+          },
+          {
+            "id": "exec.no_uncaught_exception",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "ran to completion",
+            "evidence": {}
+          },
+          {
+            "id": "env.code_identity",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "executed source matches the recorded hash (fae9f119611c)",
+            "evidence": {
+              "expected": "fae9f119611cc9713a584cc100c4730144907f29e9c682e2ff0cd9fb197cee1c",
+              "as_executed": "fae9f119611cc9713a584cc100c4730144907f29e9c682e2ff0cd9fb197cee1c"
+            }
+          },
+          {
+            "id": "exec.no_swallowed_traceback",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no caught-and-ignored traceback in the logs",
+            "evidence": {}
+          },
+          {
+            "id": "logs.no_error_signals",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no error, warning or device-failure signals in the logs",
+            "evidence": {}
+          },
+          {
+            "id": "env.clean_namespace",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "started from an empty namespace",
+            "evidence": {
+              "unexpected": []
+            }
+          },
+          {
+            "id": "env.seed_recorded",
+            "passed": true,
+            "severity": "WARN",
+            "message": "seed recorded (42)",
+            "evidence": {
+              "seed": 42
+            }
+          },
+          {
+            "id": "results.contract_present",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "4 metric(s) recorded",
+            "evidence": {
+              "keys": [
+                "eff.acc_at_100",
+                "eff.acc_at_25",
+                "eff.efficiency_ratio",
+                "eff.train_s"
+              ]
+            }
+          },
+          {
+            "id": "results.expected_keys_present",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every declared key was recorded",
+            "evidence": {
+              "missing": [],
+              "recorded": [
+                "eff.acc_at_100",
+                "eff.acc_at_25",
+                "eff.efficiency_ratio",
+                "eff.train_s"
+              ]
+            }
+          },
+          {
+            "id": "results.values_computed",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every recorded value is the result of a computation",
+            "evidence": {
+              "unresolved": []
+            }
+          },
+          {
+            "id": "results.values_finite",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "all values are finite",
+            "evidence": {
+              "keys": []
+            }
+          },
+          {
+            "id": "results.single_observation",
+            "passed": false,
+            "severity": "WARN",
+            "message": "recorded more than once with a changing value: eff.train_s (2 calls) \u2014 the registry holds the last call, not the best one",
+            "evidence": {
+              "varied": [
+                {
+                  "key": "eff.train_s",
+                  "call_count": 2,
+                  "recorded_value": 0.01562939400173491,
+                  "first": 0.02001483600179199,
+                  "min": 0.01562939400173491,
+                  "max": 0.02001483600179199,
+                  "truncated": false
+                }
+              ]
+            }
+          },
+          {
+            "id": "results.non_degenerate",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no degenerate values",
+            "evidence": {
+              "suspicious": []
+            }
+          },
+          {
+            "id": "output.untruncated",
+            "passed": true,
+            "severity": "INFO",
+            "message": "6,538 bytes of stdout and 0 bytes of stderr captured in full",
+            "evidence": {
+              "stdout_bytes": 6538,
+              "stderr_bytes": 0,
+              "stdout_path": "research_dir/gate_artifacts/gate1/attempt_06/stdout.txt",
+              "stderr_path": "research_dir/gate_artifacts/gate1/attempt_06/stderr.txt"
+            }
+          },
+          {
+            "id": "env.provenance",
+            "passed": true,
+            "severity": "INFO",
+            "message": "execution environment recorded",
+            "evidence": {
+              "python": "3.11.11",
+              "executable": "/home/kesh/AgentLaboratory-Gemini/.venv/bin/python",
+              "platform": "Linux-7.0.12-arch1-1-x86_64-with-glibc2.43",
+              "cwd": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/gated",
+              "pythonhashseed": null,
+              "numpy_version": "2.0.2",
+              "scipy_version": "1.13.1",
+              "pandas_version": "2.2.3",
+              "matplotlib_version": "3.9.2"
+            }
+          }
+        ],
+        "citable": true
+      },
+      {
+        "attempt": "attempt_07",
+        "stdout_bytes": 6538,
+        "stderr_bytes": 0,
+        "recorded_key_count": 4,
+        "extra_key_count": 0,
+        "required_keys_recorded": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "required_keys_visible_in_legacy_view": [],
+        "required_keys_visible_in_full_stdout": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "values": {
+          "eff.acc_at_25": 0.89,
+          "eff.acc_at_100": 0.97,
+          "eff.efficiency_ratio": 0.9175257731958764,
+          "eff.train_s": 0.015708253002230776
+        },
+        "verdict": "PASS",
+        "failed_checks": [],
+        "warning_checks": [
+          "results.single_observation"
+        ],
+        "checks": [
+          {
+            "id": "static.syntax_valid",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "compiles",
+            "evidence": {}
+          },
+          {
+            "id": "static.no_unbound_names",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every referenced name resolves",
+            "evidence": {}
+          },
+          {
+            "id": "static.no_banned_calls",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "no calls that forge an exit code",
+            "evidence": {}
+          },
+          {
+            "id": "results.contract_not_shadowed",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "the harness recording API is not redefined",
+            "evidence": {}
+          },
+          {
+            "id": "exec.completed_within_budget",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "finished in 8.6s",
+            "evidence": {
+              "timeout_s": 900,
+              "duration_s": 8.61
+            }
+          },
+          {
+            "id": "exec.exit_code_zero",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "exited 0",
+            "evidence": {
+              "exit_code": 0
+            }
+          },
+          {
+            "id": "exec.no_uncaught_exception",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "ran to completion",
+            "evidence": {}
+          },
+          {
+            "id": "env.code_identity",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "executed source matches the recorded hash (909160dd9b7f)",
+            "evidence": {
+              "expected": "909160dd9b7f32185375764bd1c1644bb7c86f3d5bec04c46f16881c25b4d64b",
+              "as_executed": "909160dd9b7f32185375764bd1c1644bb7c86f3d5bec04c46f16881c25b4d64b"
+            }
+          },
+          {
+            "id": "exec.no_swallowed_traceback",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no caught-and-ignored traceback in the logs",
+            "evidence": {}
+          },
+          {
+            "id": "logs.no_error_signals",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no error, warning or device-failure signals in the logs",
+            "evidence": {}
+          },
+          {
+            "id": "env.clean_namespace",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "started from an empty namespace",
+            "evidence": {
+              "unexpected": []
+            }
+          },
+          {
+            "id": "env.seed_recorded",
+            "passed": true,
+            "severity": "WARN",
+            "message": "seed recorded (42)",
+            "evidence": {
+              "seed": 42
+            }
+          },
+          {
+            "id": "results.contract_present",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "4 metric(s) recorded",
+            "evidence": {
+              "keys": [
+                "eff.acc_at_100",
+                "eff.acc_at_25",
+                "eff.efficiency_ratio",
+                "eff.train_s"
+              ]
+            }
+          },
+          {
+            "id": "results.expected_keys_present",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every declared key was recorded",
+            "evidence": {
+              "missing": [],
+              "recorded": [
+                "eff.acc_at_100",
+                "eff.acc_at_25",
+                "eff.efficiency_ratio",
+                "eff.train_s"
+              ]
+            }
+          },
+          {
+            "id": "results.values_computed",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every recorded value is the result of a computation",
+            "evidence": {
+              "unresolved": []
+            }
+          },
+          {
+            "id": "results.values_finite",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "all values are finite",
+            "evidence": {
+              "keys": []
+            }
+          },
+          {
+            "id": "results.single_observation",
+            "passed": false,
+            "severity": "WARN",
+            "message": "recorded more than once with a changing value: eff.train_s (2 calls) \u2014 the registry holds the last call, not the best one",
+            "evidence": {
+              "varied": [
+                {
+                  "key": "eff.train_s",
+                  "call_count": 2,
+                  "recorded_value": 0.015708253002230776,
+                  "first": 0.02149573600036092,
+                  "min": 0.015708253002230776,
+                  "max": 0.02149573600036092,
+                  "truncated": false
+                }
+              ]
+            }
+          },
+          {
+            "id": "results.non_degenerate",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no degenerate values",
+            "evidence": {
+              "suspicious": []
+            }
+          },
+          {
+            "id": "output.untruncated",
+            "passed": true,
+            "severity": "INFO",
+            "message": "6,538 bytes of stdout and 0 bytes of stderr captured in full",
+            "evidence": {
+              "stdout_bytes": 6538,
+              "stderr_bytes": 0,
+              "stdout_path": "research_dir/gate_artifacts/gate1/attempt_07/stdout.txt",
+              "stderr_path": "research_dir/gate_artifacts/gate1/attempt_07/stderr.txt"
+            }
+          },
+          {
+            "id": "env.provenance",
+            "passed": true,
+            "severity": "INFO",
+            "message": "execution environment recorded",
+            "evidence": {
+              "python": "3.11.11",
+              "executable": "/home/kesh/AgentLaboratory-Gemini/.venv/bin/python",
+              "platform": "Linux-7.0.12-arch1-1-x86_64-with-glibc2.43",
+              "cwd": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/gated",
+              "pythonhashseed": null,
+              "numpy_version": "2.0.2",
+              "scipy_version": "1.13.1",
+              "pandas_version": "2.2.3",
+              "matplotlib_version": "3.9.2"
+            }
+          }
+        ],
+        "citable": true
+      },
+      {
+        "attempt": "attempt_08",
+        "stdout_bytes": 6962,
+        "stderr_bytes": 0,
+        "recorded_key_count": 4,
+        "extra_key_count": 0,
+        "required_keys_recorded": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "required_keys_visible_in_legacy_view": [],
+        "required_keys_visible_in_full_stdout": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "values": {
+          "eff.acc_at_25": 0.89,
+          "eff.acc_at_100": 0.97,
+          "eff.efficiency_ratio": 0.9175257731958764,
+          "eff.train_s": 0.015442635001818417
+        },
+        "verdict": "PASS",
+        "failed_checks": [],
+        "warning_checks": [
+          "results.single_observation"
+        ],
+        "checks": [
+          {
+            "id": "static.syntax_valid",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "compiles",
+            "evidence": {}
+          },
+          {
+            "id": "static.no_unbound_names",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every referenced name resolves",
+            "evidence": {}
+          },
+          {
+            "id": "static.no_banned_calls",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "no calls that forge an exit code",
+            "evidence": {}
+          },
+          {
+            "id": "results.contract_not_shadowed",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "the harness recording API is not redefined",
+            "evidence": {}
+          },
+          {
+            "id": "exec.completed_within_budget",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "finished in 8.8s",
+            "evidence": {
+              "timeout_s": 900,
+              "duration_s": 8.756
+            }
+          },
+          {
+            "id": "exec.exit_code_zero",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "exited 0",
+            "evidence": {
+              "exit_code": 0
+            }
+          },
+          {
+            "id": "exec.no_uncaught_exception",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "ran to completion",
+            "evidence": {}
+          },
+          {
+            "id": "env.code_identity",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "executed source matches the recorded hash (f3a9410cf6c1)",
+            "evidence": {
+              "expected": "f3a9410cf6c125b2f9ede89a9bd7a5bea6077f3a486d80af647a0b04fd2b0832",
+              "as_executed": "f3a9410cf6c125b2f9ede89a9bd7a5bea6077f3a486d80af647a0b04fd2b0832"
+            }
+          },
+          {
+            "id": "exec.no_swallowed_traceback",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no caught-and-ignored traceback in the logs",
+            "evidence": {}
+          },
+          {
+            "id": "logs.no_error_signals",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no error, warning or device-failure signals in the logs",
+            "evidence": {}
+          },
+          {
+            "id": "env.clean_namespace",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "started from an empty namespace",
+            "evidence": {
+              "unexpected": []
+            }
+          },
+          {
+            "id": "env.seed_recorded",
+            "passed": true,
+            "severity": "WARN",
+            "message": "seed recorded (42)",
+            "evidence": {
+              "seed": 42
+            }
+          },
+          {
+            "id": "results.contract_present",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "4 metric(s) recorded",
+            "evidence": {
+              "keys": [
+                "eff.acc_at_100",
+                "eff.acc_at_25",
+                "eff.efficiency_ratio",
+                "eff.train_s"
+              ]
+            }
+          },
+          {
+            "id": "results.expected_keys_present",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every declared key was recorded",
+            "evidence": {
+              "missing": [],
+              "recorded": [
+                "eff.acc_at_100",
+                "eff.acc_at_25",
+                "eff.efficiency_ratio",
+                "eff.train_s"
+              ]
+            }
+          },
+          {
+            "id": "results.values_computed",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every recorded value is the result of a computation",
+            "evidence": {
+              "unresolved": []
+            }
+          },
+          {
+            "id": "results.values_finite",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "all values are finite",
+            "evidence": {
+              "keys": []
+            }
+          },
+          {
+            "id": "results.single_observation",
+            "passed": false,
+            "severity": "WARN",
+            "message": "recorded more than once with a changing value: eff.train_s (2 calls) \u2014 the registry holds the last call, not the best one",
+            "evidence": {
+              "varied": [
+                {
+                  "key": "eff.train_s",
+                  "call_count": 2,
+                  "recorded_value": 0.015442635001818417,
+                  "first": 0.02134823999949731,
+                  "min": 0.015442635001818417,
+                  "max": 0.02134823999949731,
+                  "truncated": false
+                }
+              ]
+            }
+          },
+          {
+            "id": "results.non_degenerate",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no degenerate values",
+            "evidence": {
+              "suspicious": []
+            }
+          },
+          {
+            "id": "output.untruncated",
+            "passed": true,
+            "severity": "INFO",
+            "message": "6,962 bytes of stdout and 0 bytes of stderr captured in full",
+            "evidence": {
+              "stdout_bytes": 6962,
+              "stderr_bytes": 0,
+              "stdout_path": "research_dir/gate_artifacts/gate1/attempt_08/stdout.txt",
+              "stderr_path": "research_dir/gate_artifacts/gate1/attempt_08/stderr.txt"
+            }
+          },
+          {
+            "id": "env.provenance",
+            "passed": true,
+            "severity": "INFO",
+            "message": "execution environment recorded",
+            "evidence": {
+              "python": "3.11.11",
+              "executable": "/home/kesh/AgentLaboratory-Gemini/.venv/bin/python",
+              "platform": "Linux-7.0.12-arch1-1-x86_64-with-glibc2.43",
+              "cwd": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/gated",
+              "pythonhashseed": null,
+              "numpy_version": "2.0.2",
+              "scipy_version": "1.13.1",
+              "pandas_version": "2.2.3",
+              "matplotlib_version": "3.9.2"
+            }
+          }
+        ],
+        "citable": true
+      },
+      {
+        "attempt": "attempt_09",
+        "stdout_bytes": 6962,
+        "stderr_bytes": 0,
+        "recorded_key_count": 4,
+        "extra_key_count": 0,
+        "required_keys_recorded": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "required_keys_visible_in_legacy_view": [],
+        "required_keys_visible_in_full_stdout": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "values": {
+          "eff.acc_at_25": 0.89,
+          "eff.acc_at_100": 0.97,
+          "eff.efficiency_ratio": 0.9175257731958764,
+          "eff.train_s": 0.01585161199909635
+        },
+        "verdict": "PASS",
+        "failed_checks": [],
+        "warning_checks": [
+          "results.single_observation"
+        ],
+        "checks": [
+          {
+            "id": "static.syntax_valid",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "compiles",
+            "evidence": {}
+          },
+          {
+            "id": "static.no_unbound_names",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every referenced name resolves",
+            "evidence": {}
+          },
+          {
+            "id": "static.no_banned_calls",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "no calls that forge an exit code",
+            "evidence": {}
+          },
+          {
+            "id": "results.contract_not_shadowed",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "the harness recording API is not redefined",
+            "evidence": {}
+          },
+          {
+            "id": "exec.completed_within_budget",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "finished in 7.9s",
+            "evidence": {
+              "timeout_s": 900,
+              "duration_s": 7.909
+            }
+          },
+          {
+            "id": "exec.exit_code_zero",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "exited 0",
+            "evidence": {
+              "exit_code": 0
+            }
+          },
+          {
+            "id": "exec.no_uncaught_exception",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "ran to completion",
+            "evidence": {}
+          },
+          {
+            "id": "env.code_identity",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "executed source matches the recorded hash (f3a9410cf6c1)",
+            "evidence": {
+              "expected": "f3a9410cf6c125b2f9ede89a9bd7a5bea6077f3a486d80af647a0b04fd2b0832",
+              "as_executed": "f3a9410cf6c125b2f9ede89a9bd7a5bea6077f3a486d80af647a0b04fd2b0832"
+            }
+          },
+          {
+            "id": "exec.no_swallowed_traceback",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no caught-and-ignored traceback in the logs",
+            "evidence": {}
+          },
+          {
+            "id": "logs.no_error_signals",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no error, warning or device-failure signals in the logs",
+            "evidence": {}
+          },
+          {
+            "id": "env.clean_namespace",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "started from an empty namespace",
+            "evidence": {
+              "unexpected": []
+            }
+          },
+          {
+            "id": "env.seed_recorded",
+            "passed": true,
+            "severity": "WARN",
+            "message": "seed recorded (42)",
+            "evidence": {
+              "seed": 42
+            }
+          },
+          {
+            "id": "results.contract_present",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "4 metric(s) recorded",
+            "evidence": {
+              "keys": [
+                "eff.acc_at_100",
+                "eff.acc_at_25",
+                "eff.efficiency_ratio",
+                "eff.train_s"
+              ]
+            }
+          },
+          {
+            "id": "results.expected_keys_present",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every declared key was recorded",
+            "evidence": {
+              "missing": [],
+              "recorded": [
+                "eff.acc_at_100",
+                "eff.acc_at_25",
+                "eff.efficiency_ratio",
+                "eff.train_s"
+              ]
+            }
+          },
+          {
+            "id": "results.values_computed",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every recorded value is the result of a computation",
+            "evidence": {
+              "unresolved": []
+            }
+          },
+          {
+            "id": "results.values_finite",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "all values are finite",
+            "evidence": {
+              "keys": []
+            }
+          },
+          {
+            "id": "results.single_observation",
+            "passed": false,
+            "severity": "WARN",
+            "message": "recorded more than once with a changing value: eff.train_s (2 calls) \u2014 the registry holds the last call, not the best one",
+            "evidence": {
+              "varied": [
+                {
+                  "key": "eff.train_s",
+                  "call_count": 2,
+                  "recorded_value": 0.01585161199909635,
+                  "first": 0.01976859900241834,
+                  "min": 0.01585161199909635,
+                  "max": 0.01976859900241834,
+                  "truncated": false
+                }
+              ]
+            }
+          },
+          {
+            "id": "results.non_degenerate",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no degenerate values",
+            "evidence": {
+              "suspicious": []
+            }
+          },
+          {
+            "id": "output.untruncated",
+            "passed": true,
+            "severity": "INFO",
+            "message": "6,962 bytes of stdout and 0 bytes of stderr captured in full",
+            "evidence": {
+              "stdout_bytes": 6962,
+              "stderr_bytes": 0,
+              "stdout_path": "research_dir/gate_artifacts/gate1/attempt_09/stdout.txt",
+              "stderr_path": "research_dir/gate_artifacts/gate1/attempt_09/stderr.txt"
+            }
+          },
+          {
+            "id": "env.provenance",
+            "passed": true,
+            "severity": "INFO",
+            "message": "execution environment recorded",
+            "evidence": {
+              "python": "3.11.11",
+              "executable": "/home/kesh/AgentLaboratory-Gemini/.venv/bin/python",
+              "platform": "Linux-7.0.12-arch1-1-x86_64-with-glibc2.43",
+              "cwd": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/gated",
+              "pythonhashseed": null,
+              "numpy_version": "2.0.2",
+              "scipy_version": "1.13.1",
+              "pandas_version": "2.2.3",
+              "matplotlib_version": "3.9.2"
+            }
+          }
+        ],
+        "citable": true
+      },
+      {
+        "attempt": "attempt_10",
+        "stdout_bytes": 4099,
+        "stderr_bytes": 0,
+        "recorded_key_count": 4,
+        "extra_key_count": 0,
+        "required_keys_recorded": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "required_keys_visible_in_legacy_view": [],
+        "required_keys_visible_in_full_stdout": [
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "values": {
+          "eff.acc_at_25": 0.89,
+          "eff.acc_at_100": 0.97,
+          "eff.efficiency_ratio": 0.9175257731958764,
+          "eff.train_s": 0.017149006998806726
+        },
+        "verdict": "PASS",
+        "failed_checks": [],
+        "warning_checks": [],
+        "checks": [
+          {
+            "id": "static.syntax_valid",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "compiles",
+            "evidence": {}
+          },
+          {
+            "id": "static.no_unbound_names",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every referenced name resolves",
+            "evidence": {}
+          },
+          {
+            "id": "static.no_banned_calls",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "no calls that forge an exit code",
+            "evidence": {}
+          },
+          {
+            "id": "results.contract_not_shadowed",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "the harness recording API is not redefined",
+            "evidence": {}
+          },
+          {
+            "id": "exec.completed_within_budget",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "finished in 5.3s",
+            "evidence": {
+              "timeout_s": 900,
+              "duration_s": 5.339
+            }
+          },
+          {
+            "id": "exec.exit_code_zero",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "exited 0",
+            "evidence": {
+              "exit_code": 0
+            }
+          },
+          {
+            "id": "exec.no_uncaught_exception",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "ran to completion",
+            "evidence": {}
+          },
+          {
+            "id": "env.code_identity",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "executed source matches the recorded hash (679f478b7429)",
+            "evidence": {
+              "expected": "679f478b742978dd8fc9535f46105c9a3aef40c90cd85450ca9ca7979b938acf",
+              "as_executed": "679f478b742978dd8fc9535f46105c9a3aef40c90cd85450ca9ca7979b938acf"
+            }
+          },
+          {
+            "id": "exec.no_swallowed_traceback",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no caught-and-ignored traceback in the logs",
+            "evidence": {}
+          },
+          {
+            "id": "logs.no_error_signals",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no error, warning or device-failure signals in the logs",
+            "evidence": {}
+          },
+          {
+            "id": "env.clean_namespace",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "started from an empty namespace",
+            "evidence": {
+              "unexpected": []
+            }
+          },
+          {
+            "id": "env.seed_recorded",
+            "passed": true,
+            "severity": "WARN",
+            "message": "seed recorded (42)",
+            "evidence": {
+              "seed": 42
+            }
+          },
+          {
+            "id": "results.contract_present",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "4 metric(s) recorded",
+            "evidence": {
+              "keys": [
+                "eff.acc_at_100",
+                "eff.acc_at_25",
+                "eff.efficiency_ratio",
+                "eff.train_s"
+              ]
+            }
+          },
+          {
+            "id": "results.expected_keys_present",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every declared key was recorded",
+            "evidence": {
+              "missing": [],
+              "recorded": [
+                "eff.acc_at_100",
+                "eff.acc_at_25",
+                "eff.efficiency_ratio",
+                "eff.train_s"
+              ]
+            }
+          },
+          {
+            "id": "results.values_computed",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "every recorded value is the result of a computation",
+            "evidence": {
+              "unresolved": []
+            }
+          },
+          {
+            "id": "results.values_finite",
+            "passed": true,
+            "severity": "FAIL",
+            "message": "all values are finite",
+            "evidence": {
+              "keys": []
+            }
+          },
+          {
+            "id": "results.single_observation",
+            "passed": true,
+            "severity": "WARN",
+            "message": "every recorded key has one unambiguous value",
+            "evidence": {}
+          },
+          {
+            "id": "results.non_degenerate",
+            "passed": true,
+            "severity": "WARN",
+            "message": "no degenerate values",
+            "evidence": {
+              "suspicious": []
+            }
+          },
+          {
+            "id": "output.untruncated",
+            "passed": true,
+            "severity": "INFO",
+            "message": "4,099 bytes of stdout and 0 bytes of stderr captured in full",
+            "evidence": {
+              "stdout_bytes": 4099,
+              "stderr_bytes": 0,
+              "stdout_path": "research_dir/gate_artifacts/gate1/attempt_10/stdout.txt",
+              "stderr_path": "research_dir/gate_artifacts/gate1/attempt_10/stderr.txt"
+            }
+          },
+          {
+            "id": "env.provenance",
+            "passed": true,
+            "severity": "INFO",
+            "message": "execution environment recorded",
+            "evidence": {
+              "python": "3.11.11",
+              "executable": "/home/kesh/AgentLaboratory-Gemini/.venv/bin/python",
+              "platform": "Linux-7.0.12-arch1-1-x86_64-with-glibc2.43",
+              "cwd": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/gated",
+              "pythonhashseed": null,
+              "numpy_version": "2.0.2",
+              "scipy_version": "1.13.1",
+              "pandas_version": "2.2.3",
+              "matplotlib_version": "3.9.2"
+            }
+          }
+        ],
+        "citable": true
+      }
+    ],
+    "attempt_count": 10,
+    "pass_count": 10,
+    "blocking_failure_count": 0,
+    "warning_counts": {
+      "results.single_observation": 9
+    },
+    "all_required_recorded_count": 10,
+    "all_required_visible_in_legacy_view_count": 0,
+    "all_required_visible_in_full_stdout_count": 6,
+    "check_inventory": {
+      "static.syntax_valid": {
+        "severity": "FAIL",
+        "observed": 10,
+        "passed": 10,
+        "failed": 0
+      },
+      "static.no_unbound_names": {
+        "severity": "FAIL",
+        "observed": 10,
+        "passed": 10,
+        "failed": 0
+      },
+      "static.no_banned_calls": {
+        "severity": "FAIL",
+        "observed": 10,
+        "passed": 10,
+        "failed": 0
+      },
+      "results.contract_not_shadowed": {
+        "severity": "FAIL",
+        "observed": 10,
+        "passed": 10,
+        "failed": 0
+      },
+      "exec.completed_within_budget": {
+        "severity": "FAIL",
+        "observed": 10,
+        "passed": 10,
+        "failed": 0
+      },
+      "exec.exit_code_zero": {
+        "severity": "FAIL",
+        "observed": 10,
+        "passed": 10,
+        "failed": 0
+      },
+      "exec.no_uncaught_exception": {
+        "severity": "FAIL",
+        "observed": 10,
+        "passed": 10,
+        "failed": 0
+      },
+      "env.code_identity": {
+        "severity": "FAIL",
+        "observed": 10,
+        "passed": 10,
+        "failed": 0
+      },
+      "exec.no_swallowed_traceback": {
+        "severity": "WARN",
+        "observed": 10,
+        "passed": 10,
+        "failed": 0
+      },
+      "logs.no_error_signals": {
+        "severity": "WARN",
+        "observed": 10,
+        "passed": 10,
+        "failed": 0
+      },
+      "env.clean_namespace": {
+        "severity": "FAIL",
+        "observed": 10,
+        "passed": 10,
+        "failed": 0
+      },
+      "env.seed_recorded": {
+        "severity": "WARN",
+        "observed": 10,
+        "passed": 10,
+        "failed": 0
+      },
+      "results.contract_present": {
+        "severity": "FAIL",
+        "observed": 10,
+        "passed": 10,
+        "failed": 0
+      },
+      "results.expected_keys_present": {
+        "severity": "FAIL",
+        "observed": 10,
+        "passed": 10,
+        "failed": 0
+      },
+      "results.values_computed": {
+        "severity": "FAIL",
+        "observed": 10,
+        "passed": 10,
+        "failed": 0
+      },
+      "results.values_finite": {
+        "severity": "FAIL",
+        "observed": 10,
+        "passed": 10,
+        "failed": 0
+      },
+      "results.single_observation": {
+        "severity": "WARN",
+        "observed": 10,
+        "passed": 1,
+        "failed": 9
+      },
+      "results.non_degenerate": {
+        "severity": "WARN",
+        "observed": 10,
+        "passed": 10,
+        "failed": 0
+      },
+      "output.untruncated": {
+        "severity": "INFO",
+        "observed": 10,
+        "passed": 10,
+        "failed": 0
+      },
+      "env.provenance": {
+        "severity": "INFO",
+        "observed": 10,
+        "passed": 10,
+        "failed": 0
+      }
+    },
+    "paper_audit": {
+      "paper": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/gated/research_dir/report.txt",
+      "n_claims": 29,
+      "sourced": 19,
+      "derived": 9,
+      "printed": 0,
+      "unsourced": 1,
+      "sourced_rate": 0.6551724137931034,
+      "traceable_rate": 0.9655172413793104,
+      "registry_keys": [
+        "eff.acc_at_100",
+        "eff.acc_at_25",
+        "eff.efficiency_ratio",
+        "eff.train_s"
+      ],
+      "record_result_calls": 4,
+      "note": "",
+      "claims": [
+        {
+          "value": 0.89,
+          "context": "ult is that the 100-sample arm reaches a test accuracy of (0.89 ), while the 400-sample arm r",
+          "status": "sourced",
+          "source": "registry:eff.acc_at_25"
+        },
+        {
+          "value": 0.97,
+          "context": "st accuracy of (0.89 ), while the 400-sample arm reaches (0.97 ), yielding an efficiency rat",
+          "status": "sourced",
+          "source": "registry:eff.acc_at_100"
+        },
+        {
+          "value": 0.9175257731958764,
+          "context": "cy _ratio = acc _at _25 / acc _at _100 = 0.9175257731958764 ). In other words, one quarte",
+          "status": "sourced",
+          "source": "registry:eff.efficiency_ratio"
+        },
+        {
+          "value": 91.75,
+          "context": "er words, one quarter of the labels retains approximately (91.75 % ) of full-data test accurac",
+          "status": "sourced",
+          "source": "registry:eff.efficiency_ratio"
+        },
+        {
+          "value": 0.11,
+          "context": "test accuracy. In error-rate terms, the error drops from (0.11 ) to (0.03 ) when the traini",
+          "status": "derived",
+          "source": "1 - eff.acc_at_25"
+        },
+        {
+          "value": 0.03,
+          "context": "cy. In error-rate terms, the error drops from (0.11 ) to (0.03 ) when the training set is qu",
+          "status": "derived",
+          "source": "1 - eff.acc_at_100"
+        },
+        {
+          "value": 0.94,
+          "context": "d, corresponding to a power-law exponent of approximately (0.94 ) under the assumption (E(n)",
+          "status": "derived",
+          "source": "eff.efficiency_ratio / eff.acc_at_100"
+        },
+        {
+          "value": 0.017149006998806726,
+          "context": "a ). The total wall-clock training time for both arms is (0.017149006998806726 ) seconds, confirming that th",
+          "status": "sourced",
+          "source": "registry:eff.train_s"
+        },
+        {
+          "value": 0.89,
+          "context": "ained on 100 labelled samples achieved a test accuracy of (0.89 ) on the fixed 200-sample tes",
+          "status": "sourced",
+          "source": "registry:eff.acc_at_25"
+        },
+        {
+          "value": 0.97,
+          "context": "d on all 400 labelled samples achieved a test accuracy of (0.97 ). The efficiency ratio is th",
+          "status": "sourced",
+          "source": "registry:eff.acc_at_100"
+        },
+        {
+          "value": 0.89,
+          "context": "= 0.89 0.97",
+          "status": "sourced",
+          "source": "registry:eff.acc_at_25"
+        },
+        {
+          "value": 0.97,
+          "context": "= 0.89 0.97",
+          "status": "sourced",
+          "source": "registry:eff.acc_at_100"
+        },
+        {
+          "value": 0.9175257731958764,
+          "context": "= 0.9175257731958764.",
+          "status": "sourced",
+          "source": "registry:eff.efficiency_ratio"
+        },
+        {
+          "value": 0.89,
+          "context": "eff.acc _at _25 & 0.89",
+          "status": "sourced",
+          "source": "registry:eff.acc_at_25"
+        },
+        {
+          "value": 0.97,
+          "context": "eff.acc _at _100 & 0.97",
+          "status": "sourced",
+          "source": "registry:eff.acc_at_100"
+        },
+        {
+          "value": 0.9175257731958764,
+          "context": "eff.efficiency _ratio & 0.9175257731958764",
+          "status": "sourced",
+          "source": "registry:eff.efficiency_ratio"
+        },
+        {
+          "value": 0.017149006998806726,
+          "context": "eff.train _s & 0.017149006998806726",
+          "status": "sourced",
+          "source": "registry:eff.train_s"
+        },
+        {
+          "value": 0.11,
+          "context": "= (0.11 / 0.03) (4) 0.9",
+          "status": "derived",
+          "source": "1 - eff.acc_at_25"
+        },
+        {
+          "value": 0.03,
+          "context": "= (0.11 / 0.03) (4) 0.94.",
+          "status": "derived",
+          "source": "1 - eff.acc_at_100"
+        },
+        {
+          "value": 0.94,
+          "context": "= (0.11 / 0.03) (4) 0.94.",
+          "status": "derived",
+          "source": "eff.efficiency_ratio / eff.acc_at_100"
+        },
+        {
+          "value": 0.08,
+          "context": "The absolute accuracy difference of (0.08 ) between the two arms corres",
+          "status": "derived",
+          "source": "eff.acc_at_100 - eff.acc_at_25"
+        },
+        {
+          "value": 91.75,
+          "context": "-regression model trained on 100 labelled samples retains (91.75 % ) of the test accuracy achi",
+          "status": "sourced",
+          "source": "registry:eff.efficiency_ratio"
+        },
+        {
+          "value": 0.94,
+          "context": "implied power-law exponent of approximately ( 0.94 ) is instructive when compare",
+          "status": "derived",
+          "source": "eff.efficiency_ratio / eff.acc_at_100"
+        },
+        {
+          "value": 0.5,
+          "context": "often predicted to be of order ( /(1+ ) 0.5 ) when the exponent (",
+          "status": "unsourced",
+          "source": ""
+        },
+        {
+          "value": 0.9175,
+          "context": "undred samples may be small. The high efficiency ratio of (0.9175 ) suggests that a quarter of",
+          "status": "sourced",
+          "source": "registry:eff.efficiency_ratio"
+        },
+        {
+          "value": 0.94,
+          "context": "se the value of additional data. The measured exponent of (0.94 ) should therefore not be int",
+          "status": "derived",
+          "source": "eff.efficiency_ratio / eff.acc_at_100"
+        },
+        {
+          "value": 0.89,
+          "context": "oader scaling-law literature. The observed accuracy pair ((0.89, 0.97) ) can be used as a cal",
+          "status": "sourced",
+          "source": "registry:eff.acc_at_25"
+        },
+        {
+          "value": 0.97,
+          "context": "scaling-law literature. The observed accuracy pair ((0.89, 0.97) ) can be used as a calibrati",
+          "status": "sourced",
+          "source": "registry:eff.acc_at_100"
+        },
+        {
+          "value": 0.9175257731958764,
+          "context": "achieves its objective. The measured efficiency ratio of (0.9175257731958764 ) demonstrates that, for a we",
+          "status": "sourced",
+          "source": "registry:eff.efficiency_ratio"
+        }
+      ]
+    }
+  },
+  "ungated": {
+    "workflow": {
+      "path": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815_ungated_retry/ungated/workflow.log",
+      "bytes": 54829,
+      "numeric_scores": [
+        0.95,
+        0.95,
+        0.97,
+        0.9,
+        0.95,
+        0.95,
+        0.95,
+        1.0,
+        3.659090909090909,
+        3.659090909090909,
+        2.8636363636363638,
+        3.2045454545454537,
+        3.4318181818181817,
+        3.886363636363635
+      ],
+      "score_none_count": 2,
+      "command_failure_count": 2,
+      "traceback_count": 0,
+      "completed_subtasks": [
+        "literature review",
+        "plan formulation",
+        "data preparation",
+        "running experiments",
+        "results interpretation",
+        "report writing"
+      ]
+    },
+    "attempts": [
+      {
+        "attempt": "ungated_01",
+        "stdout_bytes": 14782,
+        "stderr_bytes": 0,
+        "recorded_key_count": 4,
+        "extra_key_count": 0,
+        "required_keys_recorded": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "required_keys_visible_in_legacy_view": [],
+        "required_keys_visible_in_full_stdout": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "values": {
+          "eff.acc_at_25": 0.775,
+          "eff.acc_at_100": 0.81,
+          "eff.efficiency_ratio": 0.95679012345679,
+          "eff.train_s": 0.09591236200139974
+        },
+        "exception": null,
+        "legacy_accepted": true,
+        "legacy_false_success": false
+      },
+      {
+        "attempt": "ungated_02",
+        "stdout_bytes": 15456,
+        "stderr_bytes": 0,
+        "recorded_key_count": 4,
+        "extra_key_count": 0,
+        "required_keys_recorded": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "required_keys_visible_in_legacy_view": [],
+        "required_keys_visible_in_full_stdout": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "values": {
+          "eff.acc_at_25": 0.775,
+          "eff.acc_at_100": 0.81,
+          "eff.efficiency_ratio": 0.95679012345679,
+          "eff.train_s": 0.09753852300127619
+        },
+        "exception": null,
+        "legacy_accepted": true,
+        "legacy_false_success": false
+      },
+      {
+        "attempt": "ungated_03",
+        "stdout_bytes": 15878,
+        "stderr_bytes": 0,
+        "recorded_key_count": 4,
+        "extra_key_count": 0,
+        "required_keys_recorded": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "required_keys_visible_in_legacy_view": [],
+        "required_keys_visible_in_full_stdout": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "values": {
+          "eff.acc_at_25": 0.775,
+          "eff.acc_at_100": 0.81,
+          "eff.efficiency_ratio": 0.95679012345679,
+          "eff.train_s": 0.09774116100015817
+        },
+        "exception": null,
+        "legacy_accepted": true,
+        "legacy_false_success": false
+      },
+      {
+        "attempt": "ungated_04",
+        "stdout_bytes": 16147,
+        "stderr_bytes": 0,
+        "recorded_key_count": 4,
+        "extra_key_count": 0,
+        "required_keys_recorded": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "required_keys_visible_in_legacy_view": [],
+        "required_keys_visible_in_full_stdout": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "values": {
+          "eff.acc_at_25": 0.775,
+          "eff.acc_at_100": 0.81,
+          "eff.efficiency_ratio": 0.95679012345679,
+          "eff.train_s": 0.08972798000104376
+        },
+        "exception": null,
+        "legacy_accepted": true,
+        "legacy_false_success": false
+      },
+      {
+        "attempt": "ungated_05",
+        "stdout_bytes": 0,
+        "stderr_bytes": 0,
+        "recorded_key_count": 0,
+        "extra_key_count": 0,
+        "required_keys_recorded": [],
+        "required_keys_visible_in_legacy_view": [],
+        "required_keys_visible_in_full_stdout": [],
+        "values": {},
+        "exception": {
+          "type": "SyntaxError",
+          "message": "'(' was never closed (experiment.py, line 414)",
+          "traceback": "Traceback (most recent call last):\n  File \"/home/kesh/gates/gates/harness.py\", line 179, in main\n    code = compile(source, _CODE_PATH, \"exec\")\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815_ungated_retry/ungated/research_dir/gate_artifacts/ungated_05/experiment.py\", line 414\n    ax.text(\n           ^\nSyntaxError: '(' was never closed\n",
+          "filename": "/home/kesh/gates/gates/harness.py",
+          "lineno": 179,
+          "function": "main",
+          "source_line": "code = compile(source, _CODE_PATH, \"exec\")"
+        },
+        "legacy_accepted": false,
+        "legacy_false_success": false
+      },
+      {
+        "attempt": "ungated_06",
+        "stdout_bytes": 17222,
+        "stderr_bytes": 0,
+        "recorded_key_count": 4,
+        "extra_key_count": 0,
+        "required_keys_recorded": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "required_keys_visible_in_legacy_view": [],
+        "required_keys_visible_in_full_stdout": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "values": {
+          "eff.acc_at_25": 0.775,
+          "eff.acc_at_100": 0.81,
+          "eff.efficiency_ratio": 0.95679012345679,
+          "eff.train_s": 0.09596548099943902
+        },
+        "exception": null,
+        "legacy_accepted": true,
+        "legacy_false_success": false
+      },
+      {
+        "attempt": "ungated_07",
+        "stdout_bytes": 17561,
+        "stderr_bytes": 0,
+        "recorded_key_count": 4,
+        "extra_key_count": 0,
+        "required_keys_recorded": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "required_keys_visible_in_legacy_view": [],
+        "required_keys_visible_in_full_stdout": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "values": {
+          "eff.acc_at_25": 0.775,
+          "eff.acc_at_100": 0.81,
+          "eff.efficiency_ratio": 0.95679012345679,
+          "eff.train_s": 0.0992204270005459
+        },
+        "exception": null,
+        "legacy_accepted": true,
+        "legacy_false_success": false
+      },
+      {
+        "attempt": "ungated_08",
+        "stdout_bytes": 17618,
+        "stderr_bytes": 0,
+        "recorded_key_count": 4,
+        "extra_key_count": 0,
+        "required_keys_recorded": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "required_keys_visible_in_legacy_view": [],
+        "required_keys_visible_in_full_stdout": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "values": {
+          "eff.acc_at_25": 0.775,
+          "eff.acc_at_100": 0.81,
+          "eff.efficiency_ratio": 0.95679012345679,
+          "eff.train_s": 0.09675537699877168
+        },
+        "exception": null,
+        "legacy_accepted": true,
+        "legacy_false_success": false
+      },
+      {
+        "attempt": "ungated_09",
+        "stdout_bytes": 19989,
+        "stderr_bytes": 0,
+        "recorded_key_count": 10,
+        "extra_key_count": 6,
+        "required_keys_recorded": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "required_keys_visible_in_legacy_view": [],
+        "required_keys_visible_in_full_stdout": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "values": {
+          "eff.acc_at_25": 0.775,
+          "eff.acc_at_100": 0.81,
+          "eff.efficiency_ratio": 0.95679012345679,
+          "eff.train_s": 0.09745060700151953
+        },
+        "exception": null,
+        "legacy_accepted": true,
+        "legacy_false_success": false
+      },
+      {
+        "attempt": "ungated_10",
+        "stdout_bytes": 19945,
+        "stderr_bytes": 0,
+        "recorded_key_count": 10,
+        "extra_key_count": 6,
+        "required_keys_recorded": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "required_keys_visible_in_legacy_view": [],
+        "required_keys_visible_in_full_stdout": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ],
+        "values": {
+          "eff.acc_at_25": 0.775,
+          "eff.acc_at_100": 0.81,
+          "eff.efficiency_ratio": 0.95679012345679,
+          "eff.train_s": 0.10703255100088427
+        },
+        "exception": null,
+        "legacy_accepted": true,
+        "legacy_false_success": false
+      }
+    ],
+    "attempt_count": 10,
+    "legacy_accept_count": 9,
+    "legacy_reject_count": 1,
+    "legacy_false_success_count": 0,
+    "all_required_recorded_count": 9,
+    "all_required_visible_in_legacy_view_count": 0,
+    "all_required_visible_in_full_stdout_count": 9,
+    "attempts_with_extra_keys": 2,
+    "paper_audit": {
+      "paper": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815_ungated_retry/ungated/research_dir/report.txt",
+      "n_claims": 11,
+      "sourced": 0,
+      "derived": 0,
+      "printed": 8,
+      "unsourced": 3,
+      "sourced_rate": 0.0,
+      "traceable_rate": 0.0,
+      "registry_keys": [],
+      "record_result_calls": 10,
+      "note": "",
+      "claims": [
+        {
+          "value": 0.0,
+          "context": "[arm=25][step=0000] cross _entropy=1.098612 ,",
+          "status": "printed",
+          "source": "stdout, untraceable"
+        },
+        {
+          "value": 1.098612,
+          "context": "[arm=25][step=0000] cross _entropy=1.098612 ,",
+          "status": "printed",
+          "source": "stdout, untraceable"
+        },
+        {
+          "value": 1.098612,
+          "context": "0 & 1.098612",
+          "status": "printed",
+          "source": "stdout, untraceable"
+        },
+        {
+          "value": 0.553408,
+          "context": "50 & 0.553408",
+          "status": "printed",
+          "source": "stdout, untraceable"
+        },
+        {
+          "value": 0.481476,
+          "context": "100 & 0.481476",
+          "status": "printed",
+          "source": "stdout, untraceable"
+        },
+        {
+          "value": 0.450088,
+          "context": "150 & 0.450088",
+          "status": "printed",
+          "source": "stdout, untraceable"
+        },
+        {
+          "value": 0.432672,
+          "context": "200 & 0.432672",
+          "status": "printed",
+          "source": "stdout, untraceable"
+        },
+        {
+          "value": 0.99,
+          "context": "pre-specified interpretation thresholds for (r )--- (r 0.99 ) indicating saturation at 10",
+          "status": "printed",
+          "source": "stdout, untraceable"
+        },
+        {
+          "value": 0.95,
+          "context": ")--- (r 0.99 ) indicating saturation at 100 samples, (0.95 r < 0.99 ) indicating hig",
+          "status": "unsourced",
+          "source": ""
+        },
+        {
+          "value": 1500.0,
+          "context": "accuracy values should have been printed directly after the 1500-step training loops, before t",
+          "status": "unsourced",
+          "source": ""
+        },
+        {
+          "value": 1500.0,
+          "context": "ower. The experiment also uses a fixed training protocol of 1500 full-batch gradient steps. If",
+          "status": "unsourced",
+          "source": ""
+        }
+      ]
+    },
+    "paper_audit_against_full_stdout": {
+      "paper": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815_ungated_retry/ungated/research_dir/report.txt",
+      "n_claims": 11,
+      "sourced": 0,
+      "derived": 0,
+      "printed": 11,
+      "unsourced": 0,
+      "sourced_rate": 0.0,
+      "traceable_rate": 0.0,
+      "registry_keys": [],
+      "record_result_calls": 10,
+      "note": "",
+      "claims": [
+        {
+          "value": 0.0,
+          "context": "[arm=25][step=0000] cross _entropy=1.098612 ,",
+          "status": "printed",
+          "source": "stdout, untraceable"
+        },
+        {
+          "value": 1.098612,
+          "context": "[arm=25][step=0000] cross _entropy=1.098612 ,",
+          "status": "printed",
+          "source": "stdout, untraceable"
+        },
+        {
+          "value": 1.098612,
+          "context": "0 & 1.098612",
+          "status": "printed",
+          "source": "stdout, untraceable"
+        },
+        {
+          "value": 0.553408,
+          "context": "50 & 0.553408",
+          "status": "printed",
+          "source": "stdout, untraceable"
+        },
+        {
+          "value": 0.481476,
+          "context": "100 & 0.481476",
+          "status": "printed",
+          "source": "stdout, untraceable"
+        },
+        {
+          "value": 0.450088,
+          "context": "150 & 0.450088",
+          "status": "printed",
+          "source": "stdout, untraceable"
+        },
+        {
+          "value": 0.432672,
+          "context": "200 & 0.432672",
+          "status": "printed",
+          "source": "stdout, untraceable"
+        },
+        {
+          "value": 0.99,
+          "context": "pre-specified interpretation thresholds for (r )--- (r 0.99 ) indicating saturation at 10",
+          "status": "printed",
+          "source": "stdout, untraceable"
+        },
+        {
+          "value": 0.95,
+          "context": ")--- (r 0.99 ) indicating saturation at 100 samples, (0.95 r < 0.99 ) indicating hig",
+          "status": "printed",
+          "source": "stdout, untraceable"
+        },
+        {
+          "value": 1500.0,
+          "context": "accuracy values should have been printed directly after the 1500-step training loops, before t",
+          "status": "printed",
+          "source": "stdout, untraceable"
+        },
+        {
+          "value": 1500.0,
+          "context": "ower. The experiment also uses a fixed training protocol of 1500 full-batch gradient steps. If",
+          "status": "printed",
+          "source": "stdout, untraceable"
+        }
+      ]
+    }
+  }
+}

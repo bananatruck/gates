@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "generated_on": "2026-08-16",
+  "title": "Gate 1 final validation submission",
+  "canonical_comparison": {
+    "gated_run": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/gated",
+    "ungated_run": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815_ungated_retry/ungated",
+    "config_sha256": "a0409cf020f37a9c773fe7d66b1f61ff46bb5ab0d0750823917071be7503de0e",
+    "model": "deepseek-v4-flash"
+  },
+  "headline_results": {
+    "required_values_delivered_gated": "40/40",
+    "required_values_delivered_ungated": "0/40",
+    "gated_paper_traceability": "28/29 (96.6%)",
+    "ungated_paper_traceability": "0/11 (0%)",
+    "legacy_blind_rejected_turns": "9/18",
+    "regression_tests": 362
+  },
+  "deliverables": [
+    "GATE1_FINAL_REPORT.pdf",
+    "GATE1_FINAL_PRESENTATION.pptx",
+    "GATE1_FINAL_PRESENTATION.pdf"
+  ],
+  "verification_root": "verification/",
+  "credential_persisted": false
+}

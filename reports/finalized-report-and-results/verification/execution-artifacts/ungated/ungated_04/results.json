@@ -1,0 +1,93 @@
+{
+  "schema_version": "1.1",
+  "code_path": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815_ungated_retry/ungated/research_dir/gate_artifacts/ungated_04/experiment.py",
+  "code_sha256": "f4eda02a383a41e79f3a3513fcd4867818fc80f0b975d7c1daf53167dcb3b844",
+  "metrics": {
+    "eff.acc_at_25": {
+      "key": "eff.acc_at_25",
+      "value": 0.775,
+      "unit": null,
+      "lineno": 92,
+      "source_line": "record_result(\"eff.acc_at_25\", acc_at_25)",
+      "call_count": 1,
+      "observations": [
+        {
+          "value": 0.775,
+          "lineno": 92
+        }
+      ],
+      "observations_truncated": false
+    },
+    "eff.acc_at_100": {
+      "key": "eff.acc_at_100",
+      "value": 0.81,
+      "unit": null,
+      "lineno": 93,
+      "source_line": "record_result(\"eff.acc_at_100\", acc_at_100)",
+      "call_count": 1,
+      "observations": [
+        {
+          "value": 0.81,
+          "lineno": 93
+        }
+      ],
+      "observations_truncated": false
+    },
+    "eff.efficiency_ratio": {
+      "key": "eff.efficiency_ratio",
+      "value": 0.95679012345679,
+      "unit": null,
+      "lineno": 94,
+      "source_line": "record_result(\"eff.efficiency_ratio\", efficiency_ratio)",
+      "call_count": 1,
+      "observations": [
+        {
+          "value": 0.95679012345679,
+          "lineno": 94
+        }
+      ],
+      "observations_truncated": false
+    },
+    "eff.train_s": {
+      "key": "eff.train_s",
+      "value": 0.08972798000104376,
+      "unit": null,
+      "lineno": 95,
+      "source_line": "record_result(\"eff.train_s\", train_s)",
+      "call_count": 1,
+      "observations": [
+        {
+          "value": 0.08972798000104376,
+          "lineno": 95
+        }
+      ],
+      "observations_truncated": false
+    }
+  },
+  "metadata": {
+    "seed": 42
+  },
+  "initial_namespace": [
+    "__builtins__",
+    "__doc__",
+    "__file__",
+    "__loader__",
+    "__name__",
+    "__package__",
+    "__spec__",
+    "record_metadata",
+    "record_result"
+  ],
+  "environment": {
+    "python": "3.11.11",
+    "executable": "/home/kesh/AgentLaboratory-Gemini/.venv/bin/python",
+    "platform": "Linux-7.0.12-arch1-1-x86_64-with-glibc2.43",
+    "cwd": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815_ungated_retry/ungated",
+    "pythonhashseed": null,
+    "numpy_version": "2.0.2",
+    "scipy_version": "1.13.1",
+    "pandas_version": "2.2.3",
+    "matplotlib_version": "3.9.2"
+  },
+  "exception": null
+}

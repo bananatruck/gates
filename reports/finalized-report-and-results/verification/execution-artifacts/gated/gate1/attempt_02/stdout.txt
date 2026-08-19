@@ -1,0 +1,154 @@
+Arm A step 0 train_loss 1.098612
+Arm A step 10 train_loss 0.808171
+Arm A step 20 train_loss 0.657196
+Arm A step 30 train_loss 0.567282
+Arm A step 40 train_loss 0.507397
+Arm A step 50 train_loss 0.464219
+Arm A step 60 train_loss 0.431301
+Arm A step 70 train_loss 0.405173
+Arm A step 80 train_loss 0.383801
+Arm A step 90 train_loss 0.365908
+Arm A step 100 train_loss 0.350649
+Arm A step 110 train_loss 0.337439
+Arm A step 120 train_loss 0.325858
+Arm A step 130 train_loss 0.315597
+Arm A step 140 train_loss 0.306421
+Arm A step 150 train_loss 0.298152
+Arm A step 160 train_loss 0.290646
+Arm A step 170 train_loss 0.283793
+Arm A step 180 train_loss 0.277499
+Arm A step 190 train_loss 0.271692
+Arm A step 200 train_loss 0.266310
+Arm A step 210 train_loss 0.261302
+Arm A step 220 train_loss 0.256625
+Arm A step 230 train_loss 0.252242
+Arm A step 240 train_loss 0.248123
+Arm A step 250 train_loss 0.244241
+Arm A step 260 train_loss 0.240573
+Arm A step 270 train_loss 0.237099
+Arm A step 280 train_loss 0.233802
+Arm A step 290 train_loss 0.230665
+Arm A step 300 train_loss 0.227677
+Arm B step 0 train_loss 1.098612
+Arm B step 10 train_loss 0.836515
+Arm B step 20 train_loss 0.696287
+Arm B step 30 train_loss 0.610877
+Arm B step 40 train_loss 0.553026
+Arm B step 50 train_loss 0.510810
+Arm B step 60 train_loss 0.478342
+Arm B step 70 train_loss 0.452394
+Arm B step 80 train_loss 0.431047
+Arm B step 90 train_loss 0.413086
+Arm B step 100 train_loss 0.397696
+Arm B step 110 train_loss 0.384315
+Arm B step 120 train_loss 0.372536
+Arm B step 130 train_loss 0.362061
+Arm B step 140 train_loss 0.352660
+Arm B step 150 train_loss 0.344161
+Arm B step 160 train_loss 0.336423
+Arm B step 170 train_loss 0.329339
+Arm B step 180 train_loss 0.322817
+Arm B step 190 train_loss 0.316786
+Arm B step 200 train_loss 0.311186
+Arm B step 210 train_loss 0.305965
+Arm B step 220 train_loss 0.301081
+Arm B step 230 train_loss 0.296499
+Arm B step 240 train_loss 0.292187
+Arm B step 250 train_loss 0.288118
+Arm B step 260 train_loss 0.284271
+Arm B step 270 train_loss 0.280623
+Arm B step 280 train_loss 0.277159
+Arm B step 290 train_loss 0.273861
+Arm B step 300 train_loss 0.270718
+========================================================================
+Experiment purpose:
+This controlled data-efficiency gate isolates the effect of training-set
+size on test accuracy. Both arms use the exact same multinomial logistic
+regression model (softmax + cross-entropy), vanilla gradient descent,
+identical seed (42), identical initial zero weights, identical learning
+rate (0.1), and identical number of gradient steps (300). The only
+difference is the number of training samples: Arm A sees 100 labelled
+samples (25% of the 400-sample pool) while Arm B sees all 400 samples.
+Both arms are evaluated on the same frozen 200-sample test set, so any
+accuracy gap is attributable solely to data quantity. The headline metric,
+eff.efficiency_ratio = acc_at_25 / acc_at_100, measures how much of the
+full-data accuracy is retained when only a quarter of the labels are used.
+========================================================================
+Arm A step 0 train_loss 1.098612
+Arm A step 10 train_loss 0.808171
+Arm A step 20 train_loss 0.657196
+Arm A step 30 train_loss 0.567282
+Arm A step 40 train_loss 0.507397
+Arm A step 50 train_loss 0.464219
+Arm A step 60 train_loss 0.431301
+Arm A step 70 train_loss 0.405173
+Arm A step 80 train_loss 0.383801
+Arm A step 90 train_loss 0.365908
+Arm A step 100 train_loss 0.350649
+Arm A step 110 train_loss 0.337439
+Arm A step 120 train_loss 0.325858
+Arm A step 130 train_loss 0.315597
+Arm A step 140 train_loss 0.306421
+Arm A step 150 train_loss 0.298152
+Arm A step 160 train_loss 0.290646
+Arm A step 170 train_loss 0.283793
+Arm A step 180 train_loss 0.277499
+Arm A step 190 train_loss 0.271692
+Arm A step 200 train_loss 0.266310
+Arm A step 210 train_loss 0.261302
+Arm A step 220 train_loss 0.256625
+Arm A step 230 train_loss 0.252242
+Arm A step 240 train_loss 0.248123
+Arm A step 250 train_loss 0.244241
+Arm A step 260 train_loss 0.240573
+Arm A step 270 train_loss 0.237099
+Arm A step 280 train_loss 0.233802
+Arm A step 290 train_loss 0.230665
+Arm A step 300 train_loss 0.227677
+Arm B step 0 train_loss 1.098612
+Arm B step 10 train_loss 0.836515
+Arm B step 20 train_loss 0.696287
+Arm B step 30 train_loss 0.610877
+Arm B step 40 train_loss 0.553026
+Arm B step 50 train_loss 0.510810
+Arm B step 60 train_loss 0.478342
+Arm B step 70 train_loss 0.452394
+Arm B step 80 train_loss 0.431047
+Arm B step 90 train_loss 0.413086
+Arm B step 100 train_loss 0.397696
+Arm B step 110 train_loss 0.384315
+Arm B step 120 train_loss 0.372536
+Arm B step 130 train_loss 0.362061
+Arm B step 140 train_loss 0.352660
+Arm B step 150 train_loss 0.344161
+Arm B step 160 train_loss 0.336423
+Arm B step 170 train_loss 0.329339
+Arm B step 180 train_loss 0.322817
+Arm B step 190 train_loss 0.316786
+Arm B step 200 train_loss 0.311186
+Arm B step 210 train_loss 0.305965
+Arm B step 220 train_loss 0.301081
+Arm B step 230 train_loss 0.296499
+Arm B step 240 train_loss 0.292187
+Arm B step 250 train_loss 0.288118
+Arm B step 260 train_loss 0.284271
+Arm B step 270 train_loss 0.280623
+Arm B step 280 train_loss 0.277159
+Arm B step 290 train_loss 0.273861
+Arm B step 300 train_loss 0.270718
+========================================================================
+Evaluation explanation:
+After the full 300-step training, each arm's learned weight matrix is
+frozen and applied to the fixed 200-sample test set. Test accuracy is the
+fraction of argmax predictions that match the true class labels. From the
+two accuracies we compute eff.efficiency_ratio = acc_at_25 / acc_at_100.
+A ratio below 1 shows that more data helps; the magnitude tells us how
+much classification quality is lost when only 100 of the 400 labels are
+used. The wallclock time eff.train_s covers only the two training loops,
+so it is a direct measure of the computational cost of the comparison.
+========================================================================
+Arm A (100 samples) test accuracy: 0.890000
+Arm B (400 samples) test accuracy: 0.970000
+Efficiency ratio (25%/100%): 0.917526
+Total training wallclock seconds: 0.015440
+Figures saved: Figure_1.png (loss curves), Figure_2.png (accuracy comparison).

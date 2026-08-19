@@ -1,0 +1,188 @@
+{
+  "schema_version": "1.1",
+  "code_path": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/artifacts/gate1/attempt_10/experiment.py",
+  "code_sha256": "306a2eafd3202b0dd5f3cb984543437b80097d77029d6b74be62cafd3f0b9006",
+  "metrics": {
+    "eff.acc_at_25": {
+      "key": "eff.acc_at_25",
+      "value": 0.775,
+      "unit": null,
+      "lineno": 119,
+      "source_line": "    record_result(\"eff.acc_at_25\", acc_at_25)",
+      "call_count": 1,
+      "observations": [
+        {
+          "value": 0.775,
+          "lineno": 119
+        }
+      ],
+      "observations_truncated": false
+    },
+    "eff.acc_at_100": {
+      "key": "eff.acc_at_100",
+      "value": 0.81,
+      "unit": null,
+      "lineno": 120,
+      "source_line": "    record_result(\"eff.acc_at_100\", acc_at_100)",
+      "call_count": 1,
+      "observations": [
+        {
+          "value": 0.81,
+          "lineno": 120
+        }
+      ],
+      "observations_truncated": false
+    },
+    "eff.efficiency_ratio": {
+      "key": "eff.efficiency_ratio",
+      "value": 0.95679012345679,
+      "unit": null,
+      "lineno": 121,
+      "source_line": "    record_result(\"eff.efficiency_ratio\", efficiency_ratio)",
+      "call_count": 1,
+      "observations": [
+        {
+          "value": 0.95679012345679,
+          "lineno": 121
+        }
+      ],
+      "observations_truncated": false
+    },
+    "eff.train_s": {
+      "key": "eff.train_s",
+      "value": 0.09187144700263161,
+      "unit": null,
+      "lineno": 122,
+      "source_line": "    record_result(\"eff.train_s\", train_s)",
+      "call_count": 1,
+      "observations": [
+        {
+          "value": 0.09187144700263161,
+          "lineno": 122
+        }
+      ],
+      "observations_truncated": false
+    },
+    "eff.saturation.asymptotic_acc": {
+      "key": "eff.saturation.asymptotic_acc",
+      "value": 0.9087069893405808,
+      "unit": null,
+      "lineno": 450,
+      "source_line": "record_result(\"eff.saturation.asymptotic_acc\", asymptotic_acc)",
+      "call_count": 1,
+      "observations": [
+        {
+          "value": 0.9087069893405808,
+          "lineno": 450
+        }
+      ],
+      "observations_truncated": false
+    },
+    "eff.saturation.beta": {
+      "key": "eff.saturation.beta",
+      "value": 0.636947568338921,
+      "unit": null,
+      "lineno": 451,
+      "source_line": "record_result(\"eff.saturation.beta\", beta_hat)",
+      "call_count": 1,
+      "observations": [
+        {
+          "value": 0.636947568338921,
+          "lineno": 451
+        }
+      ],
+      "observations_truncated": false
+    },
+    "eff.saturation.gamma": {
+      "key": "eff.saturation.gamma",
+      "value": -0.3200000000004053,
+      "unit": null,
+      "lineno": 452,
+      "source_line": "record_result(\"eff.saturation.gamma\", gamma_hat)",
+      "call_count": 1,
+      "observations": [
+        {
+          "value": -0.3200000000004053,
+          "lineno": 452
+        }
+      ],
+      "observations_truncated": false
+    },
+    "eff.saturation.fit_rmse": {
+      "key": "eff.saturation.fit_rmse",
+      "value": 0.016606850493069477,
+      "unit": null,
+      "lineno": 453,
+      "source_line": "record_result(\"eff.saturation.fit_rmse\", fit_rmse_lc)",
+      "call_count": 1,
+      "observations": [
+        {
+          "value": 0.016606850493069477,
+          "lineno": 453
+        }
+      ],
+      "observations_truncated": false
+    },
+    "eff.saturation.stss": {
+      "key": "eff.saturation.stss",
+      "value": 3832.3764247390495,
+      "unit": null,
+      "lineno": 454,
+      "source_line": "record_result(\"eff.saturation.stss\", stss_hat)",
+      "call_count": 1,
+      "observations": [
+        {
+          "value": 3832.3764247390495,
+          "lineno": 454
+        }
+      ],
+      "observations_truncated": false
+    },
+    "eff.acc_gap": {
+      "key": "eff.acc_gap",
+      "value": 0.03500000000000003,
+      "unit": null,
+      "lineno": 455,
+      "source_line": "record_result(\"eff.acc_gap\", acc_gap)",
+      "call_count": 1,
+      "observations": [
+        {
+          "value": 0.03500000000000003,
+          "lineno": 455
+        }
+      ],
+      "observations_truncated": false
+    }
+  },
+  "metadata": {
+    "seed": 42,
+    "model": "multinomial_logistic_regression_numpy",
+    "optimizer": "full_batch_gradient_descent",
+    "learning_rate": 0.1,
+    "num_steps": 1500,
+    "dataset": "synthetic_8d_3class_balanced_seed42"
+  },
+  "initial_namespace": [
+    "__builtins__",
+    "__doc__",
+    "__file__",
+    "__loader__",
+    "__name__",
+    "__package__",
+    "__spec__",
+    "record_metadata",
+    "record_result"
+  ],
+  "environment": {
+    "python": "3.11.11",
+    "executable": "/home/kesh/AgentLaboratory-Gemini/.venv/bin/python",
+    "platform": "Linux-7.0.12-arch1-1-x86_64-with-glibc2.43",
+    "cwd": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/work",
+    "pythonhashseed": null,
+    "numpy_version": "2.0.2",
+    "scipy_version": "1.13.1",
+    "pandas_version": "2.2.3",
+    "matplotlib_version": "3.9.2"
+  },
+  "exception": null
+}

@@ -1,0 +1,288 @@
+{
+  "scenarios": [
+    {
+      "scenario": "archived-run",
+      "outcome": "gate_failure",
+      "expected_outcome": "gate_failure",
+      "turns_used": 3,
+      "executions": 3,
+      "upstream_blind_turns": [
+        1,
+        2
+      ],
+      "fell_back": false,
+      "ledger": "/home/kesh/gates/reports/evidence/gate1_loop_repeat_3/archived-run/gate_artifacts/divergence.jsonl",
+      "artifacts": "/home/kesh/gates/reports/evidence/gate1_loop_repeat_3/archived-run/gate_artifacts",
+      "problems": [],
+      "turns": [
+        {
+          "index": 0,
+          "passed": false,
+          "rejections_after": 1,
+          "executions": [
+            {
+              "label": "NameError inside forward()",
+              "attempt": 1,
+              "verdict": "FAIL",
+              "failed": [
+                "static.no_unbound_names"
+              ],
+              "warned": [],
+              "upstream_detected_failure": true,
+              "marker_visible_at": 22
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "passed": false,
+          "rejections_after": 2,
+          "executions": [
+            {
+              "label": "crash after 3,000 characters of epoch logging",
+              "attempt": 2,
+              "verdict": "FAIL",
+              "failed": [
+                "exec.exit_code_zero",
+                "exec.no_uncaught_exception",
+                "results.contract_present"
+              ],
+              "warned": [
+                "env.seed_recorded"
+              ],
+              "upstream_detected_failure": false,
+              "marker_visible_at": 3442
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "passed": false,
+          "rejections_after": 3,
+          "executions": [
+            {
+              "label": "runs clean, prints the numbers, records nothing",
+              "attempt": 3,
+              "verdict": "FAIL",
+              "failed": [
+                "results.contract_present"
+              ],
+              "warned": [
+                "env.seed_recorded"
+              ],
+              "upstream_detected_failure": false,
+              "marker_visible_at": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "recovers",
+      "outcome": "pass",
+      "expected_outcome": "pass",
+      "turns_used": 3,
+      "executions": 3,
+      "upstream_blind_turns": [
+        1
+      ],
+      "fell_back": false,
+      "ledger": "/home/kesh/gates/reports/evidence/gate1_loop_repeat_3/recovers/gate_artifacts/divergence.jsonl",
+      "artifacts": "/home/kesh/gates/reports/evidence/gate1_loop_repeat_3/recovers/gate_artifacts",
+      "problems": [],
+      "turns": [
+        {
+          "index": 0,
+          "passed": false,
+          "rejections_after": 1,
+          "executions": [
+            {
+              "label": "NameError inside forward()",
+              "attempt": 1,
+              "verdict": "FAIL",
+              "failed": [
+                "static.no_unbound_names"
+              ],
+              "warned": [],
+              "upstream_detected_failure": true,
+              "marker_visible_at": 22
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "passed": false,
+          "rejections_after": 2,
+          "executions": [
+            {
+              "label": "reads the feedback, invents the numbers instead",
+              "attempt": 2,
+              "verdict": "FAIL",
+              "failed": [
+                "results.values_computed"
+              ],
+              "warned": [],
+              "upstream_detected_failure": false,
+              "marker_visible_at": null
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "passed": true,
+          "rejections_after": 0,
+          "executions": [
+            {
+              "label": "measures and records every declared key",
+              "attempt": 3,
+              "verdict": "PASS",
+              "failed": [],
+              "warned": [],
+              "upstream_detected_failure": null,
+              "marker_visible_at": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "inner-repair",
+      "outcome": "pass",
+      "expected_outcome": "pass",
+      "turns_used": 1,
+      "executions": 3,
+      "upstream_blind_turns": [],
+      "fell_back": false,
+      "ledger": "/home/kesh/gates/reports/evidence/gate1_loop_repeat_3/inner-repair/gate_artifacts/divergence.jsonl",
+      "artifacts": "/home/kesh/gates/reports/evidence/gate1_loop_repeat_3/inner-repair/gate_artifacts",
+      "problems": [],
+      "turns": [
+        {
+          "index": 0,
+          "passed": true,
+          "rejections_after": 0,
+          "executions": [
+            {
+              "label": "submitted with a syntax error",
+              "attempt": 1,
+              "verdict": "FAIL",
+              "failed": [
+                "static.syntax_valid"
+              ],
+              "warned": [],
+              "upstream_detected_failure": true,
+              "marker_visible_at": 22
+            },
+            {
+              "label": "repair loop fixes the syntax; ZeroDivisionError remains",
+              "attempt": 2,
+              "verdict": "FAIL",
+              "failed": [
+                "exec.exit_code_zero",
+                "exec.no_uncaught_exception",
+                "results.contract_present"
+              ],
+              "warned": [],
+              "upstream_detected_failure": true,
+              "marker_visible_at": 22
+            },
+            {
+              "label": "repair loop fixes the arithmetic",
+              "attempt": 3,
+              "verdict": "PASS",
+              "failed": [],
+              "warned": [],
+              "upstream_detected_failure": null,
+              "marker_visible_at": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "warn-tier",
+      "outcome": "pass",
+      "expected_outcome": "pass",
+      "turns_used": 1,
+      "executions": 1,
+      "upstream_blind_turns": [],
+      "fell_back": false,
+      "ledger": "/home/kesh/gates/reports/evidence/gate1_loop_repeat_3/warn-tier/gate_artifacts/divergence.jsonl",
+      "artifacts": "/home/kesh/gates/reports/evidence/gate1_loop_repeat_3/warn-tier/gate_artifacts",
+      "problems": [],
+      "turns": [
+        {
+          "index": 0,
+          "passed": true,
+          "rejections_after": 0,
+          "executions": [
+            {
+              "label": "caught exception, NaN warning, CPU fallback, no seed",
+              "attempt": 1,
+              "verdict": "PASS",
+              "failed": [],
+              "warned": [
+                "env.seed_recorded",
+                "exec.no_swallowed_traceback",
+                "logs.no_error_signals",
+                "results.non_degenerate"
+              ],
+              "upstream_detected_failure": null,
+              "marker_visible_at": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "namespace-leak",
+      "outcome": "pass",
+      "expected_outcome": "pass",
+      "turns_used": 2,
+      "executions": 2,
+      "upstream_blind_turns": [],
+      "fell_back": false,
+      "ledger": "/home/kesh/gates/reports/evidence/gate1_loop_repeat_3/namespace-leak/gate_artifacts/divergence.jsonl",
+      "artifacts": "/home/kesh/gates/reports/evidence/gate1_loop_repeat_3/namespace-leak/gate_artifacts",
+      "problems": [],
+      "turns": [
+        {
+          "index": 0,
+          "passed": true,
+          "rejections_after": 0,
+          "executions": [
+            {
+              "label": "binds leaked_accuracy, passes",
+              "attempt": 1,
+              "verdict": "PASS",
+              "failed": [],
+              "warned": [],
+              "upstream_detected_failure": null,
+              "marker_visible_at": null
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "passed": false,
+          "rejections_after": 1,
+          "executions": [
+            {
+              "label": "reads the previous run's variable",
+              "attempt": 2,
+              "verdict": "FAIL",
+              "failed": [
+                "exec.exit_code_zero",
+                "exec.no_uncaught_exception",
+                "results.contract_present"
+              ],
+              "warned": [],
+              "upstream_detected_failure": true,
+              "marker_visible_at": 22
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

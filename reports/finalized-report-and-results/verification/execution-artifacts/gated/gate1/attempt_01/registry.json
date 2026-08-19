@@ -1,0 +1,260 @@
+{
+  "schema_version": "1.1",
+  "gate": "GATE 1 \u2014 EXECUTION VALIDITY",
+  "verdict": "PASS",
+  "citable": true,
+  "attempt": 1,
+  "rewrite": 0,
+  "task_ref_sha256": "20084f297c560b4a",
+  "run": {
+    "run_id": "9533c14b35a034be",
+    "code_sha256": "710d7bebe87ff5392d43635de2d9d902655812c4c868180877af00bf01cc8262",
+    "code_sha256_as_executed": "710d7bebe87ff5392d43635de2d9d902655812c4c868180877af00bf01cc8262",
+    "code_sha256_verified": true,
+    "argv": [
+      "/home/kesh/AgentLaboratory-Gemini/.venv/bin/python",
+      "/home/kesh/gates/gates/harness.py",
+      "research_dir/gate_artifacts/gate1/attempt_01/experiment.py",
+      "research_dir/gate_artifacts/gate1/attempt_01"
+    ],
+    "started_at": "2026-08-15T23:32:19.805165+00:00",
+    "finished_at": "2026-08-15T23:32:27.809075+00:00",
+    "duration_s": 8.004,
+    "exit_code": 0,
+    "artifact_dir": "research_dir/gate_artifacts/gate1/attempt_01",
+    "stdout_path": "research_dir/gate_artifacts/gate1/attempt_01/stdout.txt",
+    "stderr_path": "research_dir/gate_artifacts/gate1/attempt_01/stderr.txt",
+    "results_json_path": "research_dir/gate_artifacts/gate1/attempt_01/results.json",
+    "seed": 42,
+    "metadata": {
+      "seed": 42
+    },
+    "environment": {
+      "python": "3.11.11",
+      "executable": "/home/kesh/AgentLaboratory-Gemini/.venv/bin/python",
+      "platform": "Linux-7.0.12-arch1-1-x86_64-with-glibc2.43",
+      "cwd": "/home/kesh/AgentLaboratory-Gemini/full_ablation_runs/deepseek_common_20260815/gated",
+      "pythonhashseed": null,
+      "numpy_version": "2.0.2",
+      "scipy_version": "1.13.1",
+      "pandas_version": "2.2.3",
+      "matplotlib_version": "3.9.2"
+    }
+  },
+  "values": {
+    "eff.acc_at_25": {
+      "trace_id": "b373cb49240da5a5",
+      "value": 0.89,
+      "unit": "ratio",
+      "type": "float",
+      "provenance": {
+        "run_id": "9533c14b35a034be",
+        "code_sha256": "710d7bebe87ff5392d43635de2d9d902655812c4c868180877af00bf01cc8262",
+        "lineno": 191,
+        "source_line": "record_result(\"eff.acc_at_25\", acc_at_25, unit=\"ratio\")",
+        "arg_kind": "computed",
+        "call_count": 2,
+        "observations": [
+          {
+            "value": 0.89,
+            "lineno": 77
+          },
+          {
+            "value": 0.89,
+            "lineno": 191
+          }
+        ],
+        "observations_truncated": false
+      },
+      "chain": [
+        {
+          "link": "task",
+          "ref": "20084f297c560b4a",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "command",
+          "ref": "9533c14b35a034be",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "log",
+          "ref": "research_dir/gate_artifacts/gate1/attempt_01/stdout.txt",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "value",
+          "ref": "b373cb49240da5a5",
+          "resolved": true,
+          "why": null
+        }
+      ],
+      "chain_complete": true
+    },
+    "eff.acc_at_100": {
+      "trace_id": "72746952dc61d46a",
+      "value": 0.97,
+      "unit": "ratio",
+      "type": "float",
+      "provenance": {
+        "run_id": "9533c14b35a034be",
+        "code_sha256": "710d7bebe87ff5392d43635de2d9d902655812c4c868180877af00bf01cc8262",
+        "lineno": 192,
+        "source_line": "record_result(\"eff.acc_at_100\", acc_at_100, unit=\"ratio\")",
+        "arg_kind": "computed",
+        "call_count": 2,
+        "observations": [
+          {
+            "value": 0.97,
+            "lineno": 78
+          },
+          {
+            "value": 0.97,
+            "lineno": 192
+          }
+        ],
+        "observations_truncated": false
+      },
+      "chain": [
+        {
+          "link": "task",
+          "ref": "20084f297c560b4a",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "command",
+          "ref": "9533c14b35a034be",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "log",
+          "ref": "research_dir/gate_artifacts/gate1/attempt_01/stdout.txt",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "value",
+          "ref": "72746952dc61d46a",
+          "resolved": true,
+          "why": null
+        }
+      ],
+      "chain_complete": true
+    },
+    "eff.efficiency_ratio": {
+      "trace_id": "1e60291eccddc145",
+      "value": 0.9175257731958764,
+      "unit": "ratio",
+      "type": "float",
+      "provenance": {
+        "run_id": "9533c14b35a034be",
+        "code_sha256": "710d7bebe87ff5392d43635de2d9d902655812c4c868180877af00bf01cc8262",
+        "lineno": 193,
+        "source_line": "record_result(\"eff.efficiency_ratio\", efficiency_ratio, unit=\"ratio\")",
+        "arg_kind": "computed",
+        "call_count": 2,
+        "observations": [
+          {
+            "value": 0.9175257731958764,
+            "lineno": 79
+          },
+          {
+            "value": 0.9175257731958764,
+            "lineno": 193
+          }
+        ],
+        "observations_truncated": false
+      },
+      "chain": [
+        {
+          "link": "task",
+          "ref": "20084f297c560b4a",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "command",
+          "ref": "9533c14b35a034be",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "log",
+          "ref": "research_dir/gate_artifacts/gate1/attempt_01/stdout.txt",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "value",
+          "ref": "1e60291eccddc145",
+          "resolved": true,
+          "why": null
+        }
+      ],
+      "chain_complete": true
+    },
+    "eff.train_s": {
+      "trace_id": "3efed49a6563b2f9",
+      "value": 0.016058803998021176,
+      "unit": "seconds",
+      "type": "float",
+      "provenance": {
+        "run_id": "9533c14b35a034be",
+        "code_sha256": "710d7bebe87ff5392d43635de2d9d902655812c4c868180877af00bf01cc8262",
+        "lineno": 194,
+        "source_line": "record_result(\"eff.train_s\", train_s, unit=\"seconds\")",
+        "arg_kind": "computed",
+        "call_count": 2,
+        "observations": [
+          {
+            "value": 0.022257949000049848,
+            "lineno": 80
+          },
+          {
+            "value": 0.016058803998021176,
+            "lineno": 194
+          }
+        ],
+        "observations_truncated": false
+      },
+      "chain": [
+        {
+          "link": "task",
+          "ref": "20084f297c560b4a",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "command",
+          "ref": "9533c14b35a034be",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "log",
+          "ref": "research_dir/gate_artifacts/gate1/attempt_01/stdout.txt",
+          "resolved": true,
+          "why": null
+        },
+        {
+          "link": "value",
+          "ref": "3efed49a6563b2f9",
+          "resolved": true,
+          "why": null
+        }
+      ],
+      "chain_complete": true
+    }
+  },
+  "chain_integrity": {
+    "values": 4,
+    "complete_chains": 4,
+    "rate": 1.0,
+    "missing_links": {}
+  }
+}

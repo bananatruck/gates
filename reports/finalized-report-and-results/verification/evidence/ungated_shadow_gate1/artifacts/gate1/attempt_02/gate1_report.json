@@ -1,0 +1,340 @@
+{
+  "schema_version": "1.1",
+  "gate": "GATE 1 \u2014 EXECUTION VALIDITY",
+  "verdict": "PASS",
+  "attempt": 2,
+  "rewrite": 0,
+  "max_attempts": 3,
+  "code_sha256": "00e6ea771ad22f3b7f84ff4dfacb8182b9318aa9fa919addbcaf1f94dcf33571",
+  "artifact_dir": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/artifacts/gate1/attempt_02",
+  "checks": [
+    {
+      "id": "static.syntax_valid",
+      "passed": true,
+      "severity": "FAIL",
+      "message": "compiles",
+      "evidence": {}
+    },
+    {
+      "id": "static.no_unbound_names",
+      "passed": true,
+      "severity": "FAIL",
+      "message": "every referenced name resolves",
+      "evidence": {}
+    },
+    {
+      "id": "static.no_banned_calls",
+      "passed": true,
+      "severity": "FAIL",
+      "message": "no calls that forge an exit code",
+      "evidence": {}
+    },
+    {
+      "id": "results.contract_not_shadowed",
+      "passed": true,
+      "severity": "FAIL",
+      "message": "the harness recording API is not redefined",
+      "evidence": {}
+    },
+    {
+      "id": "exec.completed_within_budget",
+      "passed": true,
+      "severity": "FAIL",
+      "message": "finished in 3.2s",
+      "evidence": {
+        "timeout_s": 900,
+        "duration_s": 3.228
+      }
+    },
+    {
+      "id": "exec.exit_code_zero",
+      "passed": true,
+      "severity": "FAIL",
+      "message": "exited 0",
+      "evidence": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "exec.no_uncaught_exception",
+      "passed": true,
+      "severity": "FAIL",
+      "message": "ran to completion",
+      "evidence": {}
+    },
+    {
+      "id": "env.code_identity",
+      "passed": true,
+      "severity": "FAIL",
+      "message": "executed source matches the recorded hash (00e6ea771ad2)",
+      "evidence": {
+        "expected": "00e6ea771ad22f3b7f84ff4dfacb8182b9318aa9fa919addbcaf1f94dcf33571",
+        "as_executed": "00e6ea771ad22f3b7f84ff4dfacb8182b9318aa9fa919addbcaf1f94dcf33571"
+      }
+    },
+    {
+      "id": "exec.no_swallowed_traceback",
+      "passed": true,
+      "severity": "WARN",
+      "message": "no caught-and-ignored traceback in the logs",
+      "evidence": {}
+    },
+    {
+      "id": "logs.no_error_signals",
+      "passed": true,
+      "severity": "WARN",
+      "message": "no error, warning or device-failure signals in the logs",
+      "evidence": {}
+    },
+    {
+      "id": "logs.model_error_signals",
+      "passed": true,
+      "severity": "INFO",
+      "message": "the log scan could not run, so error signals outside the deterministic pattern set were not looked for",
+      "evidence": {
+        "error": "no model was supplied",
+        "degraded": true
+      }
+    },
+    {
+      "id": "env.clean_namespace",
+      "passed": true,
+      "severity": "FAIL",
+      "message": "started from an empty namespace",
+      "evidence": {
+        "unexpected": []
+      }
+    },
+    {
+      "id": "env.seed_recorded",
+      "passed": true,
+      "severity": "WARN",
+      "message": "seed recorded (42)",
+      "evidence": {
+        "seed": 42
+      }
+    },
+    {
+      "id": "results.contract_present",
+      "passed": true,
+      "severity": "FAIL",
+      "message": "4 metric(s) recorded",
+      "evidence": {
+        "keys": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ]
+      }
+    },
+    {
+      "id": "results.expected_keys_present",
+      "passed": true,
+      "severity": "FAIL",
+      "message": "every declared key was recorded",
+      "evidence": {
+        "missing": [],
+        "recorded": [
+          "eff.acc_at_100",
+          "eff.acc_at_25",
+          "eff.efficiency_ratio",
+          "eff.train_s"
+        ]
+      }
+    },
+    {
+      "id": "results.values_computed",
+      "passed": true,
+      "severity": "FAIL",
+      "message": "every recorded value is the result of a computation",
+      "evidence": {
+        "unresolved": []
+      }
+    },
+    {
+      "id": "results.values_finite",
+      "passed": true,
+      "severity": "FAIL",
+      "message": "all values are finite",
+      "evidence": {
+        "keys": []
+      }
+    },
+    {
+      "id": "results.single_observation",
+      "passed": true,
+      "severity": "WARN",
+      "message": "every recorded key has one unambiguous value",
+      "evidence": {}
+    },
+    {
+      "id": "results.non_degenerate",
+      "passed": true,
+      "severity": "WARN",
+      "message": "no degenerate values",
+      "evidence": {
+        "suspicious": []
+      }
+    },
+    {
+      "id": "output.untruncated",
+      "passed": true,
+      "severity": "INFO",
+      "message": "15,456 bytes of stdout and 0 bytes of stderr captured in full",
+      "evidence": {
+        "stdout_bytes": 15456,
+        "stderr_bytes": 0,
+        "stdout_path": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/artifacts/gate1/attempt_02/stdout.txt",
+        "stderr_path": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/artifacts/gate1/attempt_02/stderr.txt"
+      }
+    },
+    {
+      "id": "env.provenance",
+      "passed": true,
+      "severity": "INFO",
+      "message": "execution environment recorded",
+      "evidence": {
+        "python": "3.11.11",
+        "executable": "/home/kesh/AgentLaboratory-Gemini/.venv/bin/python",
+        "platform": "Linux-7.0.12-arch1-1-x86_64-with-glibc2.43",
+        "cwd": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/work",
+        "pythonhashseed": null,
+        "numpy_version": "2.0.2",
+        "scipy_version": "1.13.1",
+        "pandas_version": "2.2.3",
+        "matplotlib_version": "3.9.2"
+      }
+    }
+  ],
+  "execution": {
+    "run_id": "036f9809add9b354",
+    "argv": [
+      "/home/kesh/AgentLaboratory-Gemini/.venv/bin/python",
+      "/home/kesh/gates/gates/harness.py",
+      "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/artifacts/gate1/attempt_02/experiment.py",
+      "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/artifacts/gate1/attempt_02"
+    ],
+    "started_at": "2026-08-16T02:53:16.062290+00:00",
+    "finished_at": "2026-08-16T02:53:19.289885+00:00",
+    "code_sha256": "00e6ea771ad22f3b7f84ff4dfacb8182b9318aa9fa919addbcaf1f94dcf33571",
+    "exit_code": 0,
+    "timed_out": false,
+    "duration_s": 3.228,
+    "stdout_path": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/artifacts/gate1/attempt_02/stdout.txt",
+    "stderr_path": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/artifacts/gate1/attempt_02/stderr.txt",
+    "stdout_bytes": 15456,
+    "stderr_bytes": 0,
+    "truncated": false,
+    "exception": null,
+    "metrics": {
+      "eff.acc_at_25": {
+        "key": "eff.acc_at_25",
+        "value": 0.775,
+        "unit": null,
+        "lineno": 92,
+        "source_line": "record_result(\"eff.acc_at_25\", acc_at_25)",
+        "call_count": 1,
+        "arg_kind": "computed",
+        "observations": [
+          {
+            "value": 0.775,
+            "lineno": 92
+          }
+        ],
+        "observations_truncated": false,
+        "trace_id": "ad8660058f8de2ad"
+      },
+      "eff.acc_at_100": {
+        "key": "eff.acc_at_100",
+        "value": 0.81,
+        "unit": null,
+        "lineno": 93,
+        "source_line": "record_result(\"eff.acc_at_100\", acc_at_100)",
+        "call_count": 1,
+        "arg_kind": "computed",
+        "observations": [
+          {
+            "value": 0.81,
+            "lineno": 93
+          }
+        ],
+        "observations_truncated": false,
+        "trace_id": "a1e7e6d6a18c26e6"
+      },
+      "eff.efficiency_ratio": {
+        "key": "eff.efficiency_ratio",
+        "value": 0.95679012345679,
+        "unit": null,
+        "lineno": 94,
+        "source_line": "record_result(\"eff.efficiency_ratio\", efficiency_ratio)",
+        "call_count": 1,
+        "arg_kind": "computed",
+        "observations": [
+          {
+            "value": 0.95679012345679,
+            "lineno": 94
+          }
+        ],
+        "observations_truncated": false,
+        "trace_id": "a1038cf27309e733"
+      },
+      "eff.train_s": {
+        "key": "eff.train_s",
+        "value": 0.10251651499856962,
+        "unit": null,
+        "lineno": 95,
+        "source_line": "record_result(\"eff.train_s\", train_s)",
+        "call_count": 1,
+        "arg_kind": "computed",
+        "observations": [
+          {
+            "value": 0.10251651499856962,
+            "lineno": 95
+          }
+        ],
+        "observations_truncated": false,
+        "trace_id": "0a434c66f506f9c7"
+      }
+    },
+    "metadata": {
+      "seed": 42
+    },
+    "initial_namespace": [
+      "__builtins__",
+      "__doc__",
+      "__file__",
+      "__loader__",
+      "__name__",
+      "__package__",
+      "__spec__",
+      "record_metadata",
+      "record_result"
+    ],
+    "environment": {
+      "python": "3.11.11",
+      "executable": "/home/kesh/AgentLaboratory-Gemini/.venv/bin/python",
+      "platform": "Linux-7.0.12-arch1-1-x86_64-with-glibc2.43",
+      "cwd": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/work",
+      "pythonhashseed": null,
+      "numpy_version": "2.0.2",
+      "scipy_version": "1.13.1",
+      "pandas_version": "2.2.3",
+      "matplotlib_version": "3.9.2"
+    },
+    "results_json_path": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/artifacts/gate1/attempt_02/results.json",
+    "harness_error": null
+  },
+  "model": {
+    "calls": 1,
+    "failures": 1,
+    "degraded": true,
+    "latency_s": 0.0,
+    "prompt_chars": 0,
+    "completion_chars": 0,
+    "errors": [
+      "no model was supplied"
+    ]
+  },
+  "generated_fixes": null
+}

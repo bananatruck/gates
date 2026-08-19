@@ -1,0 +1,93 @@
+{
+  "schema_version": "1.1",
+  "code_path": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/artifacts/gate1/attempt_06/experiment.py",
+  "code_sha256": "d642d919ae770cecb9d81cc4f70d280b37361d7cebd3a3ffa6967ce5b2f298b9",
+  "metrics": {
+    "eff.acc_at_25": {
+      "key": "eff.acc_at_25",
+      "value": 0.775,
+      "unit": null,
+      "lineno": 92,
+      "source_line": "record_result(\"eff.acc_at_25\", acc_at_25)",
+      "call_count": 1,
+      "observations": [
+        {
+          "value": 0.775,
+          "lineno": 92
+        }
+      ],
+      "observations_truncated": false
+    },
+    "eff.acc_at_100": {
+      "key": "eff.acc_at_100",
+      "value": 0.81,
+      "unit": null,
+      "lineno": 93,
+      "source_line": "record_result(\"eff.acc_at_100\", acc_at_100)",
+      "call_count": 1,
+      "observations": [
+        {
+          "value": 0.81,
+          "lineno": 93
+        }
+      ],
+      "observations_truncated": false
+    },
+    "eff.efficiency_ratio": {
+      "key": "eff.efficiency_ratio",
+      "value": 0.95679012345679,
+      "unit": null,
+      "lineno": 94,
+      "source_line": "record_result(\"eff.efficiency_ratio\", efficiency_ratio)",
+      "call_count": 1,
+      "observations": [
+        {
+          "value": 0.95679012345679,
+          "lineno": 94
+        }
+      ],
+      "observations_truncated": false
+    },
+    "eff.train_s": {
+      "key": "eff.train_s",
+      "value": 0.10038962099861237,
+      "unit": null,
+      "lineno": 95,
+      "source_line": "record_result(\"eff.train_s\", train_s)",
+      "call_count": 1,
+      "observations": [
+        {
+          "value": 0.10038962099861237,
+          "lineno": 95
+        }
+      ],
+      "observations_truncated": false
+    }
+  },
+  "metadata": {
+    "seed": 42
+  },
+  "initial_namespace": [
+    "__builtins__",
+    "__doc__",
+    "__file__",
+    "__loader__",
+    "__name__",
+    "__package__",
+    "__spec__",
+    "record_metadata",
+    "record_result"
+  ],
+  "environment": {
+    "python": "3.11.11",
+    "executable": "/home/kesh/AgentLaboratory-Gemini/.venv/bin/python",
+    "platform": "Linux-7.0.12-arch1-1-x86_64-with-glibc2.43",
+    "cwd": "/home/kesh/gates/reports/evidence/ungated_shadow_gate1/work",
+    "pythonhashseed": null,
+    "numpy_version": "2.0.2",
+    "scipy_version": "1.13.1",
+    "pandas_version": "2.2.3",
+    "matplotlib_version": "3.9.2"
+  },
+  "exception": null
+}

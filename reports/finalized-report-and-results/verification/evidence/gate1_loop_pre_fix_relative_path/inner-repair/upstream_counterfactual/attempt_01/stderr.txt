@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/home/kesh/gates/gates/harness.py", line 222, in <module>
+    sys.exit(main(sys.argv))
+             ^^^^^^^^^^^^^^
+  File "/home/kesh/gates/gates/harness.py", line 153, in main
+    with open(_CODE_PATH, "r", encoding="utf-8") as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/kesh/gates/reports/evidence/gate1_loop_repeat_1/inner-repair/reports/evidence/gate1_loop_repeat_1/inner-repair/upstream_counterfactual/attempt_01/experiment.py'

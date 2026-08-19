@@ -1,0 +1,265 @@
+2026-08-15 16:25:25.608003: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-08-15 16:25:25.618797: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:477] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+E0000 00:00:1786836325.630676  336884 cuda_dnn.cc:8310] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+E0000 00:00:1786836325.634024  336884 cuda_blas.cc:1418] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+2026-08-15 16:25:25.647960: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+Using deepseek-v4-flash as the backend LLM for the agents.
+Directory research_dir does not exist or is not a directory.
+**************************************************
+Beginning phase: literature review
+**************************************************
+&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+Beginning subtask: literature review
+&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ literature review ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+```SUMMARY
+data efficiency machine learning
+``` 
+~~~~~~~~~~~
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ literature review ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+```SUMMARY
+learning curves training data size
+``` 
+~~~~~~~~~~~
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ literature review ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+```FULL_TEXT
+2201.12150v2
+``` 
+~~~~~~~~~~~
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ literature review ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+```ADD_PAPER
+2201.12150v2
+This survey reviews learning-curve methods for decision making in supervised machine learning, directly relevant to data-efficiency experiments such as comparing a model trained on 25% vs 100% of a training pool. It formalizes sample-wise and iteration-wise learning curves, and discusses parametric extrapolation models (notably the inverse power law) used to predict performance at larger training-set sizes from smaller subsamples. The authors contribute a three-axis framework categorising approaches by decision-making situation (data acquisition, early stopping, early discarding), technical question addressed, and data resources used. The survey reports that most sample-wise curves are well-behaved/convex in practice, and that while inverse-power-law extrapolation is widely used, no single model uniformly dominates across settings; both simple extrapolation and meta-learning approaches have complementary strengths. This is highly relevant to understanding how test accuracy and efficiency ratio vary with training sample size in logistic-regression experiments.
+``` 
+~~~~~~~~~~~
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ literature review ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+```SUMMARY
+learning curve extrapolation classification accuracy
+``` 
+~~~~~~~~~~~
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ literature review ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+```SUMMARY
+power law learning curves training set size
+``` 
+~~~~~~~~~~~
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ literature review ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+```SUMMARY
+learning curve extrapolation methods
+``` 
+~~~~~~~~~~~
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ literature review ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+```SUMMARY
+scaling laws generalization
+``` 
+~~~~~~~~~~~
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ literature review ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+```FULL_TEXT
+2412.07942v1
+``` 
+~~~~~~~~~~~
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ literature review ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+```ADD_PAPER
+2412.07942v1
+This paper proposes a percolation-theory model of natural data distributions to explain the universality of empirical neural scaling laws. It assumes context-dependent target functions and general-purpose learning mechanisms, then shows that at the percolation threshold the data distribution decomposes into a power-law (Zipf) distribution of discrete subtasks (quanta) corresponding to percolation clusters, while above threshold a dominant low-dimensional manifold structure emerges. This unifies prior theories: the subcritical quantum regime is associated with the quantization model (Michaud et al. 2024) and yields model scaling exponent alpha and data scaling exponent alpha/(1+alpha), while the supercritical regime corresponds to manifold approximation (Sharma & Kaplan 2022) with exponent c/D. For d>=6 the theory predicts alpha=1 and for ReLU networks c/D=1, giving model scaling L ~ N^{-1} and data scaling L ~ D^{-0.5}. Experiments trained nearest-neighbor regression models with a Bayesian prior on datasets generated from critical percolation clusters on a Bethe lattice with d=100, using 50 random seeds. Each cluster's individual scaling curves were fit with a plateau (P<m) followed by (P/m)^{-c/D}, and the measured model and data scaling curves were consistent with the theoretical predictions, although the fits were nonparametric approximations rather than neural networks. This work is relevant to data-efficiency research because it provides a theoretical account of how learning-curve scaling exponents and efficiency ratios relate to dataset structure, model capacity, and training sample count.
+``` 
+~~~~~~~~~~~
+
+Subtask 'literature review' completed in 115.95 seconds.
+**************************************************
+Beginning phase: plan formulation
+**************************************************
+&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+Beginning subtask: plan formulation
+&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ plan formulation ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Postdoc:  ```PLAN
+Plan for Controlled Gate 1 Validation — Data Efficiency
+
+I propose two tightly coupled experiments that satisfy the reproducibility gate while directly using the two literature anchors (the learning-curve survey, arXiv 2201.12150, and the percolation-theory scaling model, arXiv 2412.07942).
+
+## Experiment 1 (Gate 1 Validation, required): 25% vs 100% Multinomial Logistic Regression on a Synthetic 3-Class Dataset
+
+### Dataset (numpy-only, reproducible)
+- Use an explicit integer seed: `seed = 42`.
+- Create `numpy.random.default_rng(42)` so every draw is reproducible.
+- Generate a synthetic 3-class classification dataset with `600` samples and `8` features:
+  - Class 0 center: `rng.normal(0, 1, size=8)`
+  - Class 1 center: `rng.normal(3, 1, size=8)`
+  - Class 2 center: `rng.normal(-3, 1, size=8)`
+  - For each sample, draw features from `center + rng.normal(0, 1, size=8)`.
+  - Make exactly 200 samples per class, producing a balanced 3-class pool.
+- Shuffle all 600 samples with `rng.permutation` and split:
+  - Fixed test set: 200 samples.
+  - Training pool: 400 samples.
+- Keep the test set identical for both arms and for Experiment 2.
+
+### Model and training
+- Implement multinomial logistic regression from scratch with numpy only.
+- Model: softmax output, cross-entropy loss, full-batch gradient descent.
+- Add an intercept column of ones to the feature matrix.
+- Initialize the weight matrix `W` to zeros once; use this same initialization for both arms so the models are identical.
+- Hyperparameters:
+  - Learning rate: `lr = 0.5`
+  - Steps/epochs: `steps = 300`
+  - Print a labelled training-loss line for every 10 steps in both arms, e.g. `arm=25pct step=0 loss=1.098612`, so stdout exceeds 1,000 characters before the final measurements are printed.
+- Arm A: train on the first 100 samples of the shuffled training pool (25% of the pool).
+- Arm B: train on all 400 samples of the training pool.
+- Both arms use the same optimizer, same initialization, same number of steps, and same test set.
+
+### Measurements and recording
+- Use `time.perf_counter()` to capture wall-clock time around both training runs only (not data generation).
+- After each arm, compute test accuracy on the fixed 200-sample test set:
+  - `acc_at_25 = accuracy Arm A`
+  - `acc_at_100 = accuracy Arm B`
+- Compute:
+  - `efficiency_ratio = acc_at_25 / acc_at_100`
+  - `train_s = total wall-clock seconds for both training runs`
+- Call `record_metadata("seed", seed)`.
+- Call `record_result` exactly four times, always passing the computed variable, never a numeric literal:
+  - `record_result("eff.acc_at_25", acc_at_25)`
+  - `record_result("eff.acc_at_100", acc_at_100)`
+  - `record_result("eff.efficiency_ratio", efficiency_ratio)`
+  - `record_result("eff.train_s", train_s)`
+- Do not define or import `record_result` or `record_metadata`; the harness supplies them.
+
+## Experiment 2 (Literature-informed extension, separate from the Gate 1 report): Inverse-Power-Law Learning-Curve Extrapolation
+
+This builds directly on the inverse-power-law fits discussed in the survey and the scaling exponents predicted by percolation theory.
+
+- Use the same synthetic dataset, same seed, same test set, and the same logistic-regression model.
+- Additionally train the identical model on subsampled training pools of sizes `[40, 80, 120, 200]` (i.e., 10%, 20%, 30%, 50% of the 400-sample pool), again from the same zero initialization and with the same 300 gradient-descent steps and the same learning rate.
+- Combine these with the 25% and 100% points already produced by Experiment 1 to obtain a learning curve of test error `e(n)` versus training sample count `n`.
+- Fit the inverse-power-law model `e(n) = a + b * n^(-c)` using numpy only:
+  - Grid-search `c` over a reasonable range (e.g., 0.1 to 2.0),
+  - for each candidate `c`, use `numpy.linalg.lstsq` to solve for `a` and `b` in the linearized form `e(n) = a + b * n^(-c)`,
+  - choose the `(a, b, c)` combination with smallest mean squared error on the observed points.
+- Use the fitted curve to extrapolate predicted test error at `n=400` and compare with the measured `e(400)` from Experiment 1, reporting whether the inverse-power-law extrapolation over- or under-predicts performance.
+- Calculate the fitted exponent `c` as the headline scaling result; this connects to the survey’s finding that no single extrapolation model uniformly dominates and to the percolation theory’s predicted data-scaling exponent.
+
+## Report and constraint compliance
+- The Gate 1 report must contain only the four rows specified by the keys `eff.acc_at_25`, `eff.acc_at_100`, `eff.efficiency_ratio`, and `eff.train_s`, with `eff.efficiency_ratio` as the headline result.
+- Experiment 2’s numbers are an additional planned analysis and are not inserted into that four-row Gate 1 findings table, respecting the instruction not to introduce additional empirical results into the gate-validation report.
+- If any required Gate 1 value is absent from execution evidence, the table cell must say “not available from the execution evidence”, never a reconstructed or copied value.
+``` 
+~~~~~~~~~~~
+Subtask 'plan formulation' completed in 62.23 seconds.
+**************************************************
+Beginning phase: experimentation
+**************************************************
+&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+Beginning subtask: data preparation
+&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ data preparation ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+ CODE RESPONSE: arm=25pct step=0 loss=1.098612
+arm=25pct step=10 loss=0.040326
+arm=25pct step=20 loss=0.028077
+arm=25pct step=30 loss=0.022583
+arm=25pct step=40 loss=0.019314
+arm=25pct step=50 loss=0.017089
+arm=25pct step=60 loss=0.015450
+arm=25pct step=70 loss=0.014179
+arm=25pct step=80 loss=0.013156
+arm=25pct step=90 loss=0.012311
+arm=25pct step=100 loss=0.011597
+arm=25pct step=110 loss=0.010984
+arm=25pct step=120 loss=0.010451
+arm=25pct step=130 loss=0.009982
+arm=25pct step=140 loss=0.009565
+arm=25pct step=150 loss=0.009192
+arm=25pct step=160 loss=0.008856
+arm=25pct step=170 loss=0.008551
+arm=25pct step=180 loss=0.008274
+arm=25pct step=190 loss=0.008019
+arm=25pct step=200 loss=0.007785
+arm=25pct step=210 loss=0.007568
+arm=25pct step=220 loss=0.007367
+arm=25pct step=230 loss=0.007180
+arm=25pct step=240 loss=0.007006
+arm=25pct step=250 loss=0.006842
+arm=25pct step=260 loss=0.006688
+arm=25pct step=270 loss=0.006543
+arm=25pct step=280 loss=0.006406
+arm=25pct step=290 loss=0.006276
+arm=100pct step=0 loss=1.098612
+arm=100pct step=10 loss=0.051887
+arm=100pct step=20 loss=0.038660
+arm=100pct step=30 loss=0.032688
+arm=100pct step=40 loss=0.029101
+arm=100pct step=50 loss=0.026632
+arm=100pct step=60 loss=0.024790
+arm=100pct step=70 loss=0.023341
+arm=100pct step=80 loss=0.022158
+arm=100pct step=90 loss=0.021164
+arm=100pct step=100 loss=0.020310
+arm=100pct step=110 loss=0.019565
+arm=100pct step=120 loss=0.018904
+arm=100pct step=130 loss=0.018312
+arm=100pct step=140 loss=0.017775
+arm=100pct step=150 loss=0.017286
+arm=100pct step=160 loss=0.016836
+arm=100pct step=170 loss=0.016420
+arm=100pct step=180 loss=0.016032
+arm=100pct step=190 loss=0.015670
+arm=100pct step=200 loss=0.015330
+arm=100pct step=210 loss=0.015009
+arm=100pct step=220 loss=0.014705
+arm=100pct step=230 loss=0.014417
+arm=100pct step=240 loss=0.014142
+arm=100pct step=250 loss=0.013880
+arm=100pct step=260 loss=0.013629
+arm=100pct step=270 loss=0.013389
+arm=100pct step=280 loss=0.013157
+arm=100pct step=290 loss=0.012935
+acc_at_25=0.9900 acc_at_100=0.9900 efficiency_ratio=1.0000 train_s=0.022922
+
+Data successfully saved to ./research_dir/src/load_data.py
+Subtask 'data preparation' completed in 51.13 seconds.
+&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+Beginning subtask: running experiments
+&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+@@@ INIT ATTEMPT: Command Exec // Attempt 0:  Code was successfully replaced.
+$$$ Score: 0.4
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+@@@ Command Exec // Attempt 0:  Code was successfully replaced.
+$$$ Score: 0.5
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+@@@ Command Exec // Attempt 1:  Code was successfully replaced.
+$$$ Score: 0.9
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+@@@ Command Exec // Attempt 2:  Code was successfully replaced.
+$$$ Score: 0.75
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+@@@ Command Exec // Attempt 0:  Code was successfully replaced.
+$$$ Score: 0.9
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+@@@ Command Exec // Attempt 1:  Code was successfully replaced.
+$$$ Score: 0.3
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+@@@ Command Exec // Attempt 2:  Code was successfully replaced.
+$$$ Score: 0.4
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+@@@ Command Exec // Attempt 0:  Code was successfully replaced.
+$$$ Score: 0.4
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+@@@ Command Exec // Attempt 1:  Code was successfully replaced.
+$$$ Score: 0.45
+Current experiment cost = $0.0, ** Approximate values, may not reflect true cost
+An error occurred: 'NoneType' object has no attribute 'execution'
+Press enter to exit.The research project has been completed. Press enter to exit.

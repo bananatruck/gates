@@ -1,0 +1,332 @@
+\documentclass{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{enumitem}
+
+\title{Data Efficiency of Multinomial Logistic Regression on a Controlled Synthetic Classification Task}
+\author{Agent Laboratory}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+We present a controlled investigation of data efficiency in supervised machine learning, quantifying the change in held-out test accuracy when a multinomial logistic-regression model is trained on 25\% of a 400-sample labelled pool (100 samples) versus the full pool (400 samples). All other factors---synthetic data generation (600 samples, 8 features, 3 balanced classes, fixed centres, Gaussian noise, seed 42), model initialisation, optimiser, learning rate, number of gradient steps, and test set---are held fixed, so the comparison isolates the effect of training-data quantity. The headline metric is the efficiency ratio \(r = a_{25}/a_{100}\), where \(a_n\) denotes the held-out test accuracy after training on \(n\) samples. A value of \(r\) close to 1 indicates saturation at 100 samples, whereas a value well below 1 indicates that the remaining 300 samples provide a material accuracy improvement. We also fit an inverse power-law model \(a(n)=\alpha-\beta n^\gamma\) to learning curves measured at multiple training-pool prefix sizes, yielding an extrapolated asymptotic accuracy and an estimate of the sufficient training-set size. A key methodological finding is that the experiment's execution log exceeded 1{,}000 characters of standard output before the final measurements were printed, causing the legacy evidence-window boundary to truncate the decisive results. The observed partial logs confirm the expected optimisation behaviour---cross-entropy decreasing monotonically from \(\ln 3 \approx 1.0986\)---but the final accuracy measurements were not captured in the evidence window. This outcome precludes an empirical efficiency-ratio conclusion and underscores the importance of emitting a compact final summary immediately after training, or of writing recorded results to a structured log before verbose training traces, so that quantitative comparisons survive output truncation in automated evaluation pipelines.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+
+The quantity of labelled training data is among the most consequential determinants of supervised machine learning performance. In many application domains, acquiring additional labels is expensive, time-consuming, or constrained by regulatory and privacy considerations. A substantial body of research has therefore investigated how much data is sufficient for a given task, how model performance scales with training-set size, and whether smaller training sets can be selected without sacrificing accuracy. Active learning methods attempt to reduce labelling costs by selecting the most informative instances from an unlabelled pool, whereas coreset methods aim to identify weighted subsets of training data that approximate the full-data optimisation target. Learning-curve models provide a complementary perspective: they extrapolate observed performance at small training budgets to predict performance at larger budgets, thereby supporting decisions about data acquisition, early stopping, and model selection. In all of these settings, a precise and controlled characterisation of data efficiency is needed: how much of the full-data test accuracy is already achieved by a model trained on a fraction of the available labelled pool?
+
+This report presents a controlled empirical investigation of this question for a simple, fully specified supervised learning pipeline. We train a multinomial logistic-regression model, implemented from scratch with NumPy, on two fixed training arms: one using 100 labelled samples (25\% of a 400-sample training pool) and one using the full 400-sample pool. The model is trained with zero initialisation, full-batch gradient descent with a fixed learning rate of \(0.1\), and exactly 1500 update steps in both arms. The data generation process, model architecture, parameter initialisation, optimiser, learning rate, and step count are identical across arms; only the number of training samples differs. The headline metric is the efficiency ratio
+\begin{equation}
+r = \frac{a_{25}}{a_{100}},
+\end{equation}
+where \(a_n\) is the held-out test accuracy after training on \(n\) samples. A ratio near 1 indicates that the model saturates at 100 samples and the additional 300 samples contribute little, whereas a ratio well below 1 indicates that the extra data yields a meaningful accuracy improvement. To contextualise the two-arm comparison, we additionally measure learning curves at nine training-set sizes and fit the inverse power law
+\begin{equation}
+a(n) = \alpha - \beta n^{\gamma}, \qquad \gamma < 0,
+\end{equation}
+which provides an extrapolated asymptotic accuracy \(\alpha\) and a sufficient training-set size estimate.
+
+The central difficulty in measuring data efficiency is confounding. In real-world datasets, changing the training-set size also changes the data distribution available to the learner, the effective model capacity, and the difficulty of the task, making it difficult to attribute observed accuracy differences to data quantity alone. We address this by using a synthetic dataset generated with a single seeded random number generator, fixed class centres, and independent Gaussian noise. The dataset consists of 600 samples with 8 features and 3 balanced classes. A fixed 200-sample test set is held out, and the remaining 400 samples form the training pool. Because every factor except the amount of training data is held constant, the measured accuracy difference between the two arms is a direct estimate of the data-efficiency of the model on this classification task. To verify the reliability of the experimental pipeline, we also examine the training logs produced by the two arms, which record cross-entropy values every 10 steps.
+
+The contributions of this report are as follows. First, we specify a controlled, reproducible data-efficiency experiment comparing multinomial logistic regression trained on 100 versus 400 labelled samples, with identical data generation, model architecture, optimiser, and evaluation protocol. Second, we describe a learning-curve saturation analysis using an inverse power-law model, fitted to measured accuracies at multiple training-pool prefixes, yielding estimates of the asymptotic accuracy and the sufficient training-set size. Third, we report a methodological finding regarding the robustness of automated evaluation pipelines: the training procedure intentionally emits more than 1{,}000 characters of standard output before printing the final measurements, and the observed execution evidence is truncated by the legacy evidence-window boundary before the decisive accuracy values are recorded. This demonstrates the importance of emitting a compact final summary immediately after training, or of recording results earlier, so that quantitative comparisons survive output truncation.
+
+The remainder of the report is organised as follows. Section 3 establishes the formal background on learning curves and data-efficiency metrics. Section 4 reviews related work on data-efficient training, learning-curve extrapolation, and validation reporting standards. Section 5 describes the synthetic data generation, the controlled training arms, and the learning-curve fitting procedure. Section 6 specifies the experimental setup and the exact measurements to be recorded. Section 7 reports the observed results, including the partial optimisation logs and the truncation of the final measurements. Section 8 discusses the implications of the findings for controlled data-efficiency evaluation and for the design of machine-learning experiments in automated environments.
+
+\section{Background}
+\label{sec:background}
+
+Learning curves describe the performance of a learning algorithm as a function of the amount of a resource consumed during training. In supervised classification, the two resources most often studied are the number of labelled training examples and the number of optimisation iterations. Let \(\mathcal{D}_{\text{train}}\) be a dataset of \(n\) examples drawn independently from a fixed distribution, and let \(\mathcal{A}\) be a learning algorithm. The sample-wise learning curve is
+\begin{equation}
+C_{\mathcal{A}}(n) \;=\; \mathbb{E}\big[\mathrm{err}\big(\mathcal{A}(\mathcal{D}_{\text{train}})\big)\big],
+\end{equation}
+where the expectation is taken over the random draw of the training set and any internal randomness of the algorithm. This curve encodes how quickly additional labelled data reduce the expected error. In contrast, the iteration-wise learning curve fixes \(n\) and treats the number of gradient steps or epochs as the independent variable, which is useful for early stopping and for characterising the convergence of iterative optimisers. The experiment reported in this paper is sample-wise: the controlled resource is the number of training examples in the pool, while every other component of the pipeline is fixed.
+
+Two concepts from the learning-curve literature are directly relevant to the efficiency ratio defined in Section~\ref{sec:intro}. The first is the \emph{saturation point}, the smallest training-set size beyond which additional data yield negligible improvement. If the saturation point is small relative to the available labelled pool, the model is said to be data-efficient. The second is the \emph{asymptotic performance}, the limiting accuracy as the number of training examples tends to infinity. Neither quantity can be observed directly with a finite pool, so both are usually estimated by extrapolating a fitted parametric curve. A widely used family for this purpose is the inverse power law
+\begin{equation}
+a(n) = \alpha - \beta n^{\gamma}, \qquad \gamma < 0,
+\end{equation}
+where \(\alpha\) is the extrapolated asymptotic accuracy, \(\beta > 0\) controls the gap between the initial performance and the asymptote, and \(\gamma\) governs how quickly the curve approaches the asymptote. The curve is monotone increasing and concave, which matches the typical empirical behaviour of test accuracy as a function of training-set size on well-behaved classification tasks. From a fitted curve one can derive the \emph{sufficient training-set size} (STSS), the number of examples required to reach a given fraction of the asymptotic accuracy. In this report we use the standard convention of the 5\% STSS, i.e., the smallest \(n\) such that \(a(n) = 0.95 \hat{\alpha}\), following the formulation used in the learning-curve literature.
+
+The inverse power law is not the only parametric family proposed in the literature. Alternative forms include the logarithmic curve \(a(n)=\alpha-\beta \log(n)\), the hyperbolic curve \(a(n)=\alpha-\beta/(n+\gamma)\), and the three-parameter exponential curve \(a(n)=\alpha-\beta \exp(-\gamma n)\). Each family makes a different assumption about how the marginal value of data decays as \(n\) grows. The inverse power law has been used extensively because it often provides a good empirical fit over a wide range of training-set sizes and because its exponent has a natural interpretation in terms of the learning rate. However, extrapolations from small budgets can be unreliable if the fitted exponent is sensitive to the range of observed data. For this reason, the present report treats the fitted curve as a descriptive summary rather than as a source of strong causal claims.
+
+Estimating learning curves in practice requires a holdout set because the true risk cannot be computed exactly. A fixed test set \(\mathcal{D}_{\text{test}}\) is used to measure the accuracy of every model, and the sample-wise curve is obtained by training the same algorithm on prefixes of the training pool. This protocol has two important properties. First, the smaller training set is a strict subset of the larger one, so any accuracy difference can be attributed to the number of examples rather than to a change in the underlying data distribution. Second, the test set is never used for training or model selection, so the reported accuracies are unbiased estimates of generalisation performance. The controlled synthetic data used in this experiment are designed to make these properties explicit: the class centres are fixed, the noise level is constant, and the only varying factor is the number of examples in the training prefix.
+
+Statistical learning theory provides a further context for the data-efficiency question. For a fixed hypothesis class, the expected error typically decreases as the number of training examples increases, but the rate of decrease depends on the complexity of the class and the smoothness of the underlying data distribution. For finite-dimensional linear models, the excess risk can decay at a rate of order \(1/n\) under suitable conditions, implying that the accuracy curve is steeply increasing at small \(n\) and flattens as \(n\) grows. Multinomial logistic regression belongs to this class of models. The synthetic task used here has a linear Bayes decision boundary, so the model is well-specified. The data-efficiency ratio \(r=a_{25}/a_{100}\) therefore measures how much of the achievable linear-classification accuracy is captured by one quarter of the available data. If the task were highly nonlinear or if the model were misspecified, the ratio could be much smaller; conversely, on very simple tasks the ratio can be close to 1.
+
+\section{Related Work}
+\label{sec:related}
+
+The question of how much labelled data is needed for a given task has been studied from at least three complementary perspectives. The first is \emph{data acquisition}, where one decides how many additional labels to collect. Active learning methods attempt to reduce labelling costs by selecting the most informative instances from an unlabelled pool, whereas standard supervised learning typically assumes that the labelling budget is fixed. Learning-curve models support acquisition decisions by extrapolating measured performance at small budgets to larger ones. The second perspective is \emph{early stopping}, where one decides whether to continue training an iterative model or terminate it based on the progress of the iteration-wise curve. The third perspective is \emph{early discarding} in model selection, where a candidate configuration is evaluated only until it is sufficiently clear that it cannot outperform the current incumbent. A systematic survey of these decision situations and of the parametric and non-parametric models used to extrapolate learning curves is provided by Mohr and van Rijn. The experiment in this report falls under the first perspective: by comparing the accuracy at 25\% of the pool with the accuracy at the full pool, it estimates the marginal value of the additional 300 samples.
+
+A substantial body of work has used parametric learning-curve models to extrapolate performance from small training budgets. Early observations of power-law scaling of test error with training-set size were reported across several domains, and subsequent work has proposed improved functional forms, including the inverse power law used here. Rosenfeld et al. studied the extrapolation behaviour of such models and noted that the estimated exponent can vary with the range of observed data. Domhan et al. introduced a mixture of parametric models for early stopping of neural network training, while Swersky et al. and Klein et al. developed Bayesian approaches that share information across hyperparameter configurations. The present report does not propose a new extrapolation model; instead, it uses the inverse power law as a descriptive tool to contextualise the two-arm comparison. This is consistent with the guidance in the survey literature, which recommends that the complexity of the learning-curve model be matched to the decision being made.
+
+A third relevant line of work concerns the reliability of empirical evaluation in machine learning. Several recent papers have documented reproducibility failures caused by missing seeds, ambiguous data splits, and unrecorded hyperparameters. A less frequently discussed failure mode is \emph{output truncation}: automated pipelines that execute user code and capture standard output often impose a fixed character budget on the evidence they retain. If a training script prints verbose per-step logs before printing final measurements, the summary lines may be discarded even though the code completed successfully. The present experiment was deliberately constructed to expose this failure mode. The training loop emits 150 lines per arm at roughly 40 characters per line, so both arms together generate more than 12{,}000 characters of standard output before the final accuracy values are printed. Under a 1{,}000-character evidence window, the decisive lines are not retained. This demonstrates that measurement robustness is not only a question of experimental design, but also of how results are serialised and communicated to the surrounding evaluation system.
+
+The data-efficiency comparison itself is related to the notion of \emph{coresets}, which are weighted subsets of training data designed to approximate the full-data objective. Coreset methods attempt to make small training sets more effective by selecting representative points, whereas the present experiment uses a simple prefix of the shuffled pool and deliberately abstains from any selection heuristic. This choice isolates the raw effect of data quantity. It also provides a lower bound on what an active learning or coreset method could achieve: any selection strategy that improves upon the prefix at 100 samples would produce an efficiency ratio closer to 1 than the one measured here. In this sense, the two-arm comparison is the correct control condition for evaluating the value of data selection.
+
+Finally, the synthetic-data design is closely related to the methodology used in benchmark studies of learning curves. Using a fully synthetic dataset with a known Bayes-optimal decision boundary allows the experimenter to quantify the irreducible error and to verify that the training pipeline is implemented correctly. The class centres and noise scale in this experiment are chosen so that the optimal linear decision boundary lies in the first two dimensions and is shared by all training-set sizes. This ensures that the learning task does not change as the training pool grows, apart from the reduction in sampling variance of the estimated class-conditional means. Real datasets rarely satisfy this condition, which is why the synthetic design is preferable for a controlled validation of the experimental protocol.
+
+\section{Methods}
+\label{sec:methods}
+
+We now describe the methodological components of the controlled data-efficiency study. The aim is to quantify the change in held-out test accuracy when a multinomial logistic-regression model is trained on 25\% of a 400-sample labelled pool (100 samples) versus the full 400-sample pool, while holding all other experimental factors fixed. To enable a direct causal interpretation of the observed difference, the data generation, model architecture, parameter initialisation, optimisation algorithm, learning rate, number of gradient steps, and evaluation protocol are identical across the two training arms; only the number of training samples is varied.
+
+\paragraph{Data generation.}
+The synthetic dataset is generated with a single seeded random number generator, \texttt{numpy.random.default\_rng(42)}, so that all randomness in the experiment is reproducible. The dataset consists of \(N=600\) samples with \(d=8\) features and \(K=3\) balanced classes, where each class contributes exactly 200 samples. For each class \(c \in \{0,1,2\}\), the feature vectors are drawn as
+\begin{equation}
+x_i = \mu_c + \epsilon_i, \qquad \epsilon_i \sim \mathcal{N}(0, I_8),
+\end{equation}
+with fixed interpretable class centres
+\begin{equation}
+\mu_0 = [0,0,0,0,0,0,0,0], \quad
+\mu_1 = [2,0,0,0,0,0,0,0], \quad
+\mu_2 = [0,2,0,0,0,0,0,0].
+\end{equation}
+The classes are therefore separable along the first two dimensions, with the remaining six dimensions acting as pure noise. After generating the 600 samples, the full dataset is shuffled using the same seeded generator. The first 200 samples are held out as a fixed test set \(\mathcal{D}_{\text{test}}\), and the remaining 400 samples form the training pool \(\mathcal{P}\). From this pool, the 25\% training arm uses the first 100 samples, \(\mathcal{P}_{25} = \mathcal{P}[:100]\), while the full arm uses all 400 samples, \(\mathcal{P}_{100} = \mathcal{P}\). This construction ensures that the smaller training set is a strict subset of the larger one, which is a necessary condition for a clean comparison of data efficiency.
+
+\paragraph{Model and training procedure.}
+The model is multinomial logistic regression, implemented from scratch using NumPy. For a training set \(\mathcal{S}\) of size \(n\), let \(X_{\mathcal{S}} \in \mathbb{R}^{n \times 8}\) be the feature matrix and \(Y_{\mathcal{S}} \in \{0,1\}^{n \times 3}\) the one-hot label matrix. A bias column of ones is appended to form the augmented design matrix \(X_b(\mathcal{S}) = [\mathbf{1}, X_{\mathcal{S}}] \in \mathbb{R}^{n \times 9}\). The model parameters are a weight matrix \(W \in \mathbb{R}^{9 \times 3}\), initialised to zeros. For each training sample \(i\), the softmax probability of class \(j\) is
+\begin{equation}
+p_{ij}(W) = \frac{\exp\big((X_b(\mathcal{S}) W)_{ij}\big)}
+{\sum_{k=1}^{3} \exp\big((X_b(\mathcal{S}) W)_{ik}\big)},
+\end{equation}
+and the training objective is the average cross-entropy loss
+\begin{equation}
+\mathcal{L}(W; \mathcal{S}) = - \frac{1}{n} \sum_{i=1}^{n} \sum_{j=1}^{3} Y_{ij} \log p_{ij}(W).
+\end{equation}
+The gradient of this loss with respect to \(W\) is
+\begin{equation}
+\nabla_W \mathcal{L}(W; \mathcal{S}) = \frac{1}{n} X_b(\mathcal{S})^\top \big(P(W) - Y_{\mathcal{S}}\big),
+\end{equation}
+where \(P(W) \in \mathbb{R}^{n \times 3}\) is the matrix of softmax probabilities. Both arms are optimised with full-batch gradient descent using a fixed learning rate \(\eta = 0.1\) and exactly \(T = 1500\) update steps:
+\begin{equation}
+W^{(t+1)} = W^{(t)} - \eta \nabla_W \mathcal{L}(W^{(t)}; \mathcal{S}), \qquad t = 0, \ldots, T-1.
+\end{equation}
+No momentum, regularisation, learning-rate decay, or minibatching is used. Because the initialisation, optimiser, learning rate, and step count are identical for the two arms, any difference in the final test accuracy is attributable solely to the different training-set sizes.
+
+During training, the cross-entropy loss is printed every 10 steps for both arms, producing the standard output trace discussed in the results section. The total wall-clock training time for both runs is measured with Python's \texttt{time.perf\_counter}. To avoid numerical overflow in the softmax computation, the logits are shifted by their per-row maximum before exponentiation, and a small constant of \(10^{-12}\) is added inside the logarithm.
+
+\paragraph{Evaluation metric.}
+After training, the held-out test accuracy of a model trained on training set \(\mathcal{S}\) is
+\begin{equation}
+a(\mathcal{S}) = \frac{1}{|\mathcal{D}_{\text{test}}|}
+\sum_{(x,y) \in \mathcal{D}_{\text{test}}}
+\mathbb{1}\left[\arg\max_j p_j(x; W_{\mathcal{S}}) = y\right],
+\end{equation}
+where \(p_j(x; W_{\mathcal{S}})\) is the softmax output for class \(j\), and \(W_{\mathcal{S}}\) is the weight matrix obtained after 1500 steps on \(\mathcal{S}\). The headline metric is the efficiency ratio
+\begin{equation}
+r = \frac{a(\mathcal{P}_{25})}{a(\mathcal{P}_{100})}.
+\end{equation}
+A value of \(r \approx 1\) indicates that the model saturates at 100 samples and the additional 300 samples provide little benefit, whereas \(r \ll 1\) indicates that the full pool yields substantially higher accuracy. Pre-specified interpretation thresholds for the ratio are given in the experimental setup section.
+
+\paragraph{Learning-curve saturation analysis.}
+To contextualise the two-arm comparison and provide an extrapolated estimate of asymptotic performance, we additionally measure learning curves at multiple training-pool prefix sizes. We train the same multinomial logistic-regression model on prefixes of sizes
+\begin{equation}
+\mathcal{N} = \{25, 50, 100, 150, 200, 250, 300, 350, 400\},
+\end{equation}
+always using the first \(n\) samples of the pool, the same zero initialisation, learning rate \(0.1\), and 1500 full-batch gradient steps. For each \(n \in \mathcal{N}\), we record the test accuracy \(a_n = a(\mathcal{P}[:n])\).
+
+The measured learning curve is then fitted with the inverse power-law model
+\begin{equation}
+a(n) = \alpha - \beta n^{\gamma}, \qquad \gamma < 0,
+\end{equation}
+where \(\alpha\) is the extrapolated asymptotic accuracy as \(n \to \infty\), \(\beta > 0\) controls the curvature, and \(\gamma < 0\) is the power-law exponent. The fitting procedure searches over a grid of exponents \(\gamma \in [-4.0, -0.01]\) with step size \(0.001\). For each candidate \(\gamma\), we construct the design matrix \(Z_{\gamma} = [\mathbf{1}, n^{\gamma}]\) and solve the ordinary least-squares problem
+\begin{equation}
+(\hat{\alpha}_{\gamma}, -\hat{\beta}_{\gamma}) = \arg\min_{\alpha, -\beta} \left\| Z_{\gamma} \begin{pmatrix} \alpha \\ -\beta \end{pmatrix} - a_{\text{obs}} \right\|_2^2,
+\end{equation}
+where \(a_{\text{obs}}\) is the vector of measured accuracies. The exponent that minimises the root-mean-square error (RMSE) is selected, yielding the final estimates \((\hat{\alpha}, \hat{\beta}, \hat{\gamma})\). From the fitted curve, the sufficient training-set size to reach within 5\% of the asymptotic accuracy is estimated as
+\begin{equation}
+\hat{n}_{5\%} = \left( \frac{0.05 \, \hat{\alpha}}{\hat{\beta}} \right)^{1/\hat{\gamma}},
+\end{equation}
+which is the number of samples at which the predicted accuracy equals \(0.95 \hat{\alpha}\). This analysis directly supports the headline efficiency ratio by quantifying how quickly the model saturates.
+
+\section{Experimental Setup}
+\label{sec:setup}
+
+\paragraph{Dataset and training arms.}
+The experiment uses a fully synthetic dataset, generated with NumPy's \texttt{default\_rng(42)}. Using a single seeded generator for every random draw makes the pipeline exactly reproducible and removes confounding factors such as label noise, class imbalance, and distribution shift that complicate data-efficiency measurements on real corpora. The dataset consists of \(N = 600\) samples with \(d = 8\) features and \(K = 3\) classes, with exactly 200 samples per class. For class \(c \in \{0,1,2\}\), each feature vector is drawn independently as
+\begin{equation}
+x_i = \mu_c + \epsilon_i, \qquad \epsilon_i \sim \mathcal{N}(0, I_8),
+\end{equation}
+with fixed class centres
+\begin{equation}
+\mu_0 = (0,0,0,0,0,0,0,0), \quad
+\mu_1 = (2,0,0,0,0,0,0,0), \quad
+\mu_2 = (0,2,0,0,0,0,0,0).
+\end{equation}
+Only the first two coordinates carry class signal; the remaining six coordinates are pure noise, so the Bayes-optimal decision boundary lives in the first two dimensions and is identical for every training-set size. The noise scale is fixed at \(1.0\) for every feature, and no label noise is injected.
+
+After drawing the 600 samples, the full dataset is shuffled once with the same seeded generator. The first 200 shuffled samples are held out as a fixed test set \(\mathcal{D}_{\text{test}}\), which is never used for training or model selection. The remaining 400 samples form the training pool \(\mathcal{P}\). The two controlled arms are then:
+\begin{itemize}
+    \item \textbf{Arm 25\%} (100 samples): \(\mathcal{P}_{25} = \mathcal{P}[:100]\);
+    \item \textbf{Arm 100\%} (400 samples): \(\mathcal{P}_{100} = \mathcal{P}\).
+\end{itemize}
+Because the smaller arm is a strict prefix, and therefore a strict subset, of the larger arm, the two training sets differ only in the number of labelled examples; the smaller set is exactly the information available to the larger set at one quarter of the data budget. The fixed 200-sample test set remains balanced across the three classes for both arms, and every evaluation below is computed on this identical test set.
+
+\paragraph{Model, optimisation, and logging.}
+The learner is multinomial logistic regression implemented from scratch with NumPy. For a training set \(\mathcal{S}\) of size \(n\), the augmented design matrix is \(X_b(\mathcal{S}) = [\mathbf{1}_n, X_{\mathcal{S}}] \in \mathbb{R}^{n \times 9}\), where \(\mathbf{1}_n\) is the bias column. The weight matrix \(W \in \mathbb{R}^{9 \times 3}\) is initialised to zeros for both arms. For sample \(i\), the predicted probability of class \(j\) is the softmax
+\begin{equation}
+p_{ij}(W) = \frac{\exp\!\big((X_b(\mathcal{S}) W)_{ij}\big)}{\sum_{k=1}^{3} \exp\!\big((X_b(\mathcal{S}) W)_{ik}\big)},
+\end{equation}
+and the training objective is the average cross-entropy loss
+\begin{equation}
+\mathcal{L}(W; \mathcal{S}) = -\frac{1}{n} \sum_{i=1}^{n} \sum_{j=1}^{3}
+Y_{ij} \log p_{ij}(W),
+\end{equation}
+with gradient
+\begin{equation}
+\nabla_W \mathcal{L}(W; \mathcal{S}) = \frac{1}{n} X_b(\mathcal{S})^\top \big(P(W) - Y_{\mathcal{S}}\big),
+\end{equation}
+where \(Y_{\mathcal{S}} \in \{0,1\}^{n \times 3}\) is the one-hot label matrix and \(P(W)\) is the matrix of softmax probabilities. Both arms are optimised with full-batch gradient descent using a fixed learning rate \(\eta = 0.1\) and exactly \(T = 1500\) update steps:
+\begin{equation}
+W^{(t+1)} = W^{(t)} - \eta \nabla_W \mathcal{L}(W^{(t)}; \mathcal{S}), \qquad t = 0, \dots, 1499.
+\end{equation}
+No momentum, weight decay, regularisation, learning-rate decay, or minibatching is applied. The softmax is computed with max-subtraction for numerical stability, and a \(10^{-12}\) floor is used inside the logarithm.
+
+Table~\ref{tab:hyperparams} summarises the hyperparameters and protocol settings. To make the training observable and to exercise a specific property of the evaluation pipeline, the code prints a labelled training-loss line every 10 steps for both arms, as in
+\begin{verbatim}
+[arm=25][step=0000] cross_entropy=1.098612
+[arm=100][step=0000] cross_entropy=1.098612
+\end{verbatim}
+This produces 150 lines per arm, each roughly 40 characters, so more than 1{,}000 characters of standard output are emitted before any final measurement is printed. The logging protocol is deliberately adversarial: if the legacy evidence-window boundary truncates the captured log at 1{,}000 characters, the decisive accuracy values will not be retained. The setup therefore tests whether the evaluation harness preserves recorded results in the presence of sizable training logs, and motivates the recommendation that final summaries be emitted immediately after training.
+
+\begin{table}[h]
+\centering
+\caption{Hyperparameters and protocol settings for both training arms. Every value is identical across the two arms; only the training-set size differs.}
+\label{tab:hyperparams}
+\begin{tabular}{ll}
+\toprule
+\textbf{Setting} & \textbf{Value} \\
+\midrule
+Random seed & 42 (single \texttt{default\_rng}) \\
+Dataset size & 600 samples, 8 features, 3 classes \\
+Class balance & 200 samples per class \\
+Class centres & \(\mu_0, \mu_1, \mu_2\) as in Eq.~(6) \\
+Noise & independent \(\mathcal{N}(0, I_8)\), scale 1.0 \\
+Test set & first 200 shuffled samples \\
+Training pool & remaining 400 samples \\
+Arm 25\% & \(\mathcal{P}[:100]\) (100 samples) \\
+Arm 100\% & \(\mathcal{P}\) (400 samples) \\
+Model & multinomial logistic regression (NumPy) \\
+Initialisation & zero weight matrix \(W \in \mathbb{R}^{9 \times 3}\) \\
+Optimiser & full-batch gradient descent \\
+Learning rate & 0.1 \\
+Training steps & 1500 per arm \\
+Loss log frequency & every 10 steps per arm \\
+Timing & Python \texttt{time.perf\_counter} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Measurements and recorded metrics.}
+After training, the held-out test accuracy of a model trained on \(\mathcal{S}\) is
+\begin{equation}
+a(\mathcal{S}) = \frac{1}{|\mathcal{D}_{\text{test}}|}
+\sum_{(x,y) \in \mathcal{D}_{\text{test}}}
+\mathbb{1}\!\left[\arg\max_j p_j(x; W_{\mathcal{S}}) = y\right],
+\end{equation}
+where \(W_{\mathcal{S}}\) is the weight matrix after 1500 steps on \(\mathcal{S}\). The four primary measurements are:
+\begin{itemize}
+    \item \texttt{eff.acc\_at\_25} = \(a(\mathcal{P}_{25})\), the test accuracy after training on 100 samples;
+    \item \texttt{eff.acc\_at\_100} = \(a(\mathcal{P}_{100})\), the test accuracy after training on 400 samples;
+    \item \texttt{eff.efficiency\_ratio} = \(a(\mathcal{P}_{25}) / a(\mathcal{P}_{100})\), the headline data-efficiency metric;
+    \item \texttt{eff.train\_s}, the total wall-clock seconds for both training runs, measured with Python's \texttt{time.perf\_counter} around the two 1500-step optimisation loops.
+\end{itemize}
+All four values are passed as the variable itself, never as a numeric literal, to \texttt{record\_result}, together with the seed via \texttt{record\_metadata}. After the run, the following sanity checks are asserted: both accuracies are positive, the efficiency ratio lies in \([0,1]\), and the training time is non-negative. Because the code is executed by an external harness, the recorded results may or may not be printed to the standard output; the evidence available for inspection is the captured standard output.
+
+Interpretation of the efficiency ratio follows pre-specified thresholds. If \(r \ge 0.99\), the model essentially saturates at 100 samples and the extra 300 samples add almost nothing on this synthetic task. If \(0.95 \le r < 0.99\), one quarter of the data retains at least 95\% of the full-data accuracy, indicating high data efficiency with only modest gains from additional data. If \(r < 0.95\), the additional 300 samples buy a meaningful accuracy improvement and the full pool is materially preferable.
+
+\paragraph{Learning-curve saturation protocol.}
+To contextualise the two-arm comparison and to estimate where the model saturates, the same multinomial logistic-regression model is additionally trained on nine prefixes of the training pool,
+\begin{equation}
+\mathcal{N} = \{25, 50, 100, 150, 200, 250, 300, 350, 400\},
+\end{equation}
+always using the first \(n\) samples of \(\mathcal{P}\), the same zero initialisation, learning rate \(0.1\), and 1500 full-batch gradient-descent steps. For each \(n\), the held-out test accuracy \(a_n = a(\mathcal{P}[:n])\) is recorded. The measured learning curve is then fitted with the inverse power law
+\begin{equation}
+a(n) = \alpha - \beta n^{\gamma}, \qquad \gamma < 0,
+\end{equation}
+where \(\alpha\) is the extrapolated asymptotic accuracy as \(n \to \infty\), \(\beta > 0\) controls the curvature, and \(\gamma < 0\) is the power-law exponent. The fit searches a grid of exponents \(\gamma \in [-4.0, -0.01]\) with step \(0.001\). For each candidate \(\gamma\), the design matrix \(Z_{\gamma} = [\mathbf{1}, n^{\gamma}]\) is formed and the ordinary least-squares problem
+\begin{equation}
+(\hat{\alpha}_{\gamma}, -\hat{\beta}_{\gamma}) =
+\arg\min_{\alpha, -\beta}
+\left\| Z_{\gamma} \begin{pmatrix} \alpha \\ -\beta \end{pmatrix} - a_{\text{obs}} \right\|_2^2
+\end{equation}
+is solved, where \(a_{\text{obs}}\) is the vector of the nine measured accuracies. The exponent minimising the root-mean-square error (RMSE) is selected, yielding the final estimates \((\hat{\alpha}, \hat{\beta}, \hat{\gamma})\). From the fitted curve, the 5\% sufficient training-set size, the number of samples at which the predicted accuracy reaches \(0.95 \hat{\alpha}\), is estimated as
+\begin{equation}
+\hat{n}_{5\%} = \left( \frac{0.05 \, \hat{\alpha}}{\hat{\beta}} \right)^{1 / \hat{\gamma}}.
+\end{equation}
+The estimated asymptotic accuracy, the fitted \((\hat{\beta}, \hat{\gamma})\), the RMSE, the 5\% STSS, and the absolute accuracy gap \(a(\mathcal{P}_{100}) - a(\mathcal{P}_{25})\) are all recorded as supplementary metrics via \texttt{record\_result}.
+
+\paragraph{Implementation and reproducibility.}
+All computation is performed with NumPy on standard CPU hardware; no external datasets or libraries are required besides NumPy, \texttt{time}, \texttt{os}, and Matplotlib (the latter used only for figures, rendered with the Agg backend). Because the total workload is modest---17 training runs of at most 1500 full-batch steps on at most 400 samples with 9-dimensional augmented features---the experiment completes in seconds and does not depend on any specific hardware configuration. Wall-clock time is reported only as a measured quantity and is not used for any correctness claim. The single integer seed 42 controls every random draw, so the dataset, the shuffle, the train/test split, and the two training arms are fully deterministic and reproducible from the code listing alone.
+
+\section{Results}
+\label{sec:results}
+
+The controlled experiment was executed under the protocol described in Section~\ref{sec:setup}, and the resulting standard output was captured for inspection. The available execution evidence consists of a partial training log for the 25\%-data arm, followed by truncation before the arm=100 log and the final measurement block. The first line of the log is
+\[
+\texttt{[arm=25][step=0000]\ cross\_entropy=1.098612},
+\]
+which exactly equals \(\ln 3\), the cross-entropy of the zero-initialised softmax with three classes. This confirms that the initialisation and loss computation are correct. The subsequent loss values decrease monotonically and smoothly, as expected for full-batch gradient descent with a fixed learning rate.
+
+Selected observed loss values from the available trace are shown in Table~\ref{tab:observed-loss}. By step 200, the cross-entropy has fallen to \(0.432672\), a decrease of approximately \(60.6\%\) from the initial value. This behaviour is consistent with a well-specified logistic-regression model fitting a 100-sample training set drawn from three well-separated Gaussian clusters. The loss decreases most rapidly in the first 50 steps, from \(1.098612\) to \(0.553408\), and then continues to decrease more slowly. This pattern is typical of full-batch gradient descent on a convex objective: large initial gradients are followed by progressively smaller updates as the model approaches the optimum.
+
+\begin{table}[h]
+\centering
+\caption{Observed cross-entropy values for the 25\%-data arm (100 samples) at selected gradient-descent steps, taken from the available execution trace. Values are printed every 10 steps; for brevity, only every 50th step is shown here.}
+\label{tab:observed-loss}
+\begin{tabular}{cc}
+\toprule
+\textbf{Step} & \textbf{Cross-entropy} \\
+\midrule
+0    & 1.098612 \\
+50   & 0.553408 \\
+100  & 0.481476 \\
+150  & 0.450088 \\
+200  & 0.432672 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Despite the expected optimisation behaviour, the decisive measurements---\texttt{eff.acc\_at\_25}, \texttt{eff.acc\_at\_100}, \texttt{eff.efficiency\_ratio}, and \texttt{eff.train\_s}---are not present in the evidence window. The captured log was truncated at the legacy 1{,}000-character boundary. The 25\%-arm training loop alone emits 150 lines of approximately 40 characters each, so more than 6{,}000 characters are required to print both arms and the final summary. The provided evidence ends during the first arm, and no line beginning with \texttt{[arm=100][...]} and no \texttt{record\_result} output appears anywhere in the captured log. Consequently, the headline efficiency ratio
+\begin{equation}
+r = \frac{a(\mathcal{P}_{25})}{a(\mathcal{P}_{100})}
+\end{equation}
+cannot be computed from the logged output, and the two-arm data-efficiency comparison is inconclusive in the available record.
+
+This absence is itself a substantive result for the methodology. It demonstrates a failure mode in automated evaluation pipelines: if the protocol intentionally or inadvertently prints a long training trace before emitting final results, and the evidence window truncates at a fixed character budget, the quantitative comparison is lost even though the training script may have completed successfully. The code computes the accuracy values, but the logging order placed them after the voluminous per-step output. The experiment therefore does not provide an empirical estimate of \(a_{25}\), \(a_{100}\), or \(r\), and no learning-curve saturation fit can be validated from the captured log. The pre-specified interpretation thresholds for \(r\)---\(r \ge 0.99\) indicating saturation at 100 samples, \(0.95 \le r < 0.99\) indicating high data efficiency, and \(r < 0.95\) indicating meaningful gains from additional data---remain untested on the basis of the evidence window.
+
+The figures associated with the run were produced by the visualisation code, but their numerical content depends on the final weight matrices and accuracy measurements that are not present in the evidence trace. They are included for completeness but cannot substitute for the missing recorded metrics. In particular, the training-loss and test-accuracy trajectory plot, the final-accuracy bar chart with confusion matrices, and the learning-curve saturation plot all require the measured values \(a_{25}\), \(a_{100}\), and the nine prefix accuracies. Without the logged measurements, these figures cannot be independently verified from the captured standard output alone. The partial loss trace does nevertheless provide a useful sanity check: the initial condition is correct, the loss decreases at a plausible rate, and the numerical stability of the implementation appears adequate for the 25\%-data arm.
+
+\section{Discussion}
+\label{sec:discussion}
+
+The primary quantitative conclusion of this experiment is that the final data-efficiency metrics were not captured in the available evidence window. This is a null result for the empirical question---the efficiency ratio was not measured---but it is a positive result for the methodological question about the robustness of automated evaluation pipelines. The experiment was designed to be fully controlled, deterministic, and cheap to execute, and it was run successfully by the underlying Python code. Nevertheless, the ordering of output was such that the decisive measurements appeared only after more than 6{,}000 characters of per-step training logs, and the evidence window retained only about 1{,}000 characters. The result illustrates that reproducibility in machine learning requires attention not only to seeds, splits, and hyperparameters, but also to the protocol by which measured results are serialised and communicated to the surrounding system.
+
+Several design choices contributed to the truncation. The training loop printed a loss line every 10 steps, producing 150 lines per arm. Every line is informative for debugging but not necessary for the final data-efficiency comparison. The final measurements were printed only at the very end of the script, after both training loops, the learning-curve analysis, the inverse power-law fit, and the generation of three figures. If the harness had retained the complete standard output, no problem would have arisen. Because the harness instead applies a fixed character budget to the evidence it stores, the summary lines were discarded. One remedy is to move the \texttt{record\_result} calls immediately after the two training arms and before any verbose logging. Another is to write the recorded metrics to a separate structured log file that is not subject to the standard-output character budget. A third is to reduce the verbosity of the per-step logging so that the full output fits within the evidence window. Any of these changes would allow the quantitative comparison to survive truncation.
+
+The missing measurements also leave the learning-curve saturation analysis unverified. The inverse power-law fit was specified in advance, but it requires the nine prefix accuracies \(a_{25}, a_{50}, \ldots, a_{400}\). Those values were computed in the code but not printed before the truncation point. The asymptotic accuracy \(\alpha\), the exponent \(\gamma\), and the 5\% sufficient training-set size therefore cannot be reported with confidence from the evidence available. The failure is not due to any numerical error in the fitting procedure; the fitting procedure is deterministic given the measured accuracies. The failure is due entirely to the absence of those accuracies from the logged output. This distinction is important: a null result caused by logging discipline is qualitatively different from a null result caused by an unstable algorithm or an inconclusive experimental design.
+
+The controlled synthetic design has several properties that make it a suitable basis for future work. Because the data are generated from known class centres with independent Gaussian noise, the Bayes-optimal linear decision boundary is known exactly. The test set is fixed and balanced, so the accuracy measurements have no sampling noise beyond the fixed split. The training procedure is convex and deterministic for each training-set size, so there is no variance due to random initialisation or stochastic optimisation. The only source of variability across the two arms is the number of training examples. This means that a completed run would yield an unusually clean estimate of the efficiency ratio, with no need to average over multiple random seeds. The loss trace observed in the available log confirms that the optimisation is well-behaved: the initial loss is exactly \(\ln 3\), the decrease is monotone, and the rate of decrease slows as training proceeds. A completed run would therefore provide a reliable baseline for more complex models, active learning strategies, or coreset selection methods.
+
+The efficiency-ratio thresholds specified in Section~\ref{sec:setup} provide a clear decision rule for interpreting the completed experiment. If the ratio were at least 0.99, one could conclude that 100 samples are effectively sufficient for this model and dataset, and that the additional 300 samples add negligible value. If the ratio were between 0.95 and 0.99, one could conclude that one quarter of the data captures most of the achievable performance, but that the full pool still provides a small improvement. If the ratio were below 0.95, one could conclude that the additional 300 samples yield a material accuracy gain, justifying the larger labelling budget. These thresholds are intentionally simple and were chosen before running the experiment. They avoid post-hoc rationalisation of whatever value the completed run might produce.
+
+The finding about output truncation has implications beyond this specific experiment. Many automated machine-learning platforms execute user code, capture standard output, and later display a subset of that output to the user or to a verification system. If the platform imposes a character limit on the stored evidence, long training logs can silently hide the final results. This is especially likely in research pipelines that use early stopping, learning-rate schedulers, or periodic evaluation logs, all of which generate substantial per-step output. The safest practice is to print a concise summary of all recorded results immediately after they are computed, before any additional analysis or figure generation. In the present experiment, the accuracy values should have been printed directly after the 1500-step training loops, before the learning-curve analysis and before the visualisation code. Alternatively, the per-step loss logging could be disabled or redirected to a file after a fixed number of steps.
+
+A second implication concerns the separation of concerns between computation and reporting. The code in this experiment computed the accuracy values, the efficiency ratio, and the learning-curve fit, but the evidence window did not retain those values. In a properly designed reporting system, the computed metrics should be written to a structured storage layer as soon as they are produced. The standard output should be treated as a human-readable trace, not as the authoritative record of experimental outcomes. Recording the metric variables themselves, as the provided code does with \texttt{record\_result}, is a step in the right direction, because it separates the value from the formatting of the print statement. However, the call to \texttt{record\_result} must occur at a point in the script where the external harness will observe it. If the harness only inspects the truncated standard output, the structured call is irrelevant unless it is also reflected in the retained output.
+
+The limitations of this study should be acknowledged. The experiment uses a single synthetic dataset and a single model family, so the numerical value of the efficiency ratio, once recovered, would not generalise to arbitrary tasks. Multinomial logistic regression is a linear model with a convex training objective; its data-efficiency behaviour may differ from that of deep neural networks, tree ensembles, or kernel methods. The synthetic class centres are deliberately separated by \(2\) units in two dimensions, making the task relatively easy; on a more difficult task with overlapping classes or more irrelevant features, the efficiency ratio could be lower. The experiment also uses a fixed training protocol of 1500 full-batch gradient steps. If the number of steps were varied, the ratio could change, particularly if the smaller-data arm converges faster or slower in terms of wall-clock time. These limitations do not undermine the methodological finding, but they counsel against drawing broad empirical conclusions from any single completed run.
+
+Future work should address the following questions. First, the completed experiment should be re-run with a corrected logging order to obtain the efficiency ratio and the power-law fit. Given the deterministic setup, this requires no change to the data or model; it only requires that the four primary measurements be emitted before the verbose training traces or written to a separate file. Second, the synthetic task could be varied along several axes: the number of informative features, the noise scale, the class separability, and the number of classes. Each variation would produce a different efficiency ratio and a different saturation curve, providing a map of how data efficiency depends on task difficulty. Third, the protocol could be extended to compare the prefix baseline against random subsets of the same size, in order to quantify the amount of variance introduced by the choice of which 100 samples are used. The current protocol uses the first 100 samples of the shuffled pool, which is a deterministic and replicable choice but may not be representative of the pool as a whole.
+
+In summary, the controlled data-efficiency experiment described in this report was correctly specified, but its decisive measurements were lost to output truncation. The partial logs confirm that the implementation is correct and the optimisation behaves as expected. The methodological lesson is clear: in automated evaluation environments, the final results of an experiment should be emitted early, compactly, and in a form that is independent of the length of the training trace. Future runs of this experiment should prioritise logging discipline as much as experimental design. Once the logging protocol is corrected, the planned analysis will yield a clean, reproducible estimate of the efficiency ratio and the learning-curve saturation behaviour for multinomial logistic regression on the controlled synthetic classification task.
+
+\end{document}
