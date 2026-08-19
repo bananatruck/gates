@@ -7,6 +7,7 @@ should. Every scenario in ``rig/scenarios.py`` is asserted against what it
 documents, so a scenario and its description cannot drift apart.
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -15,6 +16,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from gates import Ledger  # noqa: E402
+from rig.gate1_loop import main as gate1_loop_main  # noqa: E402
 from rig.loop import ScriptedEngineer, check_expectations, run_loop  # noqa: E402
 from rig.reward import (  # noqa: E402
     LEGACY_MARKER,
@@ -161,6 +163,25 @@ def test_upstream_never_sees_a_missing_contract(tmp_path):
     execution = run_experiment(NO_CONTRACT, tmp_path, timeout_s=60)
     assert execution.exit_code == 0
     assert not any(p.marker_visible for p in channel_sweep(execution))
+
+
+def test_retained_cli_run_resolves_a_relative_workdir(tmp_path, monkeypatch):
+    """The artifact path must not be joined to the subprocess cwd twice."""
+    monkeypatch.chdir(tmp_path)
+    assert gate1_loop_main([
+        "archived-run", "--quiet", "--workdir", "retained"
+    ]) == 0
+    shadow = (
+        tmp_path / "retained" / "archived-run" / "upstream_counterfactual"
+        / "attempt_01" / "results.json"
+    )
+    assert shadow.exists()
+
+
+def test_json_cli_output_is_machine_parseable(capsys):
+    assert gate1_loop_main(["warn-tier", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["scenarios"][0]["scenario"] == "warn-tier"
 
 
 # --------------------------------------------------------------------------- #

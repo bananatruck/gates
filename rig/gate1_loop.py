@@ -12,6 +12,8 @@ as much as a demonstration. No API key, no model, no training run.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
 import shutil
 import sys
@@ -271,23 +273,42 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     keep = args.workdir is not None
-    root = Path(args.workdir) if keep else Path(tempfile.mkdtemp(prefix="gate1_loop_"))
+    # Counterfactual executions pass this directory both as an artifact path and
+    # as their cwd.  Keeping a relative path made the harness resolve it twice
+    # (cwd / relative artifact / experiment.py), so an explicitly retained run
+    # failed before it could reproduce upstream behavior.  Temp paths happened
+    # to be absolute and masked the bug.
+    root = (
+        Path(args.workdir).resolve()
+        if keep
+        else Path(tempfile.mkdtemp(prefix="gate1_loop_"))
+    )
     quiet = args.quiet or args.json
 
     rows: list[tuple[Scenario, LoopOutcome, list[str]]] = []
     try:
-        for name in names:
-            scenario = SCENARIOS[name]
-            outcome = run_loop(
-                scenario,
-                workdir=root / name,
-                counterfactual=not args.no_counterfactual,
-                timeout_s=args.timeout,
-                observer=Transcript(
-                    quiet=quiet, show_feedback=not args.no_feedback
-                ),
-            )
-            rows.append((scenario, outcome, check_expectations(scenario, outcome)))
+        # `gated_execute` reports its verdict directly.  Human transcripts want
+        # that output, but `--json` promises a machine-parseable stdout stream.
+        # Capture the adapter chatter only in JSON mode and print the payload
+        # after all scenarios have completed.
+        output_context = (
+            contextlib.redirect_stdout(io.StringIO())
+            if args.json
+            else contextlib.nullcontext()
+        )
+        with output_context:
+            for name in names:
+                scenario = SCENARIOS[name]
+                outcome = run_loop(
+                    scenario,
+                    workdir=root / name,
+                    counterfactual=not args.no_counterfactual,
+                    timeout_s=args.timeout,
+                    observer=Transcript(
+                        quiet=quiet, show_feedback=not args.no_feedback
+                    ),
+                )
+                rows.append((scenario, outcome, check_expectations(scenario, outcome)))
 
         if args.json:
             print(as_json(rows))
