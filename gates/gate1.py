@@ -124,6 +124,12 @@ def run_gate1(source: str, config: Gate1Config, attempt: int = 1) -> GateReport:
         _attach_generated_fixes(report, model, source)
         _record_model_budget(report, model)
         _write_report(report, artifact_dir)
+        # An empty registry, marked not citable. Written here as well as on the
+        # runtime path so that "a rejected run still has a registry saying so"
+        # holds for every rejection: a consumer that reads registry.json and
+        # forgets to read the verdict must not find the file missing and treat
+        # its absence as an unrelated error.
+        write_registry(report, artifact_dir, task_ref=config.task_ref)
         return report
 
     execution = run_experiment(
@@ -175,7 +181,9 @@ def run_gate1(source: str, config: Gate1Config, attempt: int = 1) -> GateReport:
         checks.extend(
             [
                 _check_expected_keys(execution, config),
+                _check_undeclared_keys(execution, config),
                 _check_values_computed(execution),
+                _check_values_traced(execution),
                 _check_values_finite(execution),
                 _check_single_observation(execution),
                 _check_non_degenerate(execution, config),
@@ -645,12 +653,50 @@ def _check_expected_keys(execution: ExecutionRecord, config: Gate1Config) -> Che
     )
 
 
+def _check_undeclared_keys(execution: ExecutionRecord, config: Gate1Config) -> CheckResult:
+    """Keys the run recorded that the plan never asked for.
+
+    ``results.expected_keys_present`` tests presence, not equality, so an
+    experiment satisfies its contract while recording anything else it likes.
+    That matters for a reason beyond tidiness: when a scaffold prepends an
+    earlier phase's code to this one, the earlier phase's keys arrive here and
+    can satisfy a contract this run never met. Surfacing them is what makes that
+    blending visible in the report instead of invisible in the registry.
+
+    A warning, not a failure. Extra measurements are ordinary and often useful;
+    turning them into a rejection would cost the agent a rewrite for doing more
+    work than it was asked to.
+    """
+    if not config.expected_keys:
+        return CheckResult(
+            id="results.declared_keys_only",
+            passed=True,
+            severity=Severity.WARN,
+            message="no key contract declared by the plan",
+        )
+    extra = sorted(set(execution.metrics) - set(config.expected_keys))
+    return CheckResult(
+        id="results.declared_keys_only",
+        passed=not extra,
+        severity=Severity.WARN,
+        message=(
+            "the run recorded exactly the declared keys"
+            if not extra
+            else (
+                f"{len(extra)} key(s) recorded that the plan did not declare: "
+                f"{', '.join(extra)}"
+            )
+        ),
+        evidence={"undeclared": extra, "declared": sorted(config.expected_keys)},
+    )
+
+
 def _check_values_computed(execution: ExecutionRecord) -> CheckResult:
     """A recorded value that is a source literal was typed, not measured."""
     literals = [m for m in execution.metrics.values() if m.arg_kind == "literal"]
     unknown = [m for m in execution.metrics.values() if m.arg_kind == "unknown"]
     if not literals:
-        message = "every recorded value is the result of a computation"
+        message = "no recorded value is a literal at its call site"
         if unknown:
             message += f" ({len(unknown)} call site(s) could not be resolved statically)"
         return CheckResult(
@@ -674,6 +720,52 @@ def _check_values_computed(execution: ExecutionRecord) -> CheckResult:
                 for m in literals
             ],
             "unresolved": [m.key for m in unknown],
+        },
+    )
+
+
+def _check_values_traced(execution: ExecutionRecord) -> CheckResult:
+    """A value whose every input is a literal bound elsewhere in the source.
+
+    ``results.values_computed`` reads the call site and nothing else, so
+    ``record_result("k", 0.816)`` fails it and ``acc = 0.816`` followed by
+    ``record_result("k", acc)`` does not. The only difference between those two
+    programs is one indirection. This check follows the names back through their
+    assignments and reports the values that bottom out in constants.
+
+    It warns rather than fails, and that is a limit rather than a hedge: a
+    legitimately constant value — a configured batch size, a fixed split ratio,
+    a hyperparameter recorded alongside the metrics — is indistinguishable from
+    a fabricated one without knowing what the number means, which is Gate 2's
+    question. What Gate 1 can say is which values did not come from the run, and
+    it says so in the report the writer reads.
+    """
+    derived = [m for m in execution.metrics.values() if m.arg_kind == "constant"]
+    if not derived:
+        return CheckResult(
+            id="results.values_traced",
+            passed=True,
+            severity=Severity.WARN,
+            message="every recorded value traces back to something the run computed",
+        )
+    return CheckResult(
+        id="results.values_traced",
+        passed=False,
+        severity=Severity.WARN,
+        message=(
+            f"{len(derived)} value(s) resolve to source constants rather than to "
+            f"anything this run measured: {', '.join(m.key for m in derived)}"
+        ),
+        evidence={
+            "constant_derived": [
+                {
+                    "key": m.key,
+                    "value": m.value,
+                    "lineno": m.lineno,
+                    "source_line": m.source_line,
+                }
+                for m in derived
+            ]
         },
     )
 

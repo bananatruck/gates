@@ -19,6 +19,11 @@ _CONSTANT_CONVERTERS = frozenset(
     {"float", "int", "round", "abs", "str", "bool", "complex", "len"}
 )
 
+#: How measured a call site is. A line holding several ``record_result``
+#: calls takes the highest, so one real measurement is never hidden behind a
+#: constant recorded on the same line.
+_KIND_RANK = {"literal": 0, "constant": 1, "computed": 2}
+
 _BANNED_CALLS = {
     ("exit", None): "exit()",
     ("quit", None): "quit()",
@@ -211,13 +216,29 @@ def find_shadowed_harness_names(
 def classify_record_calls(
     source: str, filename: str = "<experiment>", func_name: str = "record_result"
 ) -> dict[int, str]:
-    """Map each ``record_result`` call line to ``"computed"`` or ``"literal"``.
+    """Map each ``record_result`` call line to how its value was obtained.
 
-    This is the mechanical form of "are the variables real". A recorded value
-    whose expression contains no name, attribute, subscript or non-folding call
-    was typed into the source rather than measured by the run.
+    This is the mechanical form of "are the variables real". Three answers:
+
+    ``literal``
+        The call site is a constant expression — ``record_result("k", 0.816)``.
+        Typed, not measured, and a blocking failure.
+    ``constant``
+        The call site reads names, but every binding of every name it reads is
+        itself constant — ``acc = 0.816`` then ``record_result("k", acc)``. The
+        indirection is the only difference from ``literal``, so the call-site
+        check alone cannot see it. Reported, never blocking: a genuinely
+        constant value (a configured batch size recorded beside the metrics) is
+        indistinguishable from a fabricated one without knowing what it means.
+    ``computed``
+        Something the run produced reaches the value.
+
+    The name resolution is deliberately shallow. A name that is ever bound by
+    anything other than a plain assignment is treated as computed, so the pass
+    under-reports rather than accusing a real measurement.
     """
     tree = parse(source, filename)
+    bindings = _constant_bindings(tree)
     kinds: dict[int, str] = {}
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
@@ -227,10 +248,15 @@ def classify_record_calls(
         value = _value_argument(node)
         if value is None:
             continue
-        kind = "literal" if _is_constant_expr(value) else "computed"
-        # A line with any computed record call counts as computed; a line with
-        # only literal ones is a fabrication.
-        if kinds.get(node.lineno) != "computed":
+        if _is_constant_expr(value):
+            kind = "literal"
+        elif _is_literal_derived(value, bindings, frozenset()):
+            kind = "constant"
+        else:
+            kind = "computed"
+        # One line can hold several calls. The most-measured one wins, so a line
+        # is only reported as literal when every value on it is.
+        if _KIND_RANK[kind] > _KIND_RANK.get(kinds.get(node.lineno, ""), -1):
             kinds[node.lineno] = kind
     return kinds
 
@@ -277,20 +303,113 @@ def _value_argument(node: ast.Call) -> ast.expr | None:
 
 def _is_constant_expr(node: ast.expr) -> bool:
     """True when the expression can be evaluated without reading any binding."""
+    return _is_literal_derived(node, {}, frozenset())
+
+
+def _is_literal_derived(
+    node: ast.expr, bindings: dict[str, list[ast.expr]], seen: frozenset[str]
+) -> bool:
+    """True when every leaf of ``node`` is a literal, following ``bindings``.
+
+    With an empty ``bindings`` this is the call-site test: nothing but constants
+    and constant-folding conversions. With bindings supplied it follows each
+    name back to its assignments, which is what catches a literal laundered
+    through a variable. ``seen`` breaks the cycle a self-referential binding
+    would otherwise create.
+    """
     if isinstance(node, ast.Constant):
         return True
+    if isinstance(node, ast.Name):
+        if node.id in seen or node.id not in bindings:
+            return False
+        deeper = seen | {node.id}
+        return all(_is_literal_derived(v, bindings, deeper) for v in bindings[node.id])
     if isinstance(node, ast.UnaryOp):
-        return _is_constant_expr(node.operand)
+        return _is_literal_derived(node.operand, bindings, seen)
     if isinstance(node, ast.BinOp):
-        return _is_constant_expr(node.left) and _is_constant_expr(node.right)
+        return _is_literal_derived(node.left, bindings, seen) and _is_literal_derived(
+            node.right, bindings, seen
+        )
     if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
-        return all(_is_constant_expr(e) for e in node.elts)
+        return all(_is_literal_derived(e, bindings, seen) for e in node.elts)
     if isinstance(node, ast.Call):
         name = _called_name(node.func)
         if name in _CONSTANT_CONVERTERS and not node.keywords:
-            return all(_is_constant_expr(a) for a in node.args)
+            return all(_is_literal_derived(a, bindings, seen) for a in node.args)
         return False
     return False
+
+
+def _constant_bindings(tree: ast.AST) -> dict[str, list[ast.expr]]:
+    """Every name bound only by plain assignment, mapped to what it was assigned.
+
+    A name bound by anything this pass cannot evaluate — a loop target, a
+    parameter, an augmented assignment, an import, a ``with`` or ``except``
+    alias, a ``global`` declaration — is dropped entirely rather than partially
+    resolved. Dropping it means the name reads as computed, which is the safe
+    direction: this pass only ever warns, and a false warning costs the engineer
+    a rewrite for nothing.
+    """
+    values: dict[str, list[ast.expr]] = {}
+    opaque: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    values.setdefault(target.id, []).append(node.value)
+                else:
+                    # Tuple unpacking, attributes, subscripts: the binding is
+                    # real but which value reaches which name is not this
+                    # pass's business.
+                    opaque.update(_stored_names(target))
+        elif isinstance(node, ast.AnnAssign):
+            if isinstance(node.target, ast.Name):
+                if node.value is None:
+                    opaque.add(node.target.id)
+                else:
+                    values.setdefault(node.target.id, []).append(node.value)
+        elif isinstance(node, ast.NamedExpr) and isinstance(node.target, ast.Name):
+            values.setdefault(node.target.id, []).append(node.value)
+        elif isinstance(node, ast.AugAssign):
+            opaque.update(_stored_names(node.target))
+        elif isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
+            opaque.update(_stored_names(node.target))
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                opaque.add(alias.asname or alias.name.split(".")[0])
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            opaque.add(node.name)
+            opaque.update(_argument_names(node.args))
+        elif isinstance(node, ast.Lambda):
+            opaque.update(_argument_names(node.args))
+        elif isinstance(node, ast.ClassDef):
+            opaque.add(node.name)
+        elif isinstance(node, ast.withitem) and node.optional_vars is not None:
+            opaque.update(_stored_names(node.optional_vars))
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            opaque.add(node.name)
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            opaque.update(node.names)
+    return {name: exprs for name, exprs in values.items() if name not in opaque}
+
+
+def _stored_names(target: ast.expr) -> set[str]:
+    return {
+        n.id
+        for n in ast.walk(target)
+        if isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del))
+    }
+
+
+def _argument_names(args: ast.arguments) -> set[str]:
+    every = [
+        *args.posonlyargs,
+        *args.args,
+        *args.kwonlyargs,
+        *([args.vararg] if args.vararg else []),
+        *([args.kwarg] if args.kwarg else []),
+    ]
+    return {a.arg for a in every}
 
 
 def _called_name(func: ast.expr) -> str | None:

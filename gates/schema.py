@@ -81,7 +81,11 @@ class MetricRecord:
     lineno: int | None = None
     source_line: str = ""
     call_count: int = 1
-    arg_kind: str = "unknown"  # "computed" | "literal" | "unknown"
+    #: "computed" — something the run produced reaches the value.
+    #: "constant" — every name it reads is bound only to literals.
+    #: "literal"  — the call site is a constant expression.
+    #: "unknown"  — the call site could not be resolved statically.
+    arg_kind: str = "unknown"
     #: Every ``record_result`` call for this key, oldest first, capped by the
     #: harness. Retained because the last value is not necessarily the reported
     #: one.

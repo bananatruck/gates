@@ -14,6 +14,7 @@ from gates import (  # noqa: E402
     Gate1Config,
     GateFailure,
     Ledger,
+    Severity,
     build_registry,
     citable_values,
     load_registry,
@@ -171,11 +172,45 @@ def test_banned_calls_detected():
         ("record_result('k', round(0.8160, 3))", "literal"),
         ("record_result('k', value=0.816)", "literal"),
         ("record_result('k', value=acc)", "computed"),
+        # the indirection the call-site check cannot see
+        ("record_result('k', typed)", "constant"),
+        ("record_result('k', typed / 100)", "constant"),
+        ("record_result('k', value=typed)", "constant"),
+        ("record_result('k', acc / typed)", "computed"),
     ],
 )
 def test_literal_vs_computed_classification(call, expected):
-    kinds = classify_record_calls(f"acc = 1\ntotal = 2\nscores=[1]\ndef compute(): return 1\n{call}\n")
+    preamble = (
+        "acc = sum([1])\n"
+        "total = sum([2])\n"
+        "scores = [1]\n"
+        "typed = 0.816\n"
+        "def compute(): return 1\n"
+    )
+    kinds = classify_record_calls(f"{preamble}{call}\n")
     assert list(kinds.values()) == [expected]
+
+
+@pytest.mark.parametrize(
+    "binding",
+    [
+        "for acc in [0.816]:\n    pass",
+        "acc = 0.0\nacc += 0.816",
+        "def f(acc=0.816):\n    pass\nacc = 0.816",
+        "import math as acc",
+        "acc, _ = (0.816, 0)",
+        "with open('f') as acc:\n    pass",
+    ],
+)
+def test_a_name_bound_outside_plain_assignment_is_not_called_constant(binding):
+    """The taint pass under-reports on purpose: a warning costs a rewrite."""
+    kinds = classify_record_calls(f"{binding}\nrecord_result('k', acc)\n")
+    assert list(kinds.values()) == ["computed"]
+
+
+def test_constant_chain_terminates_on_a_self_reference():
+    src = "acc = 0.816\ndef f():\n    global acc\n    acc = acc\nrecord_result('k', acc)\n"
+    assert list(classify_record_calls(src).values()) == ["computed"]
 
 
 # --------------------------------------------------------------------------- #
@@ -185,9 +220,9 @@ def test_literal_vs_computed_classification(call, expected):
 
 def test_clean_run_passes_and_records_values(config):
     src = (
-        "correct = 408\n"
-        "total = 500\n"
-        "test_acc = correct / total\n"
+        "predictions = [1] * 408 + [0] * 92\n"
+        "correct = sum(predictions)\n"
+        "test_acc = correct / len(predictions)\n"
         "record_metadata('seed', 0)\n"
         "record_result('exp1.K2.test_acc', test_acc, unit='ratio')\n"
     )
@@ -508,14 +543,89 @@ def test_any_seed_key_satisfies_the_check(config):
 
 
 # --------------------------------------------------------------------------- #
+# the limits the call-site check leaves open
+# --------------------------------------------------------------------------- #
+
+
+def test_value_laundered_through_a_variable_warns_but_does_not_block(config):
+    """`acc = 0.816; record_result(k, acc)` is the literal check's blind spot."""
+    src = (
+        "record_metadata('seed', 0)\n"
+        "test_acc = 0.816\n"
+        "record_result('exp1.K2.test_acc', test_acc, unit='ratio')\n"
+    )
+    report = run_gate1(src, config(expected_keys=("exp1.K2.test_acc",)))
+
+    assert report.passed, render_summary(report)
+    computed = next(c for c in report.checks if c.id == "results.values_computed")
+    assert computed.passed
+    traced = next(c for c in report.checks if c.id == "results.values_traced")
+    assert not traced.passed
+    assert traced.severity is Severity.WARN
+    assert traced.evidence["constant_derived"][0]["key"] == "exp1.K2.test_acc"
+    assert report.metrics()["exp1.K2.test_acc"].arg_kind == "constant"
+
+
+def test_a_real_measurement_is_not_called_constant(config):
+    src = (
+        "record_metadata('seed', 0)\n"
+        "predictions = [1] * 408 + [0] * 92\n"
+        "record_result('exp1.K2.test_acc', sum(predictions) / len(predictions))\n"
+    )
+    report = run_gate1(src, config())
+    traced = next(c for c in report.checks if c.id == "results.values_traced")
+    assert traced.passed, traced.message
+
+
+def test_keys_the_plan_never_declared_are_reported(config):
+    src = (
+        "record_metadata('seed', 0)\n"
+        "record_result('exp1.acc', sum([1]) / 2)\n"
+        "record_result('leftover.from_earlier_phase', sum([3]) / 2)\n"
+    )
+    report = run_gate1(src, config(expected_keys=("exp1.acc",)))
+
+    assert report.passed, render_summary(report)
+    declared = next(c for c in report.checks if c.id == "results.declared_keys_only")
+    assert not declared.passed
+    assert declared.severity is Severity.WARN
+    assert declared.evidence["undeclared"] == ["leftover.from_earlier_phase"]
+
+
+def test_exactly_the_declared_keys_raises_nothing(config):
+    src = "record_metadata('seed', 0)\nrecord_result('exp1.acc', sum([1]) / 2)\n"
+    report = run_gate1(src, config(expected_keys=("exp1.acc",)))
+    declared = next(c for c in report.checks if c.id == "results.declared_keys_only")
+    assert declared.passed
+
+
+# --------------------------------------------------------------------------- #
 # registry — "typed and hashed to the run that produced it"
 # --------------------------------------------------------------------------- #
+
+
+def test_a_statically_rejected_run_still_gets_a_registry(config):
+    """Nothing ran, so the registry is empty — but it exists and says so.
+
+    A consumer that reads registry.json and forgets to read the verdict must
+    find a file marked not citable rather than no file at all.
+    """
+    report = run_gate1("test_acc = (0.816\n", config())
+    assert not report.passed
+    assert not any(c.id.startswith("exec.") for c in report.checks)
+    assert report.execution is None
+
+    registry = load_registry(Path(report.artifact_dir) / "registry.json")
+    assert registry["citable"] is False
+    assert registry["values"] == {}
+    assert registry["run"]["code_sha256"] == report.code_sha256
 
 
 def test_registry_binds_each_value_to_the_run(config, tmp_path):
     src = (
         "record_metadata('seed', 0)\n"
-        "acc = 408 / 500\n"
+        "predictions = [1] * 408 + [0] * 92\n"
+        "acc = sum(predictions) / len(predictions)\n"
         "record_result('exp1.K2.test_acc', acc, unit='ratio')\n"
     )
     report = run_gate1(src, config(task_ref="reproduce SGC on Cora"), attempt=1)
