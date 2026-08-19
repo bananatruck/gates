@@ -57,8 +57,8 @@ rate:` and `Converged after 40 iterations` are all held un-flagged by test.
 | D5 | No model is asked whether the run succeeded | slide 7 | `gate1.py` imports no model client; every verdict is a runtime fact | — (structural) | **MET** |
 | D6 | AutoResearchClaw's reported limitation: a registry passes zero-valued results because the zeros are real | slide 8 | `results.non_degenerate` surfaces exact zeros, perfect scores and chance-level values as WARN, never blocking | `test_degenerate_values_warn_only` | **MET** |
 | D7 | Replace `get_score()` | slide 11 | Demoted rather than deleted, by decision: Gate 1 owns pass/fail, `get_score` orders passing attempts, and every disagreement is logged as the paper's evidence | `test_ledger_records_divergence` | **MET, by amendment** |
-| D8 | Fabrication rate as a function of channel fidelity — the novel experiment | slide 10, slide 15 step 3 | `Gate1Config(require_metrics=False)` and `GatedExecution.legacy_view()` provide the degraded arm and the faithful 1000-character reconstruction | `test_contract_optional_in_ablation_mode` | **instrumented, not yet run** |
-| D9 | Metrics-bearing outputs, numeric fabrication rate, CORE-Bench accuracy | slide 13 | evaluation targets, not implementation | — | **pending measurement** |
+| D8 | Fabrication rate as a function of channel fidelity — the novel experiment | slide 10, slide 15 step 3 | `Gate1Config(require_metrics=False)` and `GatedExecution.legacy_view()` provide the degraded arm and the faithful 1000-character reconstruction | `test_contract_optional_in_ablation_mode` | **MET** — run; 40/40 required pairs delivered gated, 0/40 ungated, same artifacts |
+| D9 | Metrics-bearing outputs, numeric fabrication rate, CORE-Bench accuracy | slide 13 | evaluation targets, not implementation | — | **PARTIAL** — paper traceability measured (28/29 gated vs 0/11 ungated); no CORE-Bench or MLR-Bench submission was run, and none is claimed |
 
 ---
 
@@ -81,6 +81,23 @@ rate:` and `Converged after 40 iterations` are all held un-flagged by test.
 
 ---
 
+## Limitations closed after validation
+
+The validation campaign's audit produced a list of gaps. Three were cheap and are
+now closed in code rather than carried as prose; each is held by a test.
+
+| # | Gap | Satisfied by | Test | Status |
+|---|---|---|---|---|
+| L1 | `values_computed` reads the call site only, so a literal assigned to a variable first satisfies it | `results.values_traced` — resolves each name back through its bindings, WARN by construction | `test_value_laundered_through_a_variable_warns_but_does_not_block`, `test_a_real_measurement_is_not_called_constant`, `test_a_name_bound_outside_plain_assignment_is_not_called_constant` | **MET** |
+| L2 | Expected keys are presence-only, so an earlier phase's keys can satisfy this phase's contract | `results.declared_keys_only` — reports undeclared keys, WARN by construction | `test_keys_the_plan_never_declared_are_reported`, `test_exactly_the_declared_keys_raises_nothing` | **MET** |
+| L3 | Documentation claimed every rejected run has a registry; pre-execution rejections had none | `write_registry` runs on the static-rejection path, writing an empty registry marked `"citable": false` | `test_a_statically_rejected_run_still_gets_a_registry` | **MET** |
+
+Both new checks warn and neither can change a verdict — the verdict stays
+deterministic and stays where `decide()` puts it. `results.values_traced` was run
+over all 20 experiment sources the campaign produced, 203 `record_result` call
+sites, and raised nothing: it is built to under-report, because a false warning
+costs the engineer a rewrite for nothing.
+
 ## What Gate 1 does not claim
 
 Stated plainly, because the deck's slide 12 commits to saying it precisely:
@@ -98,4 +115,10 @@ Stated plainly, because the deck's slide 12 commits to saying it precisely:
   the signals observed in the archived runs and the common numerical and device
   failures. An error message outside it passes silently. Precision was preferred
   to recall, and that is a measured trade, not an oversight.
+- **`results.values_traced` is a heuristic, not a proof.** It follows plain
+  assignments and constant-folding conversions. A constant that passes through a
+  function call, a loop, or a container it is read back out of is reported as
+  computed. It closes one indirection, which is the one observed; it does not
+  make either value check an anti-fabrication proof, and neither should be
+  described as one.
 - **P5 is partial** and is marked so above rather than rounded up.

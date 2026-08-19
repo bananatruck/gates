@@ -4,10 +4,11 @@
 single question with no model in the loop: *did this code actually run to completion, and were
 the numbers it reports produced by this run rather than inherited, hardcoded, or invented?*
 
-Status: **implemented, tested, wired into Agent-Researcher.** 67 gate tests, 18 loop tests, 10
-integration tests. Requirement-by-requirement traceability against the project documents is in
-[`GATE1_REQUIREMENTS.md`](GATE1_REQUIREMENTS.md); what remains before Gate 1 can be written up —
-all of it measurement, none of it code — is in [`GATE1_COMPLETION.md`](GATE1_COMPLETION.md).
+Status: **complete, measured, wired into Agent-Researcher.** 22 checks, 302 tests here and 76 in
+the host scaffold's suite. Requirement-by-requirement traceability against the project documents
+is in [`GATE1_REQUIREMENTS.md`](GATE1_REQUIREMENTS.md); how each outstanding item closed is in
+[`GATE1_COMPLETION.md`](GATE1_COMPLETION.md); the measured numbers and the boundary Gate 1 does
+not cross are in [`../README.md`](../README.md#measured-results).
 
 ---
 
@@ -110,7 +111,9 @@ record_result("exp1.K2.test_acc", test_acc, unit="ratio")
 | `results.contract_present` | nothing was recorded |
 | `results.expected_keys_present` | a key the plan declared is missing |
 | `results.values_computed` | a recorded value is a source literal |
+| `results.values_traced` *(warn)* | a value resolves to source literals once its variables are followed back |
 | `results.values_finite` | a value is NaN or infinite |
+| `results.declared_keys_only` *(warn)* | a key was recorded that the plan never declared |
 | `results.single_observation` *(warn)* | a key was recorded repeatedly with a changing value |
 | `results.non_degenerate` *(warn)* | exact zero, perfect score, or chance level |
 
@@ -119,6 +122,22 @@ site; Gate 1 re-parses the source, locates the `Call` node at that line, and ins
 argument. `record_result("k", acc)` passes. `record_result("k", 0.816)` fails, as does
 `float(80.40)/100` and `round(0.8160, 3)` — constant-folding does not launder a typed number.
 No reviewed prior art claims this check.
+
+`results.values_traced` covers the one indirection that check cannot see. `acc = 0.816` followed
+by `record_result("k", acc)` satisfies the call-site test, so the same pass follows each name back
+through its bindings and reports a value whose every input is a constant. It **warns** rather than
+fails, and that is a limit rather than a hedge: a legitimately constant value — a configured batch
+size recorded beside the metrics — is indistinguishable from a fabricated one without knowing what
+the number means, which is Gate 2's question. A name bound by anything the pass cannot evaluate (a
+loop target, a parameter, an augmented assignment, an import) is treated as computed, so it
+under-reports on purpose. Across all 20 experiment sources the validation campaign produced — 203
+`record_result` call sites — it raised zero warnings.
+
+`results.declared_keys_only` covers the other one. `results.expected_keys_present` tests presence,
+not equality, so a run can satisfy its contract while recording anything else. That matters when a
+scaffold prepends an earlier phase's code to this one: the earlier phase's keys arrive here and can
+satisfy a contract this run never met. Also a warning — extra measurements are ordinary, and
+rejecting an agent for doing more work than it was asked to would cost a rewrite for nothing.
 
 `results.non_degenerate` answers the limitation AutoResearchClaw (arXiv 2605.20025) reports for
 value registries: a registry passes zero-valued results because the zeros are genuine
@@ -155,9 +174,10 @@ reported rather than papered over, and `chain_integrity` gives the rate across a
 
 `env.code_identity` is what makes "hashed to the run that produced it" checkable rather than
 assumed: the parent hashes the source it wrote, the child process hashes the source it actually
-ran, and the gate asserts they match. A rejected run still gets a registry — recorded as
+ran, and the gate asserts they match. Every rejected run still gets a registry — recorded as
 `"citable": false`, so a downstream consumer that forgets to check the verdict still cannot cite
-it.
+it. That holds for pre-execution rejections too: nothing ran, so the registry is empty, but the
+file exists and says it is not citable rather than being absent.
 
 ---
 
@@ -270,14 +290,20 @@ environment the host already has.
 
 ---
 
-## 8. Not yet done
+## 8. What is outside Gate 1
 
 The loop these checks compose into is exercised end to end by `rig/gate1_loop.py`, with a
 scripted engineer in place of the model — five scenarios, including the audited run replayed turn
 by turn, and the host scaffold's own 1,000-character failure detector reconstructed alongside so
-the divergence is measured rather than asserted. What is left for Gate 1 after that is the
-archive re-run and the channel-fidelity writer arm, scheduled in
-[`GATE1_COMPLETION.md`](GATE1_COMPLETION.md).
+the divergence is measured rather than asserted. The archive re-run and the channel-fidelity arm
+have since run; see [`GATE1_COMPLETION.md`](GATE1_COMPLETION.md).
+
+What is left is not Gate 1's. It answers *did this run, and did these numbers come from it* — not
+whether a number means anything, and not whether the manuscript's prose follows from it. In the
+validation campaign the gated writer still derived a scaling exponent from two points and
+described a single seeded dataset as free of sampling variance; Gate 1 passed the run that
+produced those numbers, correctly, because the numbers were real. The full boundary is stated in
+[`../README.md`](../README.md#what-gate-1-does-not-do).
 
 Gate 2 (source ↔ result coherence) and Gate 3 (report validity) are specified in
 [`PLAN.md`](PLAN.md) and not implemented. Gate 1 does not check whether results are *plausible*
