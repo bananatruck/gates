@@ -1,4 +1,4 @@
-"""Sandboxed execution of experiment code.
+"""Process-isolated execution of experiment code.
 
 Replaces the ``exec(code, globals())``-in-a-thread pattern that the gate exists
 to fix. Three differences matter:
@@ -12,16 +12,24 @@ to fix. Three differences matter:
 * **Timeout kills the process group.** ``ThreadPoolExecutor.result(timeout=)``
   returns to the caller but leaves the runaway thread burning CPU for the rest
   of the run; ``killpg`` actually stops it, including dataloader workers.
+
+This is not an operating-system security sandbox: the child still runs as the
+calling user and may have filesystem or network access.  Provider credentials
+are nevertheless removed from its environment so ordinary agent code cannot
+obtain the key that the parent scaffold needs for model calls.
 """
 
 from __future__ import annotations
 
+import contextlib
+import ctypes
 import hashlib
 import json
 import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -32,6 +40,36 @@ from .schema import ExceptionRecord, ExecutionRecord, MetricRecord
 HARNESS_PATH = str(Path(__file__).with_name("harness.py").resolve())
 
 DEFAULT_TIMEOUT_S = 900
+
+_SENSITIVE_ENV_MARKERS = (
+    "API_KEY",
+    "APIKEY",
+    "TOKEN",
+    "SECRET",
+    "PASSWORD",
+    "PASSWD",
+    "CREDENTIAL",
+    "PRIVATE_KEY",
+    "ACCESS_KEY",
+    "AUTH",
+    "COOKIE",
+)
+_SENSITIVE_ENV_NAMES = {
+    "DATABASE_URL",
+    "REDIS_URL",
+    "MONGODB_URI",
+    "SENTRY_DSN",
+    "SSH_AUTH_SOCK",
+    "GPG_AGENT_INFO",
+    "KUBECONFIG",
+    "NETRC",
+}
+
+_PR_GET_DUMPABLE = 3
+_PR_SET_DUMPABLE = 4
+_DUMPABLE_LOCK = threading.Lock()
+_DUMPABLE_USERS = 0
+_DUMPABLE_ORIGINAL: int | None = None
 
 
 def code_sha256(source: str) -> str:
@@ -89,6 +127,7 @@ def run_experiment(
     )
     if env:
         child_env.update(env)
+    child_env = _without_credentials(child_env)
 
     argv = [python or sys.executable, HARNESS_PATH, str(code_path), str(artifact_dir)]
 
@@ -98,27 +137,28 @@ def run_experiment(
     started = time.monotonic()
     # Writing to files rather than PIPE: an experiment that outproduces the pipe
     # buffer would otherwise deadlock, which is exactly what a long run does.
-    with open(stdout_path, "wb") as out, open(stderr_path, "wb") as err:
-        popen_kwargs: dict[str, object] = {
-            "stdout": out,
-            "stderr": err,
-            "stdin": subprocess.DEVNULL,
-            "cwd": cwd,
-            "env": child_env,
-        }
-        if os.name == "posix":
-            popen_kwargs["start_new_session"] = True
-        try:
-            proc = subprocess.Popen(argv, **popen_kwargs)  # type: ignore[arg-type]
-        except OSError as exc:
-            raise HarnessError(f"could not start execution harness: {exc}") from exc
+    with _hide_parent_process_from_child():
+        with open(stdout_path, "wb") as out, open(stderr_path, "wb") as err:
+            popen_kwargs: dict[str, object] = {
+                "stdout": out,
+                "stderr": err,
+                "stdin": subprocess.DEVNULL,
+                "cwd": cwd,
+                "env": child_env,
+            }
+            if os.name == "posix":
+                popen_kwargs["start_new_session"] = True
+            try:
+                proc = subprocess.Popen(argv, **popen_kwargs)  # type: ignore[arg-type]
+            except OSError as exc:
+                raise HarnessError(f"could not start execution harness: {exc}") from exc
 
-        try:
-            exit_code = proc.wait(timeout=timeout_s)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            _kill_tree(proc)
-            exit_code = proc.wait()
+            try:
+                exit_code = proc.wait(timeout=timeout_s)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                _kill_tree(proc)
+                exit_code = proc.wait()
 
     duration = time.monotonic() - started
 
@@ -142,6 +182,70 @@ def run_experiment(
     for key, metric in record.metrics.items():
         metric.trace_id = make_trace_id(run_id, key, metric.lineno)
     return record
+
+
+def _without_credentials(environment: dict[str, str]) -> dict[str, str]:
+    """Return a child environment with likely credentials removed.
+
+    Scrubbing happens after caller overrides, so ``env=`` cannot accidentally
+    re-introduce a provider key.  This is defense in depth, not a replacement
+    for a container or a separate unprivileged execution account.
+    """
+    clean: dict[str, str] = {}
+    for name, value in environment.items():
+        upper = name.upper()
+        if upper in _SENSITIVE_ENV_NAMES:
+            continue
+        if any(marker in upper for marker in _SENSITIVE_ENV_MARKERS):
+            continue
+        clean[name] = value
+    return clean
+
+
+@contextlib.contextmanager
+def _hide_parent_process_from_child():
+    """Block Linux children from reading the parent's memory and `/proc` env.
+
+    Environment scrubbing protects the child's own environment.  It does not,
+    by itself, stop a same-UID child from opening ``/proc/<ppid>/environ`` or
+    attaching with ptrace.  Linux's non-dumpable process flag closes those
+    paths while the untrusted experiment is alive.  A reference count keeps
+    the parent protected if two experiment threads overlap.
+
+    Other operating systems retain environment scrubbing but need a real
+    sandbox or separate account for the equivalent parent-process boundary.
+    """
+    global _DUMPABLE_USERS, _DUMPABLE_ORIGINAL
+    joined = False
+    if sys.platform.startswith("linux"):
+        with _DUMPABLE_LOCK:
+            if _DUMPABLE_USERS == 0:
+                original = _prctl(_PR_GET_DUMPABLE)
+                if original >= 0 and _prctl(_PR_SET_DUMPABLE, 0) == 0:
+                    _DUMPABLE_ORIGINAL = original
+            if _DUMPABLE_ORIGINAL is not None:
+                _DUMPABLE_USERS += 1
+                joined = True
+    try:
+        yield
+    finally:
+        if joined:
+            with _DUMPABLE_LOCK:
+                _DUMPABLE_USERS -= 1
+                if _DUMPABLE_USERS == 0:
+                    original = _DUMPABLE_ORIGINAL
+                    _DUMPABLE_ORIGINAL = None
+                    if original is not None:
+                        _prctl(_PR_SET_DUMPABLE, original)
+
+
+def _prctl(option: int, argument: int = 0) -> int:
+    """Call Linux prctl without adding a third-party dependency."""
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        return int(libc.prctl(option, argument, 0, 0, 0))
+    except (AttributeError, OSError):
+        return -1
 
 
 def _load_results(results_path: Path, record: ExecutionRecord) -> None:

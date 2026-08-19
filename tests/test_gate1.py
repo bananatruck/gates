@@ -1,6 +1,8 @@
 """Gate 1 behaviour, including the exact failure the archived run exhibits."""
 
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -16,6 +18,7 @@ from gates import (  # noqa: E402
     citable_values,
     load_registry,
     resolve_trace,
+    run_experiment,
     run_gate1,
 )
 from gates.log_checks import scan_streams  # noqa: E402
@@ -34,6 +37,68 @@ def config(tmp_path):
         return Gate1Config(artifact_root=str(tmp_path), **kw)
 
     return _make
+
+
+def test_experiment_child_does_not_inherit_provider_credentials(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "parent-only-sentinel")
+    source = (
+        "import os\n"
+        "secret_visible = os.environ.get('DEEPSEEK_API_KEY') is not None\n"
+        "override_visible = os.environ.get('OPENAI_API_KEY') is not None\n"
+        "safe_visible = os.environ.get('GATE_TEST_SAFE') == 'visible'\n"
+        "record_result('security.parent_secret_visible', secret_visible)\n"
+        "record_result('security.override_secret_visible', override_visible)\n"
+        "record_result('security.safe_override_visible', safe_visible)\n"
+    )
+    execution = run_experiment(
+        source,
+        tmp_path,
+        env={"OPENAI_API_KEY": "also-parent-only", "GATE_TEST_SAFE": "visible"},
+        timeout_s=30,
+    )
+
+    assert execution.exit_code == 0
+    assert execution.metrics["security.parent_secret_visible"].value is False
+    assert execution.metrics["security.override_secret_visible"].value is False
+    assert execution.metrics["security.safe_override_visible"].value is True
+    artifacts = (tmp_path / "results.json").read_text()
+    assert "parent-only-sentinel" not in artifacts
+    assert "also-parent-only" not in artifacts
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux /proc test")
+def test_experiment_child_cannot_read_parent_proc_environment(tmp_path):
+    """Scrubbing the child is insufficient if it can open its parent's env."""
+    sentinel = "gate1-parent-proc-sentinel-not-a-real-secret"
+    program = f'''\
+from gates import run_experiment
+source = """import os
+try:
+    parent_env = open(f'/proc/{{os.getppid()}}/environ', 'rb').read()
+except OSError:
+    parent_env = b''
+visible = b'{sentinel}' in parent_env
+record_result('security.parent_proc_visible', visible)
+"""
+record = run_experiment(source, {str(tmp_path)!r}, timeout_s=30)
+print(record.metrics['security.parent_proc_visible'].value)
+'''
+    environment = os.environ.copy()
+    environment["GATE_TEST_SECRET_INITIAL"] = sentinel
+
+    result = subprocess.run(
+        [sys.executable, "-c", program],
+        cwd=str(Path(__file__).resolve().parents[1]),
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "False"
 
 
 # --------------------------------------------------------------------------- #
