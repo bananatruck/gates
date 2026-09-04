@@ -20,6 +20,7 @@ from ..report import render_evidence
 from .. import (
     REGISTRY_FILENAME,
     Gate1Config,
+    Gate2Config,
     GateFailure,
     GateReport,
     Ledger,
@@ -27,6 +28,8 @@ from .. import (
     render_summary,
     run_experiment,
     run_gate1,
+    run_gate2,
+    unresolved_discrepancies,
 )
 
 #: How much raw stdout to inline for the writing agent. Every citable number is
@@ -76,7 +79,7 @@ still useful, but printed values are not citable - only recorded ones are.
 class GateContext:
     """Per-phase gate state: budget, ledger, and what has passed so far."""
 
-    config: Gate1Config
+    config: Gate1Config | Gate2Config
     ledger: Ledger | None = None
     phase: str = "running experiments"
     reward_model: str | None = None
@@ -107,7 +110,7 @@ class GateContext:
         """
         if self.budget_exhausted and not self.has_passing_attempt:
             raise GateFailure(
-                gate="GATE 1 — EXECUTION VALIDITY",
+                gate=self.last_report.gate if self.last_report else "GATE",
                 attempts=self.consecutive_rejections,
                 report=self.last_report,
             )
@@ -343,6 +346,47 @@ def gated_execute(code: str, context: GateContext) -> GatedExecution:
         evidence_bundle=build_evidence_bundle(report),
         code=code,
     )
+
+
+def gated_review(registry: dict[str, Any], context: GateContext) -> GatedExecution:
+    """Review a Gate 1 registry under Gate 2 and return the verdict.
+
+    The mirror of :func:`gated_execute` one phase later. The subject is the
+    registry Gate 1 wrote rather than source code, and the budget is spent the
+    same way: ``rewrite`` is set from the context so the feedback header counts
+    agent turns rather than reporting "attempt 1" forever.
+
+    The caller does **not** call ``check_can_continue`` after this. Gate 2's
+    policy on a spent budget is to proceed with the discrepancies declared, so
+    the loop keeps going and the limitations travel forward in the bundle.
+    """
+    context.attempt += 1
+    report = run_gate2(registry, context.config, attempt=context.attempt)
+    report.rewrite = context.consecutive_rejections + 1
+    context.note(report)
+
+    print(f"$$$$ {render_summary(report)}")
+
+    return GatedExecution(
+        report=report,
+        feedback=render_feedback(report),
+        evidence_bundle=declared_limitations(report),
+    )
+
+
+def declared_limitations(report: GateReport) -> str:
+    """What the manuscript has to disclose, whether or not Gate 2 passed.
+
+    Gate 2 proceeds on exhaustion, so its findings must travel into the writing
+    phase rather than stopping the run. An empty result means there is nothing
+    to declare, not that nothing was checked - the report says which checks ran.
+    """
+    limitations = unresolved_discrepancies(report)
+    if not limitations:
+        return ""
+    lines = ["DECLARED LIMITATIONS", ""]
+    lines.extend(f"  - {item}" for item in limitations)
+    return "\n".join(lines) + "\n"
 
 
 def build_evidence_bundle(report: GateReport, budget: int = STDOUT_BUDGET_CHARS) -> str:

@@ -42,6 +42,13 @@ def render_feedback(report: GateReport, *, include_stdout_tail: bool = True) -> 
             # locate in the logs is a warning it will ignore.
             out.extend(_render_check(check))
 
+    carried = _carry_forward(report)
+    if carried:
+        out.append("CARRY FORWARD (not defects; the report must state these)")
+        out.append("")
+        out.extend(f"  {line}" for line in carried)
+        out.append("")
+
     # The model writes the fixes when it produced grounded ones; the template is
     # the fallback, not the default. Either way the findings above are the
     # deterministic ones, verbatim — the model explains what to do, it does not
@@ -80,7 +87,10 @@ def render_feedback(report: GateReport, *, include_stdout_tail: bool = True) -> 
                 out.append("")
                 out.append("LAST LINES BEFORE FAILURE")
                 out.extend(f"  | {line}" for line in tail)
-    elif failures:
+    elif failures and report.code_sha256:
+        # Only meaningful for a gate whose subject is source code. Gate 1 sets
+        # this hash on every path; Gate 2 and Gate 3 judge artifacts that were
+        # produced by a run that already happened.
         out.append("The experiment was rejected before execution; nothing was run.")
 
     return "\n".join(out).rstrip() + "\n"
@@ -207,6 +217,90 @@ def _evidence_varied(check: CheckResult) -> list[str]:
     return out
 
 
+def _evidence_range(check: CheckResult) -> list[str]:
+    out = []
+    for row in check.evidence.get("violations", [])[:_MAX_EVIDENCE_ROWS]:
+        out.append(
+            f"  {row['key']} = {row['value']!r} lies outside {row['range']} "
+            f"for unit {row['unit']!r}"
+        )
+    return out
+
+
+def _evidence_relations(check: CheckResult) -> list[str]:
+    ev = check.evidence
+    out = []
+    for row in ev.get("failures", [])[:_MAX_EVIDENCE_ROWS]:
+        out.append(
+            f"  {row['key']} recorded as {row['recorded']!r}, but "
+            f"{row['op']}({row['left']}={row['left_value']!r}, "
+            f"{row['right']}={row['right_value']!r}) = {row['expected']!r}"
+        )
+    # An operand that was never recorded is a different problem from a relation
+    # that came out wrong, and it has a different fix.
+    for row in ev.get("unresolved", [])[:_MAX_EVIDENCE_ROWS]:
+        missing = ", ".join(row["missing"])
+        out.append(f"  {row['key']}: not checked, nothing recorded for {missing}")
+    return out
+
+
+def _evidence_reference(check: CheckResult) -> list[str]:
+    ev = check.evidence
+    out = []
+    for row in ev.get("out_of_band", [])[:_MAX_EVIDENCE_ROWS]:
+        out.append(
+            f"  {row['key']} = {row['value']!r} agrees with no comparable source"
+        )
+        for cand in row.get("candidates", [])[:_MAX_EVIDENCE_ROWS]:
+            setting = f", {cand['setting']}" if cand.get("setting") else ""
+            out.append(
+                f"    {cand['source_id']} reports {cand['reported']!r}, band "
+                f"{cand['band']} ({cand['band_origin']}{setting})"
+            )
+    unreferenced = ev.get("unreferenced") or []
+    if unreferenced:
+        shown = ", ".join(unreferenced[:_MAX_EVIDENCE_ROWS])
+        rest = len(unreferenced) - _MAX_EVIDENCE_ROWS
+        more = f" (+{rest} more)" if rest > 0 else ""
+        out.append(f"  no comparable source in the corpus for: {shown}{more}")
+    return out
+
+
+def _evidence_findings(check: CheckResult) -> list[str]:
+    """Model findings from Gate 2's semantic tier.
+
+    Both semantic checks emit the same ``{ref, note, detail}`` rows, so both ids
+    point here. Same precedent as ``logs.model_error_signals`` sharing the
+    pattern scanner's renderer: the agent should never have to learn a second
+    format because a finding came from a model.
+    """
+    out = []
+    for row in check.evidence.get("findings", [])[:_MAX_EVIDENCE_ROWS]:
+        out.append(f"  {row['ref']}: {row['note']}")
+        if row.get("detail") and row["detail"] != row["note"]:
+            out.append(f"    {row['detail']}")
+    return out
+
+
+def _carry_forward(report: GateReport) -> list[str]:
+    """Declared discrepancies belonging to checks that passed.
+
+    Failures and warnings between them cover everything that went wrong. This
+    covers what went right in a way the manuscript still has to disclose: Gate
+    2's unreferenced results are not a defect, but the writer has to call such a
+    result novel rather than a replication, and rendering only failures would
+    drop exactly that instruction.
+    """
+    out: list[str] = []
+    for check in report.checks:
+        if check.passed:
+            out.extend(check.evidence.get("discrepancies") or [])
+    if len(out) > _MAX_EVIDENCE_ROWS:
+        rest = len(out) - _MAX_EVIDENCE_ROWS
+        return out[:_MAX_EVIDENCE_ROWS] + [f"(+{rest} more in the gate report)"]
+    return out
+
+
 _EVIDENCE_RENDERERS = {
     "static.syntax_valid": _evidence_syntax,
     "static.no_unbound_names": _evidence_unbound,
@@ -220,6 +314,12 @@ _EVIDENCE_RENDERERS = {
     # and the agent never has to learn a second format.
     "logs.model_error_signals": _evidence_log_signals,
     "results.single_observation": _evidence_varied,
+    # Gate 2.
+    "coherence.range_valid": _evidence_range,
+    "coherence.internal_consistency": _evidence_relations,
+    "coherence.reference_interval": _evidence_reference,
+    "coherence.method_match": _evidence_findings,
+    "coherence.claim_supported": _evidence_findings,
 }
 
 
@@ -273,6 +373,21 @@ _FIXES = {
     "results.values_finite": (
         "A metric is NaN or infinite. Check for division by zero, an empty "
         "evaluation split, or a diverged loss."
+    ),
+    "coherence.range_valid": (
+        "A recorded value lies outside what its unit admits. Either the metric "
+        "is computed wrong, or the unit passed to record_result is wrong. Fix "
+        "the computation, or record the value with the unit it actually has."
+    ),
+    "coherence.internal_consistency": (
+        "A value the plan derives from other recorded values does not match "
+        "them. Compute it from the recorded numbers rather than measuring it "
+        "separately, and record every operand it depends on."
+    ),
+    "coherence.reference_interval": (
+        "A result disagrees with every comparable number in the retrieved "
+        "literature. Check the setting matches the source before reporting it "
+        "as a replication: same split, same normalization, same hyperparameters."
     ),
     "env.code_identity": (
         "The source that ran does not hash to the source submitted. Report this "
