@@ -19,3 +19,4 @@ include = ["gates*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+cache_dir = ".cache/pytest"

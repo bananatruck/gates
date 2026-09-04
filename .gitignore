@@ -1,9 +1,10 @@
+.cache/
+.venv/
 __pycache__/
 *.py[cod]
 *.egg-info/
 build/
 dist/
-.pytest_cache/
 gate_artifacts/
 
 # libreoffice lock files

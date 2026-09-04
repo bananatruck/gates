@@ -21,6 +21,23 @@ One package: the finalized submission and everything it cites.
 The headline numbers, and the boundary they do **not** support, are summarised in
 the [top-level README](../README.md#measured-results).
 
+## Vintage
+
+This package is frozen at the state it was submitted in, 2026-08-16, and its
+`SHA256SUMS.txt` is left byte-identical so it still verifies. Two consequences
+worth knowing before quoting from it:
+
+- `SUBMISSION_MANIFEST.json` records `regression_tests: 362` and
+  `legacy_blind_rejected_turns: 9/18`. The current tree reports **321** and
+  **6/3**. Both moved after the submission; the manifest is not wrong about the
+  run it describes, and the live numbers are in the
+  [top-level README](../README.md#measured-results).
+- `SHA256SUMS.txt` lists a package-local `README.md` that commit `6ee1f3e`
+  removed when the three-folder report tree collapsed into this one. 512 of the
+  513 listed files verify; that entry is dangling. It is left in place rather
+  than edited out, because a checksum file that has been edited after the fact
+  is worth less than one with a documented gap.
+
 ## Provenance
 
 `build_final_submission.py` is retained as the build record for this package: it
