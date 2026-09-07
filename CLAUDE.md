@@ -101,3 +101,10 @@ No gate compares its own `attempt` against `max_attempts`.
 - **`gates/retrieval.py` is not a paper registry.**
   Despite the name it is BM25 over the log-line exemplar bank in `gates/exemplars.py`.
   The registry of papers the scaffold actually fetched does not exist yet, and both Gate 2 tier B and Gate 3 citation binding need it.
+
+## 7. Session workflow and progress tracking
+
+- **Check `progress.md` before starting any session:**
+  Always read `progress.md` first to load current project progress, active branch and commit state, completed components, and unresolved blockers into the context window.
+- **Update `progress.md` after completing or updating each task:**
+  Update `progress.md` immediately upon task completion in a minimal, unsloppy format containing only high-density, necessary context (commit SHAs, verified diffs/tests, architectural decisions, blockers, and exact next steps). No conversational filler or speculative claims.
