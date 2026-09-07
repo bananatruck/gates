@@ -282,6 +282,39 @@ def _evidence_findings(check: CheckResult) -> list[str]:
     return out
 
 
+def _evidence_typed_numbers(check: CheckResult) -> list[str]:
+    """Numerals the writer typed instead of citing.
+
+    Not the same shape as Gate 1's ``_evidence_literals``: that one has a line
+    number in a source file, this one has the sentence it appeared in, which is
+    what the writing agent needs to find it again.
+    """
+    out = []
+    for row in check.evidence.get("literals", [])[:_MAX_EVIDENCE_ROWS]:
+        out.append(f"  {row['value']!r} in: {row['context']}")
+    sections = check.evidence.get("sections_scanned")
+    if sections is not None:
+        out.append(f"  sections scanned: {', '.join(sections) or 'none'}")
+    return out
+
+
+def _evidence_mismatches(check: CheckResult) -> list[str]:
+    out = []
+    for row in check.evidence.get("mismatches", [])[:_MAX_EVIDENCE_ROWS]:
+        out.append(
+            f"  {row['key']}: manuscript reads {row['actual']!r}, registry "
+            f"holds {row['expected']!r}"
+        )
+    return out
+
+
+def _evidence_figures(check: CheckResult) -> list[str]:
+    out = []
+    for row in check.evidence.get("missing", [])[:_MAX_EVIDENCE_ROWS]:
+        out.append(f"  {row['target']}  — {row['reason']}")
+    return out
+
+
 def _carry_forward(report: GateReport) -> list[str]:
     """Declared discrepancies belonging to checks that passed.
 
@@ -320,6 +353,12 @@ _EVIDENCE_RENDERERS = {
     "coherence.reference_interval": _evidence_reference,
     "coherence.method_match": _evidence_findings,
     "coherence.claim_supported": _evidence_findings,
+    # Gate 3. all_tokens_resolve reuses Gate 1's renderer unchanged: it is the
+    # same {missing, recorded} question asked of a manuscript instead of a run.
+    "report.no_numeric_literals_in_results": _evidence_typed_numbers,
+    "report.all_tokens_resolve": _evidence_missing_keys,
+    "report.rendered_values_match_registry": _evidence_mismatches,
+    "report.figures_referenced_exist": _evidence_figures,
 }
 
 
@@ -388,6 +427,26 @@ _FIXES = {
         "A result disagrees with every comparable number in the retrieved "
         "literature. Check the setting matches the source before reporting it "
         "as a replication: same split, same normalization, same hyperparameters."
+    ),
+    "report.no_numeric_literals_in_results": (
+        "Do not type a number into the results prose. Write "
+        "\\result{<key>} and the renderer substitutes the recorded value. "
+        "A number with no key was never measured, so the paper cannot make it."
+    ),
+    "report.all_tokens_resolve": (
+        "A result token names a key that was never recorded. Use one of the "
+        "recorded keys listed above, or have the experiment record the value "
+        "first. An unresolvable token does not render."
+    ),
+    "report.rendered_values_match_registry": (
+        "A rendered value does not match the registry. Do not edit a "
+        "substituted number by hand and do not round it; write the token and "
+        "let the renderer emit the value exactly as it was measured."
+    ),
+    "report.figures_referenced_exist": (
+        "A referenced figure is missing or was not produced by this run. "
+        "Generate the figure inside the run's artifact directory, or remove "
+        "the reference."
     ),
     "env.code_identity": (
         "The source that ran does not hash to the source submitted. Report this "

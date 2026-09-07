@@ -9,8 +9,10 @@ grip on evidence:
   with what the cited literature reports? Three tiers, each activated by what
   the caller supplies: range and internal consistency always, reference
   intervals with a source corpus, semantic checks with a model.
-* **Gate 3 — report validity.** Does every number and citation in the manuscript
-  trace to something that exists? (pending)
+* **Gate 3 — report validity.** Does every number in the manuscript trace to
+  something that was measured? The writer emits ``\\result{key}`` tokens and the
+  renderer, not the model, writes the digits. Citation binding pending a
+  registry of fetched papers.
 
 Nothing in this package imports a host scaffold. Porting to a new one means
 writing a single adapter — see ``adapters/agentlab.py`` for the reference
@@ -29,6 +31,13 @@ from .gate2 import (
     band_for,
     run_gate2,
     unresolved_discrepancies,
+)
+from .gate3 import (
+    GATE_NAME as GATE3_NAME,
+    Gate3Config,
+    Substitution,
+    render_result_tokens,
+    run_gate3,
 )
 from .ledger import Ledger
 from .llm import ModelBudget, ModelCall, ModelFn, ModelLayer, model_warning
@@ -93,6 +102,11 @@ __all__ = [
     "run_experiment",
     "run_gate1",
     "run_gate2",
+    "GATE3_NAME",
+    "Gate3Config",
+    "Substitution",
+    "render_result_tokens",
+    "run_gate3",
     "unresolved_discrepancies",
     "write_registry",
 ]
