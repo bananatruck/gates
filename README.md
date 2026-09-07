@@ -18,13 +18,20 @@ tendency, and closes the channel at three points.
 | Gate | Question | Status |
 |---|---|---|
 | **1 — execution validity** | Did this code actually run, and were the reported numbers produced by *this* run? | **complete and measured** |
-| **2 — source ↔ result coherence** | Are the measured results consistent with what the cited literature reports? | designed |
-| **3 — report validity** | Does every number and citation in the manuscript trace to something that exists? | designed |
+| **2 — source ↔ result coherence** | Are the measured results consistent with what the cited literature reports? | implemented and unit-tested |
+| **3 — report validity** | Does every number and citation in the manuscript trace to something that exists? | implemented and unit-tested |
 
 Gate 1 is finished for the scope it declares. It has been run against a complete
 controlled A/B campaign on a real model and a real scaffold; the numbers are in
 [Measured results](#measured-results), and the boundary it does not cross is in
 [What Gate 1 does not do](#what-gate-1-does-not-do).
+
+Gates 2 and 3 are built and covered by tests, but that is a weaker claim than
+the one Gate 1 makes, and this project is not going to blur the two. "Measured"
+here means a controlled campaign against a live scaffold produced numbers we
+can show you. Gates 2 and 3 have not had one yet, so they are listed as
+implemented, not measured — the same standard the gates impose on the agents
+they audit.
 
 Full design: [`docs/PLAN.md`](docs/PLAN.md).
 
@@ -295,9 +302,16 @@ debugging aid.
 pip install -e ".[dev]" && pytest
 ```
 
-302 tests here, plus 76 in the host scaffold's integration suite — 378 in total,
-all green. Every check in the tables above is tied to the test that holds it in
-place in [`docs/GATE1_REQUIREMENTS.md`](docs/GATE1_REQUIREMENTS.md).
+396 tests here — 53 for Gate 1, 56 for Gate 2, 19 for Gate 3, and the rest
+covering the value registry, the log scanner, and the loop — plus 76 in the
+host scaffold's integration suite. Every check in the tables above is tied to
+the test that holds it in place in
+[`docs/GATE1_REQUIREMENTS.md`](docs/GATE1_REQUIREMENTS.md).
+
+CI runs the suite on Python 3.10 through 3.14, and separately installs the
+package with no test dependencies to confirm the runtime still imports on a
+bare interpreter. The stdlib-only claim above is a promise this project makes
+to any scaffold it drops into, so it is checked rather than asserted.
 
 ## Seeing the loop run
 
@@ -329,6 +343,22 @@ What was outstanding for Gate 1 and how each item closed:
 [`docs/GATE1_COMPLETION.md`](docs/GATE1_COMPLETION.md). Nothing there blocks
 Gate 1; the one open item is a second adapter, which is a portability
 demonstration rather than a Gate 1 requirement.
+
+## Project status
+
+This is an active research project, not a finished product, and the tables above
+should be read as a progress report rather than a feature list. Gate 1 is done
+and measured. Gates 2 and 3 are built and tested but have not been through a
+campaign. [`docs/PLAN.md`](docs/PLAN.md) is the plan for the rest.
+
+The negative result in [What did *not* improve](#what-did-not-improve) is part
+of the finding, not an omission. The gate changed what reached the writing
+agent without changing how reviewers scored the resulting paper, and that is
+worth knowing: closing the information-flow defect fixes the provenance of the
+numbers, not the quality of the research built on them.
+
+Nothing in this README is claimed beyond what the artifacts under `reports/`
+support.
 
 ## License
 
