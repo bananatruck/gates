@@ -32,42 +32,28 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-#: Percentages and decimals as a paper states them: "81.60\%", "$13.61\times$",
-#: "0.0180 seconds". Bare small integers are excluded by `_is_claim`.
-_NUMBER = re.compile(r"(\d+\.\d+|\d{2,})")
-
-#: Sections where a paper states its findings. Background and related work
-#: quote other people's numbers, which are not this run's to source.
-_CLAIM_SECTIONS = ("abstract", "contributions", "results", "experimental results",
-                   "discussion", "conclusion")
-
-#: LaTeX scaffolding whose numbers are structural, not empirical.
-_SKIP_LINE = re.compile(
-    r"\\(usepackage|documentclass|geometry|label|ref|cite|includegraphics|"
-    r"begin\{equation|end\{equation|section|subsection)"
+from gates.prose import (
+    CITATION,
+    CLAIM_SECTIONS,
+    NUMBER,
+    SKIP_LINE,
+    Claim,
+    context_of,
+    extract_claims,
+    is_claim,
 )
 
-#: Citation identifiers, removed before claims are extracted.
-#:
-#: "arXiv 2410.21676v4" contains "2410.21", which the number pattern was happily
-#: reporting as an unsourced empirical claim. On the gated paper that inflated
-#: the unsourced count by two and made the arm look worse than it is -- an error
-#: in the flattering direction for the argument this project is making, which is
-#: precisely the direction to be suspicious of. An arXiv id is a citation, not a
-#: measurement, so it never enters the claim set.
-_CITATION = re.compile(r"arxiv[:\s]*\d{4}\.\d{4,5}(v\d+)?", re.IGNORECASE)
-
-
-@dataclass
-class Claim:
-    value: float
-    context: str
-    status: str = "unsourced"
-    source: str = ""
-
-    def to_dict(self) -> dict:
-        return {"value": self.value, "context": self.context,
-                "status": self.status, "source": self.source}
+# The prose scanner moved to ``gates/prose.py``: Gate 3 needs it and
+# ``pyproject.toml`` packages ``gates*`` only, so ``gates`` cannot import
+# ``rig``. Re-exported under their original private names so this module's
+# callers and tests are unaffected. The move also fixed a Markdown blind spot -
+# see that module's docstring.
+_NUMBER = NUMBER
+_CLAIM_SECTIONS = CLAIM_SECTIONS
+_SKIP_LINE = SKIP_LINE
+_CITATION = CITATION
+_is_claim = is_claim
+_context = context_of
 
 
 @dataclass
@@ -108,51 +94,6 @@ class PaperAudit:
             "note": self.note,
             "claims": [c.to_dict() for c in self.claims],
         }
-
-
-def _is_claim(token: str) -> bool:
-    """Whether a number is an empirical claim rather than scaffolding.
-
-    A year, a layer count, a propagation depth: all numbers, none of them
-    results. Requiring either a decimal point or four-plus digits keeps the
-    claim set to quantities a run could have measured.
-    """
-    if "." in token:
-        return True
-    return len(token) >= 4 and not (1900 <= int(token) <= 2100)
-
-
-def extract_claims(paper_text: str) -> list[Claim]:
-    """Numeric claims in the sections where a paper states its findings."""
-    claims: list[Claim] = []
-    section = "preamble"
-    seen: set[tuple[float, str]] = set()
-    for line in paper_text.splitlines():
-        m = re.match(r"\\section\{([^}]*)\}", line.strip())
-        if m:
-            section = m.group(1).strip().lower()
-            continue
-        if _SKIP_LINE.search(line):
-            continue
-        if not any(s in section for s in _CLAIM_SECTIONS):
-            continue
-        line = _CITATION.sub(" ", line)
-        for token in _NUMBER.findall(line):
-            if not _is_claim(token):
-                continue
-            value = float(token)
-            context = _context(line, token)
-            if (value, context) in seen:
-                continue
-            seen.add((value, context))
-            claims.append(Claim(value=value, context=context))
-    return claims
-
-
-def _context(line: str, token: str) -> str:
-    i = line.find(token)
-    raw = line[max(0, i - 60):i + len(token) + 30]
-    return " ".join(re.sub(r"\\[a-zA-Z]+|[{}$\\]", " ", raw).split())
 
 
 def _close(a: float, b: float) -> bool:
