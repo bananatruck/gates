@@ -624,6 +624,115 @@ are the text's, not mine.
 
 ---
 
+## 10. Which benchmark is best, and how complex is G.A.T.E.S. by comparison?
+
+### Do not rank incompatible headline percentages
+
+CORE-Bench task accuracy, BadScientist fabricated-paper acceptance, MLR-Bench fabrication
+frequency, and SPOT verifier recall do not share a denominator or even a direction of
+goodness. Putting those raw percentages on one axis would create a comparison the papers
+do not support.
+
+The graph below instead scores direct coverage of the five things our evaluation needs.
+Each dimension receives 0 for no direct coverage, 1 for partial or indirect coverage, and
+2 for direct coverage. These are project-specific analytical judgments, not results
+reported by the benchmark authors.
+
+![Benchmark fit for evaluating G.A.T.E.S.](benchmark-fit.svg)
+
+| Benchmark | Gate 1 execution | Gate 2 source-result | Gate 3 number/citation | Semantic audit | End-to-end realism | Total |
+|---|---:|---:|---:|---:|---:|---:|
+| **MLR-Bench** | 2 | 1 | 2 | 2 | 2 | **9/10** |
+| ARC-Bench | 2 | 1 | 1 | 2 | 2 | 8/10 |
+| BadScientist | 1 | 1 | 2 | 2 | 1 | 7/10 |
+| CORE-Bench | 2 | 1 | 1 | 0 | 1 | 5/10 |
+| SPOT | 0 | 0 | 0 | 2 | 0 | 2/10 |
+
+**Best primary benchmark: MLR-Bench.** It is the only candidate here that directly
+combines open-ended research tasks, experimentation, paper writing, and the four audited
+failure classes G.A.T.E.S. is meant to constrain: faked results, hallucinated methodology,
+incorrect citations, and mathematical errors. Those failures span all three gates, so it
+tests the complete information flow rather than one checker in isolation.
+
+That does not make it sufficient by itself. The defensible portfolio is:
+
+1. Run the same Agent Laboratory task, model, seed, budget, and environment with G.A.T.E.S.
+   off and on over an MLR-Bench subset.
+2. Use CORE-Bench as the focused execution, reproducibility, and stochastic-tolerance test.
+3. Use BadScientist as the adversarial test that a convincing paper with no valid evidence
+   cannot escape into the manuscript.
+4. Use SPOT to measure the WARN-only semantic tier's precision, recall, and repeated-run
+   stability. It is not evidence for a blocking guarantee.
+
+### G.A.T.E.S. is an overlay, not another AI researcher
+
+AI-Scientist-v2 and Agent Laboratory generate ideas, search literature, write code, run
+experiments, analyze results, and write a paper. G.A.T.E.S. does none of those jobs. It
+checks the artifacts at three boundaries and sends actionable evidence back to the host.
+The fair comparison is therefore the complexity G.A.T.E.S. *adds* to either system, not
+whether G.A.T.E.S. can replace one.
+
+| Dimension | G.A.T.E.S. | AI-Scientist-v2 | Agent Laboratory |
+|---|---|---|---|
+| Role | Validity overlay | End-to-end autonomous researcher | Three-stage multi-agent research workflow |
+| Orchestration | No research planner; one adapter and three gate call sites | Progressive agentic tree search plus experiment manager | Literature, experiment, and report agents with human feedback points |
+| Runtime surface | Python stdlib only in `gates/`; model arrives as an injected callable | GPU/PyTorch, model APIs, paper tooling, search, visualization, and experiment dependencies | Model, search, document, data, and experiment stack |
+| Verdict complexity | High: deterministic checks, evidence ledger, reports, retry feedback, and fail/WARN boundaries | Research quality is selected and reviewed inside the generation loop | Research quality is assessed throughout the staged agent loop |
+| Portability cost | One host-specific adapter; gate code must not import the host | The whole system is the host | The whole system is the host and our reference integration target |
+
+A reproducible snapshot gives scale, but not semantic complexity. On 11 September 2026,
+counting tracked production Python lines and excluding tests:
+
+| Repository snapshot | Production Python files | Lines | Declared runtime requirement entries |
+|---|---:|---:|---:|
+| [G.A.T.E.S. core at `75112b0`](https://github.com/bananatruck/gates/commit/75112b066b8feaed1f0319edb272461e97133e03), `gates/` only | 24 | 6,777 | **0** third-party dependencies in the packaged gate |
+| [AI-Scientist-v2 at `96bd516`](https://github.com/SakanaAI/AI-Scientist-v2/commit/96bd51617cfdbb494a9fc283af00fe090edfae48) | 36 | 13,213 | 26 non-comment entries in `requirements.txt` |
+| [Agent Laboratory at `d9017d9`](https://github.com/SamuelSchmidgall/AgentLaboratory/commit/d9017d90e329112d2a80b7712f37ee9094d2cd27) | 9 | 4,078 | 135 non-comment entries in `requirements.txt` |
+
+By this narrow measure, G.A.T.E.S. core is about **51% of AI-Scientist-v2's production
+Python size** and **1.66x Agent Laboratory's**, while having a much smaller operational
+role and zero packaged third-party dependencies. This is not a contradiction: validation
+is cross-cutting state, schema, reporting, evidence, and feedback-loop work. Raw lines also
+depend heavily on repository layout, generated files, and how much logic sits in external
+libraries, so these ratios are an engineering-size snapshot, not a quality ranking.
+
+The practical conclusion is: **G.A.T.E.S. is much less complex to operate than either
+researcher, but non-trivial to prove correct.** Its research orchestration complexity is
+near zero because it delegates that work to the host. Its evidence and integration
+complexity is the actual product.
+
+### Gate 2 tiers as implemented today
+
+Gate 2 derives tiers from the inputs supplied. Missing input means no check is emitted;
+it never manufactures a green result for a tier that did not run.
+
+| Tier | Activation | Current checks | Verdict role | Honest claim |
+|---|---|---|---|---|
+| A - intrinsic numeric coherence | Always | `coherence.range_valid`, `coherence.internal_consistency` | FAIL | Deterministic range and arithmetic violations are eliminated by construction |
+| B - literature comparison | Only when `sources` is non-empty | `coherence.reference_interval` | WARN by default; FAIL with `strict_reference` | The comparison is deterministic after the source record and tolerance are fixed; provenance and tolerance origin must be disclosed |
+| C - semantic coherence | Only when `consult_model` is supplied | `coherence.method_match`, `coherence.claim_supported` | WARN only | Report measured precision/recall with intervals; never claim elimination |
+
+The opening of `gate2.py` currently says both "Two tiers" and "Three tiers", and says the
+semantic tier is not built even though `gate2_semantic.py` exists and is invoked. That is
+a stale docstring, not a missing tier. This branch records the discrepancy and does not
+change implementation.
+
+### Ten-minute Thursday readout
+
+1. **0:00-0:30 - thesis:** G.A.T.E.S. verifies a host; it does not compete with the host.
+2. **0:30-2:00 - five claims:** show the real entries and the interval-kind defect.
+3. **2:00-3:30 - provenance:** show `PaperRecord` and why fetched-content hashes matter.
+4. **3:30-4:30 - statistics:** CI versus PI, TOST, Wilson, and kappa in one line each.
+5. **4:30-5:30 - point-only tolerance:** no uncertainty means no statistical equivalence.
+6. **5:30-6:30 - hard decisions:** speedup stays unbounded; reject non-finite values.
+7. **6:30-7:30 - Gate 3:** scanner gaps first; MiniCheck stays outside `gates/`.
+8. **7:30-9:30 - evaluation:** MLR-Bench primary, with CORE, BadScientist, and SPOT
+   covering distinct failure surfaces.
+9. **9:30-10:00 - next week:** interval typing, Wilson routing, dispersion support, then
+   `PaperRecord` and citation binding.
+
+---
+
 ## Provenance of this document
 
 | Paper | Read from | Verified |
