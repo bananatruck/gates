@@ -29,10 +29,13 @@ plus one line). Left alone, uncommitted.
 1. `Range.admits` returns `True` for NaN and `+inf` on every unbounded-above unit; `OPS["ratio"]`
    returns NaN on a zero denominator. Failing test first, per §5. (readout §5b)
 2. `SourceClaim.interval` carries no kind or coverage — a 95% CI and a ±1 SEM both come back
-   `origin="reported_interval"`. All five entries above are typed wrong today. (§2)
+   `origin="reported_interval"`. (§2)
+2b. `default_rel_tol=0.05` on a proportion is 11.7x too narrow at 5/12 and **19.1x at 3/15**.
+   Route proportions to Wilson. (§3)
 3. New Gate 3 check `report.dispersion_supported`: a stated CI/SD/p-value requires n >= 2 in the
    registry. Deterministic, no model. (§2b)
 4. `PaperRecord` does not exist; blocks Gate 2 tier B provenance and Gate 3 citation binding.
+   Demonstrated working end-to-end in §4 (arXiv fetch + PDF sha256 + all 5 source_ids bound).
    Resolver goes in the adapter, never in `gates/` — a network call breaks determinism the same way
    a model call would. OpenAlex primary, Crossref fallback, arXiv for versions, skip S2. (§4)
 5. Scanner: negatives and scientific notation produce *wrong values*, not misses. Integer
@@ -46,10 +49,20 @@ plus one line). Left alone, uncommitted.
   published work. Concern belongs in the relation check, which is exact.
 - **MiniCheck punted** from `gates/` (PyTorch vs zero-dependency; and `model_warning()` hardcodes
   WARN so it could not decide anything anyway). Keep as a `rig/` yardstick.
-- **AutoResearchClaw's "42% on audit" does not exist.** `42.9%` is the Thorough HITL acceptance
-  rate. Do not cite it. The 42% belongs to SAGE.
+- **The 42% is real and is ScientistOne's, Table 1, about AutoResearchClaw** (5/12 score
+  verification; also 3/15 method-code alignment, lowest in the table). An earlier note here said
+  it did not exist -- that was from searching AutoResearchClaw's own paper, which does not state
+  it. Cite `arXiv:2605.26340`, not `2605.20025`.
+- **arXiv API is the PaperRecord identity spine.** Crossref 404s on arXiv DOIs (DataCite holds
+  them); Semantic Scholar 429s unauthenticated but is the only resolver that knows a real venue;
+  OpenAlex misspelled an author and hides the arXiv id. Only arXiv is version-authoritative.
 
 ## Next
 
 Items 1-3 above are small, deterministic, and independent of the `PaperRecord` work. Item 1 first.
 Recreate the venv before touching code.
+
+## Open decision
+
+Semantic Scholar API key: optional, blocks nothing, deferred until the resolver lands. Everything
+in the readout works on keyless APIs today.
