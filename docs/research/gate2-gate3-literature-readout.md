@@ -13,111 +13,145 @@ log-line exemplar bank in `gates/exemplars.py`).
 
 ---
 
-## 0. Two corrections to the brief, before anything is built on them
+## 0. Correction: the 42% is real, and I had it wrong first time round
 
-**AutoResearchClaw does not report "42% on audit."** I searched the full text
-(`2605.20025v2`). The string `42` appears once in prose, as `42.9%`, and it is the
-acceptance rate of the *Thorough* human-in-the-loop intervention mode (Table 3), not an
-audit-failure rate. The 42% we are thinking of is almost certainly SAGE's, which is a
-different paper measuring a different thing.
+My first pass through this searched **AutoResearchClaw** (`2605.20025`) for the 42% in the
+brief, did not find it, and reported the brief as mistaken. That was my error. The number
+is real. It is in **ScientistOne** (`2605.26340`, Google Cloud AI Research), which is also
+sitting in `Sources/Relative Results/` and which the brief did not name. The two arXiv ids
+are adjacent, which is how I looked in the wrong one.
 
-What AutoResearchClaw actually reports (Table 5, component ablation, 10 ARC-Bench topics,
-best-of-3 over three reruns):
+ScientistOne's contribution is a **CoE Integrity Audit**: four checks applied uniformly to
+five systems, 15 papers each, 75 papers total. The checks are score verification,
+specification violation, reference verification, and method-code alignment. Table 1:
 
-| Configuration | Completion | Quality | Accept | Fabrication found |
+| System | Score Verif. (up) | Spec. Violation (down) | Ref. Verif. (down) | Method-Code (up) |
 |---|---|---|---|---|
-| Full AutoResearchClaw | 10/10 | 5.62 | 3/10 | no |
-| w/o Verification | 10/10 | 5.48 | 5/10 | **yes** |
-| w/o Debate | 10/10 | 4.25 | 1/10 | no |
-| w/o Self-Healing | 6/10 | 4.83 | 1/6 | no |
-| w/o Evolution | 9/10 | 5.14 | 2/10 | no |
-| w/o Debate & Healing | 4/10 | 3.47 | 0/4 | no |
+| Sakana AI-Scientist v2 | 5/12 | 10/15 | 0/159 | 5/15 |
+| **AutoResearchClaw** | **5/12 = 42%** | 0/15 | 3/196 | **3/15 = 20%** |
+| DeepScientist | 11/12 | 0/15 | 42/201 | 5/15 |
+| AI-Researcher | 9/12 | 1/15 | 21/222 | 12/15 |
+| ScientistOne | 12/12 | 0/15 | 0/337 | 14/15 |
 
-The real sentence is better for us than the one in the brief: *"Removing the verified
-registry raises apparent acceptance from 3/10 to 5/10, but manual inspection reveals that
-3 of those 5 papers contain values absent from any measurement record."* A registry costs
-you 2/10 apparent acceptance and buys back 3 fabricated papers.
+So "AutoResearchClaw has grounding, still 42% on audit" is exactly right, and the precise
+form of it is sharper than the brief: AutoResearchClaw ships a verified numeric registry
+and a four-layer citation pipeline, reports zero fabrication in its own ablation, and then
+**scores 5/12 on score verification and 3/15 on method-code alignment when a third party
+audits it.** Its own paper is not wrong about its registry; the registry simply does not
+check the thing that fails.
 
-**The opening is still there, and it is sharper.** It is not a 42% audit number. It is
-AutoResearchClaw's own admission, §4 case study: *"verification is necessary but not
-sufficient. Full-Auto passes the numeric gate because the zero values are real logged
-measurements, not fabricated numbers. However, the gate cannot tell whether those
-measurements answer the research question."* A registry gate that a degenerate all-zero
-run walks straight through is the gap. Same gap SAGE names as **method-provenance
-grounding** — verifying that methodological claims are backed by executed artifacts —
-and explicitly declares open in both itself and its baselines.
+That is the opening, and ScientistOne states the mechanism for us: the gap is largest on
+"reference integrity and method-code alignment -- the two checks that test evidence
+provenance rather than score reproduction." AutoResearchClaw's own §4 says the same thing
+from the inside: *"verification is necessary but not sufficient... the gate cannot tell
+whether those measurements answer the research question."* SAGE independently names it
+**method-provenance grounding** and declares it open in itself and its baselines.
 
-That is our opening, stated in the words of the two systems closest to us.
+Three papers, three vocabularies, one gap: **score reproduction is solved and evidence
+provenance is not.** Gate 2 tier B and Gate 3 citation binding are aimed at it, and both
+are blocked on the same missing object (§4).
 
----
+Note for the writeup: ScientistOne's method-code alignment check (I4) is model-judged
+("I4 judgments were validated on a sampled basis", against I1-I3 which were manually
+verified). So the 3/15 is not a deterministic measurement, and we should cite it as an
+audited rate rather than a proven one -- the same honesty boundary we impose on our own
+tier C.
 
 ## 1. Five SourceClaim entries, hand-pulled (the Friday unblock)
 
-These construct and run through the real `gates.gate2.band_for()`. Output verified below.
+Chosen from all nine PDFs in `Sources/`, not just the ones the brief named. Two carry a
+reported interval (and deliberately two *different kinds* of interval, which is §2); three
+are point estimates with exact denominators, which is §3. All five construct and run
+through the real `gates.gate2.band_for()`, and all five bind to a fetched `PaperRecord`
+(§4). Output verified below, not asserted.
 
 ```python
-from gates.gate2 import SourceClaim
-
 CLAIMS = (
-    # CORE-Bench Table A3. 95% CI over mean accuracy, n=3 trials, test set.
+    # CORE-Bench Table A3. 95% CI over the mean, n=3 trials, test set.
     SourceClaim(
-        key="core_bench_hard_accuracy",
+        key="reproduction_accuracy_hard",
         source_id="arXiv:2409.11363",
         value=21.48,
         interval=(18.88, 24.08),          # 21.48 +/- 2.60
-        setting="CORE-Agent + GPT-4o, CORE-Bench-Hard test split, n=3, 95% CI (Table A3)",
-        describes="Agent reproduces a published result from its own code and data capsule.",
+        setting="CORE-Agent+GPT-4o, CORE-Bench-Hard test, n=3, 95% CI (Table A3)",
+        describes="Agent reproduces a published result from the paper's own code+data capsule.",
     ),
+    # PaperBench Table 4. ONE SEM, not a 95% CI. n=3 comes from the Table 9 caption,
+    # which is the only place the seed count is stated.
     SourceClaim(
-        key="core_bench_easy_accuracy",
-        source_id="arXiv:2409.11363",
-        value=60.60,
-        interval=(56.09, 65.11),          # 60.60 +/- 4.51
-        setting="CORE-Agent + GPT-4o, CORE-Bench-Easy test split, n=3, 95% CI (Table A3)",
-        describes="Same task with environment pre-built and results pre-extracted.",
-    ),
-    # Same table, cost column. The only published per-task cost band we have.
-    SourceClaim(
-        key="core_bench_hard_cost_usd",
-        source_id="arXiv:2409.11363",
-        value=2.9643,
-        interval=(2.8755, 3.0531),        # 2.9643 +/- 0.0888
-        setting="CORE-Agent + GPT-4o, CORE-Bench-Hard, mean USD/task, n=3, 95% CI",
-        describes="Dollar cost of one agent attempt at one reproduction task.",
-    ),
-    # PaperBench Table 4. NOTE: one SEM, not a 95% CI. See section 2.
-    SourceClaim(
-        key="paperbench_replication_score",
+        key="replication_score",
         source_id="arXiv:2504.01848",
         value=21.0,
-        interval=(20.2, 21.8),            # 21.0 +/- 0.8, ONE SEM over 3 seeds
-        setting="Claude 3.5 Sonnet + BasicAgent, PaperBench, 3 seeds, +/-1 SEM (Table 4)",
-        describes="Agent replicates a paper from scratch, graded against an author rubric.",
+        interval=(20.2, 21.8),            # 21.0 +/- 0.8
+        setting="Claude 3.5 Sonnet+BasicAgent, PaperBench, 3 seeds, +/-1 SEM (Table 4)",
+        describes="Agent replicates a paper from scratch against an author-approved rubric.",
+    ),
+    # ScientistOne Table 1, check I1. This is the 42%. Note source_id is the auditing
+    # paper, not the audited system -- the claim is about ARClaw, the evidence is
+    # ScientistOne's.
+    SourceClaim(
+        key="score_verification_rate",
+        source_id="arXiv:2605.26340",
+        value=41.67,
+        interval=None,                    # 5/12 papers. No interval reported.
+        setting="AutoResearchClaw audited by ScientistOne CoE Integrity Audit I1, 5/12 papers",
+        describes="Claimed result in the manuscript reproduces exactly under re-evaluation.",
+    ),
+    # ScientistOne Table 1, check I4. Lowest in the table. The provenance gap, quantified.
+    SourceClaim(
+        key="method_code_alignment_rate",
+        source_id="arXiv:2605.26340",
+        value=20.0,
+        interval=None,                    # 3/15 papers.
+        setting="AutoResearchClaw audited by ScientistOne CoE Integrity Audit I4, 3/15 papers",
+        describes="Method described in the manuscript matches the code that was executed.",
     ),
     # SAGE. Point estimate over 12 topics; the paper reports no interval.
     SourceClaim(
-        key="sage_metrics_bearing_rate",
+        key="metrics_bearing_rate",
         source_id="arXiv:2606.31478",
-        value=91.7,
-        interval=None,                    # 11/12 topics. None reported.
-        rel_tol=None,                     # undeclared -> falls to default_rel_tol
-        setting="SAGE full system, 12-topic 5-domain benchmark, 11/12 metrics-bearing",
+        value=91.67,
+        interval=None,                    # 11/12 topics.
+        setting="SAGE full system, 12-topic 5-domain benchmark, 11/12 topics",
         describes="Run whose experiment stage emits >=1 task-relevant measured metric.",
     ),
 )
 ```
 
-Run through `band_for(claim, default_rel_tol=0.05)`:
+Run through `band_for(claim, default_rel_tol=0.05)`, with each `source_id` resolved
+against a `PaperRecord` fetched live from the arXiv API and hashed against the local PDF:
 
-| key | value | band | origin | width / value |
+| bound | key | value | band | origin |
 |---|---|---|---|---|
-| core_bench_hard_accuracy | 21.4800 | [18.8800, 24.0800] | `reported_interval` | 24.21% |
-| core_bench_easy_accuracy | 60.6000 | [56.0900, 65.1100] | `reported_interval` | 14.88% |
-| core_bench_hard_cost_usd | 2.9643 | [2.8755, 3.0531] | `reported_interval` | 5.99% |
-| paperbench_replication_score | 21.0000 | [20.2000, 21.8000] | `reported_interval` | 7.62% |
-| sage_metrics_bearing_rate | 91.7000 | [87.1150, 96.2850] | `default_relative` | 10.00% |
+| yes | reproduction_accuracy_hard | 21.48 | [18.880, 24.080] | `reported_interval` |
+| yes | replication_score | 21.00 | [20.200, 21.800] | `reported_interval` |
+| yes | score_verification_rate | 41.67 | [39.587, 43.754] | `default_relative` |
+| yes | method_code_alignment_rate | 20.00 | [19.000, 21.000] | `default_relative` |
+| yes | metrics_bearing_rate | 91.67 | [87.087, 96.254] | `default_relative` |
 
-Two things fall out of that table immediately, and they are section 2.
+`All claims bound: True   registry size: 4`
+
+Two defects fall straight out of that table. The two `reported_interval` rows are not the
+same kind of interval (§2). The three `default_relative` rows are between 3.7x and **19x
+too narrow** (§3).
+
+### Also pulled, not in the five
+
+- CORE-Bench Table A3 has five more rows with real 95% CIs: Easy `60.60 +/- 4.51`, Medium
+  `57.78 +/- 4.51`, and the whole GPT-4o-mini row (`44.44 +/- 13.52`, `32.59 +/- 11.34`,
+  `16.30 +/- 2.60`). Cost too: Hard `$2.9643 +/- $0.0888`, which is the only published
+  per-task dollar band we have and the natural comparator for `ModelBudget`.
+- ScientistOne Table 1 gives twenty cells across five systems; any of them is usable.
+- MLR-Bench: 8/10 tasks fabricated by Claude Code, 5/10 nonexistent citations.
+
+### One set of numbers in `Sources/` that must never become a SourceClaim
+
+`Jr.AI Scientist.pdf` App B.3 prints four 95% confidence intervals (iNaturalist
+`[2.7%, 3.1%]`, SUN `[2.1%, 2.6%]`, Places365 `[1.6%, 2.0%]`, Texture `[1.2%, 1.6%]`)
+which the authors annotate as **fabricated** -- the experiment ran once. They are in the
+folder, they look exactly like every other interval in this document, and nothing about
+their shape distinguishes them. Whatever populates `sources` needs a human in the loop or
+a provenance rule; a scraper pointed at the folder would ingest them. See §2b.
 
 ---
 
@@ -218,29 +252,41 @@ closest published analogue to our `default_rel_tol`, and it is 5x tighter than o
 but note it is doing a *different job*: matching a number to its own measurement, not to a
 rerun. Our 5% is in the wrong place for both jobs.
 
-**Our default is falsely confident.** SAGE's 11/12 gets a `default_relative` band of
-[87.1, 96.3], width 10.0% of value. The Wilson 95% interval for 11/12 is
-[64.6%, 98.5%], width 33.9%. Our default is ~3.4x too narrow for exactly the kind of
-small-n proportion the autonomous-research literature is full of. Recommend: do not apply
-a relative tolerance to a proportion at all; route proportions to a Wilson interval with
-its own origin, and reserve `rel_tol` for continuous metrics.
+**Our default is falsely confident, and by more than I expected.** Measured on the three
+point-estimate claims from §1:
+
+| claim | k/n | `default_relative` | Wilson 95% | too narrow by |
+|---|---|---|---|---|
+| score_verification_rate | 5/12 | [39.59, 43.75] w=4.17 | [19.33, 68.05] w=48.72 | **11.7x** |
+| method_code_alignment_rate | 3/15 | [19.00, 21.00] w=2.00 | [7.05, 45.19] w=38.14 | **19.1x** |
+| metrics_bearing_rate | 11/12 | [87.09, 96.25] w=9.17 | [64.61, 98.51] w=33.90 | 3.7x |
+
+A relative tolerance is the wrong instrument for a proportion, and the error compounds
+exactly where it hurts: the *smaller* the measured rate, the tighter the relative band gets
+and the wider the true interval is. At 3/15 we would declare a real disagreement over any
+value outside [19.0, 21.0] when the honest interval runs from 7% to 45%.
+
+Recommend: do not apply a relative tolerance to a proportion at all. Route proportions to a
+Wilson interval carrying `origin="derived_wilson"`, and reserve `rel_tol` for continuous
+metrics. This needs `SourceClaim` to know a claim *is* a proportion -- either a `k`/`n`
+pair alongside `value`, or a unit of `proportion`/`percent` plus a denominator.
 
 ---
 
-## 4. `PaperRecord` sketch, and the four APIs against it
+## 4. `PaperRecord`, and the four APIs measured against it
 
 CLAUDE.md §6 is right that this does not exist and that both Gate 2 tier B and Gate 3
-citation binding need it. `SourceClaim.source_id` already promises "Gate 3 requires this
-to be in the retrieval registry, so a band can never come from a paper nobody fetched" —
-today nothing enforces that promise.
+citation binding need it. `SourceClaim.source_id` already promises "Gate 3 requires this to
+be in the retrieval registry, so a band can never come from a paper nobody fetched" --
+today nothing enforces that promise. This is the object that would.
 
 ```python
 @dataclass(frozen=True)
 class PaperRecord:
     """One paper the scaffold actually fetched. Not a bibliography entry."""
 
-    # -- identity: at least one must be present -----------------------------
-    arxiv_id: str | None          # "2409.11363", no version
+    # -- identity: at least one of the three must be present ----------------
+    arxiv_id: str | None          # "2409.11363v2" -- version included
     doi: str | None
     openalex_id: str | None
 
@@ -254,45 +300,104 @@ class PaperRecord:
     #: Where the scaffold got it. A record with no source_url is a claim that
     #: a fetch happened, not proof of one.
     source_url: str
-    #: UTC ISO-8601. Metadata is not stable; a band cited in March is not
-    #: necessarily the band the same call returns in September.
+    #: UTC ISO-8601. Metadata is not stable: the arXiv API reports CORE-Bench
+    #: as updated 2026-06-22, well after the v2 PDF in Sources/ was taken.
     retrieved_at: str
-    #: sha256 of the retrieved bytes (PDF or abstract payload).
+    #: sha256 of the retrieved bytes. This is what makes the record falsifiable
+    #: -- it pins the band to the exact document the band was read from.
     content_sha256: str
     #: Which API answered, so a disputed record can be re-fetched the same way.
     resolver: str                 # "arxiv" | "openalex" | "crossref" | "s2"
-    #: Version actually fetched, where the source has versions. "v2" != "v1";
-    #: our own Sources folder holds v2 and v3 PDFs whose numbers may differ
-    #: from v1.
+    #: Version actually fetched. "v2" != "v1", and Sources/ holds v1, v2 and v3
+    #: PDFs whose numbers may differ.
     version: str | None = None
+
+    @property
+    def key(self) -> str:
+        """The form SourceClaim.source_id uses: 'arXiv:2409.11363', version-stripped."""
 ```
 
-**Where it must live.** Not in `gates/`, and this is not a style preference. A gate that
-makes a network call can block, time out, and rate-limit, which breaks *"deterministic
-checks decide the verdict"* exactly as a model call would. `PaperRecord` is data; the
-*fetching* belongs in the adapter, and records arrive injected, the same way `ModelFn`
-does. That also keeps the `rig/` scenario loop runnable with no network and no key, which
-is the existing half-two requirement. The dataclass itself is stdlib-only and can sit in
-`gates/`; `urllib` calls cannot.
+Built for real against the four papers behind the five claims: fetched from the arXiv API,
+hashed against the local PDF, and every `source_id` resolved. Sample record:
 
-**The four APIs.**
+```
+arxiv_id         2605.26340v1
+doi              None
+title            ScientistOne: Towards Human-Level Autonomous Research via Chain-of-Evidence
+authors          ('Rui Meng', 'Bhavana Dalvi Mishra', 'Jiefeng Chen', ...)
+year             2026
+venue            None
+source_url       https://arxiv.org/abs/2605.26340v1
+retrieved_at     2026-09-11T04:11:24+00:00
+content_sha256   9d4fa9d1e9e6b1cdccfeff02fecbd28b5b961594952a1ac96e00ad135bed0a51
+resolver         arxiv
+version          v1
+```
+
+### Where it must live
+
+Not in `gates/`, and this is not a style preference. A gate that makes a network call can
+block, time out and rate-limit, which breaks *"deterministic checks decide the verdict"*
+exactly as a model call would -- and §4b below shows one of these four APIs returning
+HTTP 429 on the first call of a burst. `PaperRecord` is data; the *fetching* belongs in the
+adapter, and records arrive injected the way `ModelFn` does. That also keeps the `rig/`
+scenario loop runnable with no network and no key, which is the existing half-two
+requirement. The dataclass itself is stdlib-only and can sit in `gates/`; the `urllib`
+calls cannot.
+
+### 4b. The four resolvers, probed rather than recalled
+
+All four queried with stdlib `urllib` for CORE-Bench (`2409.11363`), plus a second round
+for the cases that failed. Measured, not remembered:
 
 | | arXiv API | OpenAlex | Semantic Scholar | Crossref |
 |---|---|---|---|---|
-| Auth | none | none (mailto = polite pool) | key advised; harsh 429s without | none (mailto polite) |
-| Stdlib-friendly | Atom XML → `xml.etree` | JSON → `json` | JSON | JSON |
-| arXiv id → record | native | yes | yes | patchy for preprints |
-| DOI → record | no | yes | yes | native, authoritative |
-| Version (`v2`/`v3`) | **yes** | no | no | no |
-| Coverage beyond arXiv | none | very broad | broad | DOI-bearing only |
-| Rate limit risk | low | low | **high** | low |
+| Latency | **98 ms** | 338 ms | 95 ms | 252 ms |
+| Auth needed | no | no (mailto polite) | **429 on 1st call of a burst** | no (mailto polite) |
+| arXiv id | **native, with version** | absent from `ids` | yes | no |
+| DOI | absent for this paper | yes | yes | native |
+| Authors | correct | **"Nitya Nagdir" (typo)** | correct | correct |
+| Venue | absent | "arXiv (Cornell University)" | **"Trans. Mach. Learn. Res."** | full proceedings title |
+| Version (v2/v3) | **yes** | no (`type: preprint`) | no | no |
+| Reference count | no | 0 (empty) | 90 | 0 for the ACL DOI |
+| arXiv DOI (`10.48550/*`) | n/a | resolves | resolves | **HTTP 404** |
 
-Recommendation: **OpenAlex primary** (no key, broad, carries both DOI and arXiv id),
-**Crossref fallback** for DOI-only published work, **arXiv API** whenever we need the
-version — and we do need it, since `Sources/` holds `v2` and `v3` PDFs and a band pulled
-from v2 is not a band from v1. **Skip Semantic Scholar**: its key requirement and 429
-behaviour is the one dependency here that could make an adapter flaky, and it adds no
-field the other three lack.
+Four findings that changed my recommendation from the first draft:
+
+1. **Crossref cannot resolve arXiv DOIs at all.** `10.48550/arXiv.2409.11363` returns 404,
+   because arXiv DOIs are registered with **DataCite**, not Crossref. Crossref is excellent
+   for genuinely published work -- it returned AxCell's full EMNLP 2020 proceedings title
+   and correct authors in 252 ms -- and useless for preprints. DataCite does resolve it,
+   and returns `version: 2`, but took 949 ms.
+2. **Semantic Scholar has the best metadata and the worst reliability.** It is the only one
+   of the four that knows CORE-Bench was published in **TMLR** rather than "arXiv", and the
+   only one returning a real reference count (90). It also returned **HTTP 429 on the very
+   first call** of a six-call burst, unauthenticated. A single spaced call had worked
+   moments earlier.
+3. **OpenAlex's metadata is derivative and it shows.** It misspells an author ("Nitya
+   Nagdir" for "Nitya Nadgir"), its `ids` dict carries only `openalex` and `doi` so the
+   arXiv id has to be recovered by parsing `best_oa_location.pdf_url`, and
+   `referenced_works` was empty for this preprint. It is still the best *linker*.
+4. **Only the arXiv API is authoritative on version**, which matters here more than it
+   would elsewhere: `Sources/` holds `v2` and `v3` PDFs, and a band read off v2 is not a
+   band from v1.
+
+### Recommendation
+
+**arXiv API as the identity spine**, because `source_id` is already an arXiv id in every
+one of our five claims, it is the only version-authoritative source, it is the fastest, and
+it needs no key. **Crossref for published venue** once a paper leaves preprint. **OpenAlex
+as the fallback linker** for anything non-arXiv without a DOI. **DataCite only if** we ever
+need to resolve an arXiv DOI rather than an arXiv id, which on current design we do not.
+
+**Semantic Scholar: worth it only with a key.** Unauthenticated it is not usable in an
+automated path -- 429 on the first call of a burst. With a key it is the highest-quality
+answer of the four and the only one that would let a `PaperRecord` carry a real venue
+instead of "arXiv". This is the one open decision in §4; see the note at the end of this
+document.
+
+Note that none of this needs a key to *ship*. The identity spine, the hashing, and the
+binding all work on keyless APIs today, as demonstrated above.
 
 ---
 
@@ -530,8 +635,9 @@ are the text's, not mine.
 | MLR-Bench 2505.19955 | `Sources/MLR Bench.pdf` | abstract, §5, Appendix B |
 | SAGE 2606.31478v1 | `Sources/Relative Results/` | abstract, §3.4, §4.3, App D, App F |
 | AutoResearchClaw 2605.20025v2 | `Sources/Relative Results/` | abstract, Table 5, §4, App H/I |
+| arXiv/OpenAlex/S2/Crossref/DataCite | live API probe | latency, fields, 429s |
 | Jr. AI Scientist (TMLR 02/2026) | `Sources/Jr.AI Scientist.pdf` | App B.3 annotation |
-| ScientistOne 2605.26340v1 | `Sources/Relative Results/` | not used |
+| ScientistOne 2605.26340v1 | `Sources/Relative Results/` | abstract, Table 1, §6.1 |
 | MLReplicate | `Sources/MLReplicate.pdf` | not used |
 | AxCell 2004.14356 | arXiv (not in `Sources/`) | Table 1 |
 | MiniCheck 2404.10774 | arXiv abstract only | 770M, 400x, LLM-AggreFact |
@@ -548,9 +654,25 @@ Text was extracted from the PDFs with a throwaway stdlib script under `.cache/`
 
 ## Proposed order of work
 
-1. `Range.admits` rejects non-finite values. Failing test first. Smallest, is a real bug. (§5b)
-2. `ReportedInterval` kind + coverage on `SourceClaim`. All five entries above are typed wrong today. (§2)
-3. `report.dispersion_supported` — a dispersion claim requires n>=2 in the registry. (§2b)
-4. `PaperRecord` + an OpenAlex/Crossref/arXiv resolver **in the adapter**, which unblocks Gate 2 tier B provenance and Gate 3 citation binding. (§4)
-5. Scanner: negatives and scientific notation first (wrong values), then integer percentages, then make skipped lines visible the way `claim_sections()` made headings visible. (§6)
-6. Proportions route to Wilson rather than a relative tolerance. (§3)
+1. `Range.admits` rejects non-finite values. Failing test first. Smallest, and a real bug. (§5b)
+2. `ReportedInterval` kind + coverage on `SourceClaim`. Both interval-bearing entries in §1 are typed wrong today. (§2)
+3. Proportions route to Wilson rather than a relative tolerance -- 19x at the worst measured point. (§3)
+4. `report.dispersion_supported` -- a dispersion claim requires n>=2 in the registry. (§2b)
+5. `PaperRecord` + an arXiv-spine resolver **in the adapter**. Demonstrated working in §4; unblocks Gate 2 tier B provenance and Gate 3 citation binding. (§4)
+6. Scanner: negatives and scientific notation first (wrong values), then integer percentages, then make skipped lines visible the way `claim_sections()` made headings visible. (§6)
+
+Items 1-4 are all deterministic, all small, and none of them needs the registry or a
+network call.
+
+---
+
+## One open decision
+
+**Do we want a Semantic Scholar API key?** Everything in §1 and §4 works today without one.
+S2 is the only resolver of the four that returns a real venue ("Trans. Mach. Learn. Res."
+rather than "arXiv") and a real reference count, and it is the natural source for Gate 3
+citation binding later. Unauthenticated it returned HTTP 429 on the first call of a
+six-call burst, so it cannot go in an automated path as-is. A key is free and the decision
+can wait until item 5.
+
+Nothing else is blocked on credentials.
