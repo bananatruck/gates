@@ -75,6 +75,15 @@ class Range:
     low_open: bool = False
 
     def admits(self, value: float) -> bool:
+        # NaN and the infinities are rejected before either bound is consulted.
+        # Without this the check depends on an accident: `value <= high` is the
+        # comparison NaN fails, so a bounded unit rejected it and every
+        # unbounded-above unit — the timings, counts, losses and speedups —
+        # admitted it. A division by an unmeasured wallclock produces exactly
+        # that NaN, which is the case `low_open` already refuses one step
+        # earlier. Neither is a measurement, so neither is in range.
+        if not math.isfinite(value):
+            return False
         if self.low is not None:
             if value < self.low or (self.low_open and value == self.low):
                 return False
@@ -354,6 +363,25 @@ def unresolved_discrepancies(report: GateReport) -> list[str]:
 # --------------------------------------------------------------------------- #
 
 
+def _describe_violation(v: dict[str, Any]) -> str:
+    """One line of feedback for one out-of-range value.
+
+    Split by cause. A value that overshot a bound needs the bound quoted so the
+    engineer can see by how much; a non-finite value needs no bound at all,
+    because the defect is upstream of the range.
+    """
+    if not v["finite"]:
+        return (
+            f"{v['key']} = {v['value']!r} is not a finite number, so it is not "
+            f"a measurement; check the computation that produced it "
+            f"(a division by an unmeasured value yields nan)"
+        )
+    return (
+        f"{v['key']} = {v['value']!r} lies outside {v['range']} "
+        f"for unit {v['unit']!r}"
+    )
+
+
 def _check_range_valid(
     values: dict[str, Any], config: Gate2Config
 ) -> CheckResult:
@@ -384,6 +412,11 @@ def _check_range_valid(
                     "value": value,
                     "unit": entry.get("unit"),
                     "range": allowed.describe(),
+                    # A non-finite value failed for a different reason than a
+                    # value that overshot a bound, and the feedback has to say
+                    # which. "nan lies outside (0, +inf]" tells the engineer
+                    # nothing they can act on.
+                    "finite": math.isfinite(float(value)),
                 }
             )
 
@@ -409,11 +442,7 @@ def _check_range_valid(
             "violations": violations,
             "checked": checked,
             "unchecked": sorted(unchecked),
-            "discrepancies": [
-                f"{v['key']} = {v['value']!r} lies outside {v['range']} "
-                f"for unit {v['unit']!r}"
-                for v in violations
-            ],
+            "discrepancies": [_describe_violation(v) for v in violations],
         },
     )
 

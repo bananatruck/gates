@@ -125,6 +125,54 @@ def test_non_numeric_values_are_skipped(tmp_path):
     assert check.evidence["checked"] == 0
 
 
+def test_a_nan_value_cannot_pass_as_a_measurement(tmp_path):
+    """NaN is not a value in range; it is the absence of one.
+
+    ``Range.admits`` rejects NaN only where an upper bound exists, because
+    ``value <= high`` is what NaN fails. Every unbounded-above unit — the
+    timings, the counts, the losses, the speedups — admitted it.
+    """
+    for unit in ("seconds", "loss", "count", "speedup", "ms", "wallclock_s"):
+        reg = registry({"a.x": (float("nan"), unit)})
+        report = run_gate2(reg, config(tmp_path))
+        assert not report.passed, f"NaN passed range_valid for unit {unit!r}"
+
+
+def test_an_infinite_value_cannot_pass_as_a_measurement(tmp_path):
+    for unit in ("seconds", "loss", "count", "speedup"):
+        reg = registry({"a.x": (float("inf"), unit)})
+        assert not run_gate2(reg, config(tmp_path)).passed, unit
+
+
+def test_a_speedup_divided_by_an_unmeasured_wallclock_cannot_pass(tmp_path):
+    """The case the two halves of Gate 2 were already half-guarding.
+
+    ``low_open`` exists so a wallclock of exactly zero is rejected as unmeasured.
+    ``OPS["ratio"]`` returns NaN when its denominator is zero. So the gate caught
+    the unmeasured time and then admitted the speedup derived from it.
+    """
+    reg = registry({
+        "a.baseline_s": (13.61, "seconds"),
+        "a.ours_s": (0.0, "seconds"),
+        "a.speedup": (float("nan"), "speedup"),
+    })
+    report = run_gate2(reg, config(tmp_path))
+    check = next(c for c in report.checks if c.id == "coherence.range_valid")
+    flagged = {v["key"] for v in check.evidence["violations"]}
+    assert "a.speedup" in flagged, "the NaN speedup was not flagged"
+
+
+def test_a_non_finite_violation_names_the_value_as_non_finite(tmp_path):
+    """The feedback has to say what is wrong, not just that something is.
+
+    "nan lies outside (0, +inf]" is not an instruction anybody can act on.
+    """
+    reg = registry({"a.t": (float("nan"), "seconds")})
+    report = run_gate2(reg, config(tmp_path))
+    check = next(c for c in report.checks if c.id == "coherence.range_valid")
+    assert any("not a finite number" in d for d in check.evidence["discrepancies"])
+
+
 # --------------------------------------------------------------------------- #
 # coherence.internal_consistency
 # --------------------------------------------------------------------------- #
