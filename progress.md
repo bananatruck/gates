@@ -15,11 +15,11 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: research/gate2-gate3-readout
-head: fe40702
+head: 6c88687
 head_date: 2026-09-11
-tests_total: 424
+tests_total: 427
 tests_gate1: 92
-tests_gate2: 85
+tests_gate2: 88
 tests_gate3: 19
 tests_llm_scan: 21
 tests_llm_layer: 14
@@ -65,8 +65,8 @@ forever, but an unverifiable manuscript must not ship.
 | Component | State | Entry point | Tests |
 |---|---|---|---|
 | Gate 1 — execution validity | complete, evidence frozen | `gated_execute()` | 92 |
-| Gate 2 tier A — boundaries | **complete** — ranges, relations, non-finite guard, plausibility ceiling | `run_gate2()` | part of 85 |
-| Gate 2 tier B — methodology conformance | **to build**; blocked on B7 | `run_gate2()` | 0 |
+| Gate 2 tier A — boundaries | **complete** — ranges, relations, non-finite guard, plausibility ceiling | `run_gate2()` | part of 88 |
+| Gate 2 tier B — methodology conformance | **to build**; B7 closed, unblocked | `run_gate2()` | 0 |
 | Gate 2 tier C — loop | **not written**; mirrors `rig/loop.py` | — | 0 |
 | Gate 3 — `report.*` regex checks | numeric + figure binding done | `run_gate3()` | 19 |
 | Gate 3 — `source.*` | **not written** | — | 0 |
@@ -74,8 +74,8 @@ forever, but an unverifiable manuscript must not ship.
 | Gate 3 loop | **not written**; reuses `rig/loop.py` unchanged | — | 0 |
 | LLM scan layer | complete, Gate 1 only | `gates/llm_scan.py` | 21 |
 | LLM plumbing (`ModelFn`, budget) | complete, Gate 1 only | `gates/llm.py` | 14 |
-| `gates/gate2_semantic.py` | **scheduled for deletion — D4** | — | ~15 of 85 |
-| Agent Laboratory adapter | `gated_execute` works; **`gated_review` unreachable (B7)**; `gated_report` absent | `gates/adapters/agentlab.py` | — |
+| `gates/gate2_semantic.py` | **scheduled for deletion — D4** | — | ~15 of 88 |
+| Agent Laboratory adapter | `gated_execute` + `gated_review` via `make_review_context()`; **`gated_report` absent** | `gates/adapters/agentlab.py` | — |
 | Tier A evidence harness | complete | `rig/gate2_tier_a_evidence.py` | 12 fixtures |
 
 Frozen and checksum-signed — do not edit: `reports/finalized-report-and-results/`.
@@ -100,24 +100,22 @@ Re-record the `STATE` block after deleting, or `tests/test_progress.py` fails.
 
 | ID | Blocker | Blocks | Opened |
 |---|---|---|---|
-| B7 | **Gate 2 has no working host entry point.** `make_context()` builds a `Gate1Config`; `gated_review()` hands it to `run_gate2()`; that raises `AttributeError: 'Gate1Config' object has no attribute 'ranges'`. Only hand-built configs work, which is what the tests do. Needs `make_review_context()`. | Gate 2 tier B | 09-11 |
 | B2 | Gate 3 `source.*` needs network, rate limits, caching, and an offline fallback so the suite stays hermetic. Only non-offline component in the plan. Build order puts it last deliberately. | Gate 3 step 5 | 09-10 |
 | B3 | `PR_SET_DUMPABLE` guard is inert under uid 0; not detected, not reported. Skips on macOS. CI runs non-root so CI is green. | portability claim | 09-07 |
 | B4 | Gate 3 `ARCHIVED` fixture points at `generated_readme.md` (8 literals) not `generated_report.txt` (29). | Gate 3 headline number | 09-07 |
 | B5 | WIP loop code unpushed, reason recorded as "code limitations" — needs restating before it can be planned around. | tier C build | 09-10 |
 | B6 | Does the host expose its retrieval registry in a readable form? If not, `source.cited_papers_in_registry` — the highest-value offline citation check — has no input. | Gate 3 step 4 | 09-11 |
 
-**Closed:** B1 (benchmark selection) — MLR-Bench chosen, see D8.
+**Closed:** B1 (benchmark selection) — MLR-Bench chosen, see D8. B7 (Gate 2 host entry point) — `make_review_context()` added 09-11; `test_the_host_wiring_path_actually_reaches_gate_2` keeps it reachable.
 
 ## next steps
 
-1. `make_review_context()` in `gates/adapters/agentlab.py`, closing B7. Prerequisite for tier B.
-2. Build Gate 2 tier B per `GATE2_implementation_spec.md` §2, with D10–D13 applied.
-3. Delete `gate2_semantic.py` per D4; rewrite the two tests named above; re-record `STATE`.
-4. Land `rig/gate2_loop.py` + scenarios + tests from the working tree, or restate B5.
-5. Build Gate 3 per `GATE3_implementation_plan.md`, steps 1-9 in order. Network work last.
-6. Add `gated_report()` to `gates/adapters/agentlab.py`.
-7. Emit an `env.parent_proc_guard` INFO check recording whether the guard actually held (B3).
+1. Build Gate 2 tier B per `GATE2_implementation_spec.md` §2, with D10–D13 applied.
+2. Delete `gate2_semantic.py` per D4; rewrite the two tests named above; re-record `STATE`.
+3. Land `rig/gate2_loop.py` + scenarios + tests from the working tree, or restate B5.
+4. Build Gate 3 per `GATE3_implementation_plan.md`, steps 1-9 in order. Network work last.
+5. Add `gated_report()` to `gates/adapters/agentlab.py`.
+6. Emit an `env.parent_proc_guard` INFO check recording whether the guard actually held (B3).
 
 ## decision log
 
@@ -138,6 +136,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-11 | D11 | **`IMPLAUSIBLE_SPEEDUP = 500.0`**, not 1000, to keep it clear of `MAX_LEN = 1000`, the stdout truncation this project diagnosed. Declared, not derived; reaches the report as `ceiling_origin`. | `gates/gate2.py` |
 | 09-11 | D12 | **Bounded scores are units, never metric names.** `auc`/`f1`/`precision`/`recall`/`perplexity` in `UNIT_RANGES`. Name-based inference stays refused. | `test_a_metric_name_alone_never_implies_a_range` |
 | 09-11 | D13 | **Tier B declarations arrive at wiring time**, not by parsing plan prose. The host passes `plan_fields`; `gates/` never reads a plan. | pending — blocked on B7 |
+| 09-11 | D15 | **Gate 2 gets its own context builder.** `make_review_context()` builds a `Gate2Config`; `make_context()` stays Gate 1's. Two gates, two phases, two budgets, so one context holding both would need two rejection counters. | `test_the_host_wiring_path_actually_reaches_gate_2` |
 | 09-11 | D14 | **Every check id must have an evidence renderer and a fix directive.** A keyed lookup that misses returns nothing and the agent gets a rejection it cannot act on. | `test_every_check_gate2_emits_can_be_rendered_and_has_a_fix` |
 
 ## session log
@@ -149,5 +148,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-11 | `756f7ee` | `coherence.plausibility`, provenance-gated. Renderer + fix directive + completeness guard. |
 | 09-11 | `fb59b5b` | `rig/gate2_tier_a_evidence.py`: 12 fixtures, 7/12 before, 12/12 after. |
 | 09-11 | `fe40702` | Ceiling 1000 → 500 to avoid collision with `MAX_LEN`. |
+| 09-11 | `6c88687` | Canonical `progress.md` adopted; `tests/test_progress.py` makes its counts true. |
+| 09-11 | *this* | `make_review_context()` closes B7. Gate 2 is reachable from the host. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.

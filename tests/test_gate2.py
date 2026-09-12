@@ -13,7 +13,12 @@ import pathlib
 import pytest
 
 import gates.gate2_semantic
-from gates.adapters.agentlab import GateContext, declared_limitations, gated_review
+from gates.adapters.agentlab import (
+    GateContext,
+    declared_limitations,
+    gated_review,
+    make_review_context,
+)
 from gates.errors import GateError, GateFailure
 from gates.gate2 import (
     GATE_NAME,
@@ -1048,6 +1053,52 @@ def test_no_fix_directive_exists_for_a_check_that_cannot_block():
 # --------------------------------------------------------------------------- #
 # the adapter: gate 2 driven the way gate 1 is
 # --------------------------------------------------------------------------- #
+
+
+def test_the_host_wiring_path_actually_reaches_gate_2(tmp_path):
+    """B7: ``make_context`` builds a Gate1Config, which ``run_gate2`` cannot use.
+
+    Gate 2 looked wired because ``gated_review`` exists, and every test built its
+    own ``Gate2Config`` by hand. Driven the way a host is documented to drive it,
+    the call raised ``AttributeError: 'Gate1Config' object has no attribute
+    'ranges'``. A gate with no reachable entry point is not installed.
+    """
+    ctx = make_review_context(research_dir=str(tmp_path))
+    assert isinstance(ctx.config, Gate2Config)
+
+    reg = registry({"exp1.acc": (0.81, "ratio")})
+    result = gated_review(reg, ctx)
+    assert result.report.verdict is Verdict.PASS
+
+
+def test_the_review_context_carries_gate_2_configuration(tmp_path):
+    """Whatever the host declares has to survive into the verdict.
+
+    A context that accepted relations and ranges and then dropped them would
+    fail open, which is worse than not accepting them.
+    """
+    ctx = make_review_context(
+        research_dir=str(tmp_path),
+        relations=(DERIVES_SPEEDUP,),
+        ranges={"a.acc": Range(0.9, 1.0)},
+        implausible_speedup=250.0,
+    )
+    assert ctx.config.relations == (DERIVES_SPEEDUP,)
+    assert ctx.config.implausible_speedup == 250.0
+
+    # The range override is the cheapest one to prove end to end: 0.81 is a
+    # legal ratio and an illegal one under the declared override.
+    result = gated_review(registry({"a.acc": (0.81, "ratio")}), ctx)
+    assert result.report.verdict is Verdict.FAIL
+
+
+def test_the_review_budget_is_two_attempts_not_gate_ones_three(tmp_path):
+    """Gate 2 gets two revisions per PLAN.md 4, Gate 1 gets three.
+
+    They are different budgets for different jobs, and a shared default would
+    silently give Gate 2 an extra turn it was never allotted.
+    """
+    assert make_review_context(research_dir=str(tmp_path)).config.max_attempts == 2
 
 
 def test_gated_review_counts_agent_turns_not_executions(tmp_path):
