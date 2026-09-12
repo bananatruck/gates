@@ -136,8 +136,12 @@ UNIT_RANGES: dict[str, Range] = {
 #: measurement or reporting defect rather than a result.
 #:
 #: Declared, not derived, and the distinction is the whole point. No argument
-#: makes 1000 the right number; it is a judgement someone made, so it travels
+#: makes 500 the right number; it is a judgement someone made, so it travels
 #: into the report as ``ceiling_origin: "declared"`` and a reviewer can move it.
+#: 500 rather than 1000 for one reason only: ``MAX_LEN = 1000`` is the stdout
+#: truncation in Agent Laboratory's ``execute_code`` that this project diagnosed
+#: as the hallucination mechanism. The two numbers measure unrelated things, and
+#: a second unexplained 1000 in the same system invites a reader to connect them.
 #: The bound is deliberately not in ``UNIT_RANGES``: everything in that table is
 #: a fact about the numbers, and mixing a prior into it would weaken the
 #: elimination-by-construction claim that ``coherence.range_valid`` supports.
@@ -145,7 +149,7 @@ UNIT_RANGES: dict[str, Range] = {
 #: SAGE (arXiv 2606.31478) reports a real FVA runtime about 4,700x FBA, which is
 #: why magnitude alone cannot be the test. A value two recorded measurements
 #: derive is exempt at any size.
-IMPLAUSIBLE_SPEEDUP = 1000.0
+IMPLAUSIBLE_SPEEDUP = 500.0
 
 #: The arithmetic a plan can declare between recorded values. Enough for the
 #: relation `PLAN.md` §4.3 gives as the worked example — a speedup that must

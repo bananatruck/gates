@@ -108,11 +108,18 @@ derives is exempt at any size, because the arithmetic is on the record. SAGE
 rejects published work. That number is in the suite as the case the gate must not
 reject. A relation that resolves but does not hold buys no exemption.
 
-`IMPLAUSIBLE_SPEEDUP = 1000.0`, overridable through
-`Gate2Config.implausible_speedup`. No argument makes 1000 the right number, so it
+`IMPLAUSIBLE_SPEEDUP = 500.0`, overridable through
+`Gate2Config.implausible_speedup`. No argument makes 500 the right number, so it
 reaches the report as `ceiling` with `ceiling_origin: "declared"` and a reviewer
 can move it instead of guessing at it. This is the reason `Band.origin` exists,
 applied to a second declared bound.
+
+500 rather than 1000 for one reason. `MAX_LEN = 1000` is the stdout truncation in
+Agent Laboratory's `execute_code` that this project diagnosed as the
+hallucination mechanism, and it will be printed prominently in the paper. The two
+numbers measure unrelated things, a character count and a speedup multiple, but a
+second unexplained 1000 in the same system invites a reader to connect them and
+costs a sentence denying it.
 
 The check returns `None` when nothing recorded a speedup, so a registry without
 one gets no speedup row rather than a green one. Non-finite speedups are left to
@@ -128,9 +135,9 @@ GATE 2 — SOURCE ↔ RESULT COHERENCE: FAIL   (attempt 1 of 2)
 FAILED CHECKS
 
   [coherence.plausibility]
-    1 speedup(s) above the declared ceiling of 1000x that no declared
+    1 speedup(s) above the declared ceiling of 500x that no declared
     relation derives, e.g. exp.speedup = 4700x
-      exp.speedup = 4700x is above the declared ceiling of 1000x, and no
+      exp.speedup = 4700x is above the declared ceiling of 500x, and no
       declared relation derives it
 
 REQUIRED FIXES
@@ -204,9 +211,9 @@ and the no-speedup case still proves the check stays absent.
 
 ## Open, for a person
 
-1. `IMPLAUSIBLE_SPEEDUP = 1000.0` is a placeholder. The only real datapoint in
-   `Sources/` is SAGE's 4,700x, which sits above it and passes through the
-   relation. Any defensible value works; it has to be chosen and written down.
+1. `IMPLAUSIBLE_SPEEDUP = 500.0` is chosen, not derived, and the code says so.
+   The only real datapoint in `Sources/` is SAGE's 4,700x, which sits above it
+   and passes through the relation. Revisit if a real run trips it without one.
 2. Tier B is not started. Its declared side does not exist yet:
    `make_context()` builds a `Gate1Config`, `gated_review()` hands it to
    `run_gate2()`, and that raises

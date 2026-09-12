@@ -17,6 +17,7 @@ from gates.adapters.agentlab import GateContext, declared_limitations, gated_rev
 from gates.errors import GateError, GateFailure
 from gates.gate2 import (
     GATE_NAME,
+    IMPLAUSIBLE_SPEEDUP,
     Band,
     Gate2Config,
     Range,
@@ -274,6 +275,13 @@ def test_the_declared_ceiling_is_recorded_in_the_report(tmp_path):
     check = next(c for c in report.checks if c.id == "coherence.plausibility")
     assert check.evidence["ceiling"] == 2500.0
     assert check.evidence["ceiling_origin"] == "declared"
+
+    # The shipped default travels the same way, so the report never leaves a
+    # reviewer to infer which bound was applied.
+    default = run_gate2(speedup_registry(4700.0), config(tmp_path))
+    assert next(
+        c for c in default.checks if c.id == "coherence.plausibility"
+    ).evidence["ceiling"] == IMPLAUSIBLE_SPEEDUP
 
 
 def test_plausibility_feedback_asks_for_the_relation_not_a_smaller_number(tmp_path):
