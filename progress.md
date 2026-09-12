@@ -76,7 +76,7 @@ forever, but an unverifiable manuscript must not ship.
 | LLM plumbing (`ModelFn`, budget) | complete, Gate 1 only | `gates/llm.py` | 14 |
 | `gates/gate2_semantic.py` | **scheduled for deletion — D4** | — | ~15 of 88 |
 | Agent Laboratory adapter | `gated_execute` + `gated_review` via `make_review_context()`; **`gated_report` absent** | `gates/adapters/agentlab.py` | — |
-| Tier A evidence harness | complete | `rig/gate2_tier_a_evidence.py` | 12 fixtures |
+| Tier A evaluation harness | complete | `rig/gate2_tier_a_eval.py` | 45 labelled registries |
 
 Frozen and checksum-signed — do not edit: `reports/finalized-report-and-results/`.
 

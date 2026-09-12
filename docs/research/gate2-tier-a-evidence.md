@@ -8,22 +8,62 @@ Nothing in `reports/finalized-report-and-results/` was touched.
 
 ---
 
-## Metrics at a glance
+## Metrics
 
-![Gate 2 tier A defect coverage before and after](gate2-tier-a-metrics.svg)
+![Gate 2 tier A scored against a labelled corpus](gate2-tier-a-metrics.svg)
 
-| Measure | Before `2da4eff` | After `11da445` |
+45 registries, each labelled: 27 carry a known defect, 18 are legitimate runs.
+Reproduce with `python -m rig.gate2_tier_a_eval`.
+
+|  | gate rejected | gate passed |
 |---|---|---|
-| Defect classes caught, of 12 | 7 | 12 |
-| Suite passing | 395 | 426 |
-| Tier A median latency, 40 values | — | 0.145 ms |
-| Model calls | 0 | 0 |
+| **registry has a defect** | 27 | 0 |
+| **registry is legitimate** | 0 | 18 |
+
+| Rate | Value | k/n | Wilson 95% |
+|---|---|---|---|
+| Detection rate | 100.0% | 27/27 | [87.5%, 100.0%] |
+| False positive rate | 0.0% | 0/18 | [0.0%, 17.6%] |
+| Specificity | 100.0% | 18/18 | [82.4%, 100.0%] |
+| Precision | 100.0% | 27/27 | [87.5%, 100.0%] |
+| Accuracy | 100.0% | 45/45 | [92.1%, 100.0%] |
+| Check attribution | 100.0% | 27/27 | [87.5%, 100.0%] |
+
+**The intervals are the finding, not the point estimates.** Every rate is 100%
+and every interval is wide, because the corpus is small. 18/18 specificity is
+consistent with a true rate as low as 82.4%; 0/18 false positives is consistent
+with a true rate as high as 17.6%. Quoting 100% without its denominator would be
+the overclaim this gate exists to catch.
+
+**The two halves measure different things.** Tier A is deterministic, so a recall
+figure over defects we wrote is close to circular: it reports that checks fire on
+the inputs they were written for. That half measures *coverage* — whether a
+defect class has a check at all, and whether the check names the right key rather
+than failing for an unrelated reason.
+
+The negative half is the real measurement. Nothing guarantees a bound rejects
+only what it should, and a false rejection costs an engineer a revision for
+nothing. Those 18 fixtures sit on the boundaries deliberately: accuracy exactly
+1.0, loss exactly 0.0, count exactly 0, perplexity exactly 1.0, percent exactly
+100, a wallclock of 1e-9, a speedup of exactly 500.0 at the ceiling, SAGE's
+derived 4,700x, a derived 1e9, an unknown unit, a registry with no values at all,
+and 50 legal values at once.
+
+### Check attribution
+
+Each defect is labelled with the check that should own it, so a defect caught by
+the wrong check scores as a miss.
+
+| Check | Defects it should own | Caught |
+|---|---|---|
+| `coherence.range_valid` | 21 | 21 |
+| `coherence.internal_consistency` | 3 | 3 |
+| `coherence.plausibility` | 3 | 3 |
 
 ### Cost
 
-Measured on this machine, 200 runs per size, warm. Includes writing
-`gate2_report.json` to disk each run, so every figure is an upper bound on the
-checks themselves.
+200 warm runs per size, including the `gate2_report.json` write each run, so
+every figure is an upper bound on the checks themselves.
 
 | Registry size | Median | p95 |
 |---|---|---|
@@ -31,58 +71,18 @@ checks themselves.
 | 40 values | 0.145 ms | 0.299 ms |
 | 400 values | 0.294 ms | 1.071 ms |
 
-Growth is sublinear across two orders of magnitude because the per-run constant,
-the report write, dominates the per-value work. The zero in the model-calls row
-is structural rather than observed: tier A takes no `ModelFn` and cannot make a
-call. MLR-Judge needs one LLM call per rubric dimension per artifact for the
-comparable judgement.
+Growth is sublinear across two orders of magnitude because the per-run constant
+dominates. **Model calls: 0**, and that zero is structural rather than observed —
+tier A takes no `ModelFn` and cannot make a call. MLR-Judge needs one LLM call
+per rubric dimension per artifact for the comparable judgement.
 
-The colours are the validated categorical slots 1, 2 and 7. Red and green were
-rejected: the palette validator scores that pair at ΔE 4.1 under deuteranopia,
-far below the ΔE 8 target, so the two states would be indistinguishable to a
-red-green colourblind reader. Blue against orange scores 24.7. Every cell also
-carries its state as a word, so nothing depends on colour alone.
+### A note on the colours
 
----
-
-## The measurement
-
-One fixture per defect class, run through `run_gate2` before and after the three
-commits. Reproduce with:
-
-```
-python -m rig.gate2_tier_a_evidence                       # after
-git worktree add .cache/before 2da4eff
-cp rig/gate2_tier_a_evidence.py .cache/before/rig/
-(cd .cache/before && python -m rig.gate2_tier_a_evidence)  # before
-```
-
-A fixture counts as caught only when the gate flags **the key the fixture is
-about**. Failing for some other reason is not catching the defect, and a fixture
-scored on the verdict alone hides a broken check.
-
-| fixture | what it is | before | after | caught by |
-|---|---|---|---|---|
-| `clean_run` | nothing wrong with it | pass | pass | must not be rejected |
-| `impossible_accuracy` | a ratio above 1.0 | caught | caught | `coherence.range_valid` |
-| `negative_loss` | a loss below zero | caught | caught | `coherence.range_valid` |
-| `unmeasured_wallclock` | a duration of exactly zero | caught | caught | `coherence.range_valid` |
-| `broken_relation` | a speedup contradicting its two times | caught | caught | `coherence.internal_consistency` |
-| `unknown_unit` | a unit the gate has no range for | unchecked | unchecked | reported, never green |
-| `sub_unit_perplexity` | perplexity 0.3 | **missed** | caught | `coherence.range_valid` |
-| `f1_above_one` | f1 of 1.5 | **missed** | caught | `coherence.range_valid` |
-| `infinite_loss` | a diverged loss reported as `inf` | **missed** | caught | `coherence.range_valid` |
-| `nan_speedup_from_zero_divisor` | the speedup from that zero wallclock | **wrong key** | caught | `coherence.range_valid` |
-| `unexplained_speedup` | 4000x with nothing deriving it | **missed** | caught | `coherence.plausibility` |
-| `sage_derived_speedup` | SAGE's real 4,700x, derived | pass | pass | must not be rejected |
-
-**7 of 12 before, 12 of 12 after.**
-
-`nan_speedup_from_zero_divisor` is the row worth reading twice. Before the
-change the report did fail, so a coarser harness would have scored it caught.
-It failed because the zero wallclock is rejected by `low_open`, while the NaN
-speedup computed from that same zero sailed through. The gate caught the
-ingredient and admitted the result.
+Red and green were the obvious choice for the two states and were rejected. The
+palette validator scores that pair at ΔE 4.1 under deuteranopia against a target
+of 8, so a red-green colourblind reader could not separate them. The shipped
+palette is the validated categorical slots 1 and 7, and every value carries its
+denominator as text, so nothing rests on colour alone.
 
 ---
 
