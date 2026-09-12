@@ -227,6 +227,22 @@ def _evidence_range(check: CheckResult) -> list[str]:
     return out
 
 
+def _evidence_plausibility(check: CheckResult) -> list[str]:
+    out = []
+    for row in check.evidence.get("violations", [])[:_MAX_EVIDENCE_ROWS]:
+        out.append(
+            f"  {row['key']} = {row['value']:g}x is above the declared ceiling "
+            f"of {row['ceiling']:g}x, and no declared relation derives it"
+        )
+    exempt = check.evidence.get("exempt") or []
+    if exempt:
+        out.append(
+            "  above the ceiling but derived, so accepted: "
+            + ", ".join(exempt[:_MAX_EVIDENCE_ROWS])
+        )
+    return out
+
+
 def _evidence_relations(check: CheckResult) -> list[str]:
     ev = check.evidence
     out = []
@@ -349,6 +365,7 @@ _EVIDENCE_RENDERERS = {
     "results.single_observation": _evidence_varied,
     # Gate 2.
     "coherence.range_valid": _evidence_range,
+    "coherence.plausibility": _evidence_plausibility,
     "coherence.internal_consistency": _evidence_relations,
     "coherence.reference_interval": _evidence_reference,
     "coherence.method_match": _evidence_findings,
@@ -417,6 +434,13 @@ _FIXES = {
         "A recorded value lies outside what its unit admits. Either the metric "
         "is computed wrong, or the unit passed to record_result is wrong. Fix "
         "the computation, or record the value with the unit it actually has."
+    ),
+    "coherence.plausibility": (
+        "A speedup that large has nothing deriving it. Declare the relation "
+        "that computes it from the two recorded times, so the arithmetic is on "
+        "the record rather than asserted: the ceiling does not apply to a value "
+        "the registry derives, at any size. If nothing derives it, the number "
+        "is a measurement or reporting defect, not a result."
     ),
     "coherence.internal_consistency": (
         "A value the plan derives from other recorded values does not match "

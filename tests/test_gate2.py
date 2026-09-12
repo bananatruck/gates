@@ -26,7 +26,7 @@ from gates.gate2 import (
     run_gate2,
     unresolved_discrepancies,
 )
-from gates.report import render_feedback
+from gates.report import render_evidence, render_feedback
 from gates.schema import Severity, Verdict
 
 
@@ -209,6 +209,146 @@ def test_a_metric_name_alone_never_implies_a_range(tmp_path):
     assert report.passed
     assert check.evidence["checked"] == 0
     assert check.evidence["unchecked"] == ["a.f1", "a.precision"]
+
+
+# --------------------------------------------------------------------------- #
+# coherence.plausibility
+# --------------------------------------------------------------------------- #
+
+
+def speedup_registry(value, **extra):
+    reg = registry({"a.baseline_s": (4700.0, "seconds"), "a.ours_s": (1.0, "seconds"),
+                    "a.speedup": (value, "speedup")})
+    reg.update(extra)
+    return reg
+
+
+DERIVES_SPEEDUP = Relation(key="a.speedup", op="ratio", left="a.baseline_s", right="a.ours_s")
+
+
+def test_an_unexplained_speedup_above_the_ceiling_cannot_survive(tmp_path):
+    """A large speedup nothing derives is a reporting defect, not a result."""
+    report = run_gate2(speedup_registry(4700.0), config(tmp_path))
+    assert not report.passed
+    check = next(c for c in report.checks if c.id == "coherence.plausibility")
+    assert check.severity is Severity.FAIL
+    assert check.evidence["violations"][0]["key"] == "a.speedup"
+
+
+def test_a_speedup_a_declared_relation_derives_is_exempt_at_any_magnitude(tmp_path):
+    """4,700x is a real published ratio, so the ceiling must not reject it.
+
+    SAGE (arXiv 2606.31478) reports an FVA runtime about 4,700x FBA. The gate
+    asks for the arithmetic, not for a smaller number: once a relation derives
+    the value from two recorded times, the magnitude stops being evidence.
+    """
+    cfg = config(tmp_path, relations=(DERIVES_SPEEDUP,))
+    report = run_gate2(speedup_registry(4700.0), cfg)
+    assert report.passed
+    check = next(c for c in report.checks if c.id == "coherence.plausibility")
+    assert check.evidence["exempt"] == ["a.speedup"]
+
+
+def test_a_speedup_whose_declared_relation_does_not_hold_is_not_exempt(tmp_path):
+    """A relation that fails cannot buy an exemption it did not earn."""
+    cfg = config(tmp_path, relations=(DERIVES_SPEEDUP,))
+    report = run_gate2(speedup_registry(9999.0), cfg)
+    check = next(c for c in report.checks if c.id == "coherence.plausibility")
+    assert not check.passed
+    assert check.evidence["exempt"] == []
+
+
+def test_plausibility_emits_no_check_when_nothing_recorded_a_speedup(tmp_path):
+    """Absent, never green: no speedup means no opinion about speedups."""
+    report = run_gate2(registry({"a.acc": (0.81, "ratio")}), config(tmp_path))
+    assert [c for c in report.checks if c.id == "coherence.plausibility"] == []
+
+
+def test_the_declared_ceiling_is_recorded_in_the_report(tmp_path):
+    """A hand-chosen bound appears in the evidence, not only in the source.
+
+    A reviewer has to be able to disagree with the number rather than guess at
+    it, which is the same reason ``Band.origin`` exists.
+    """
+    report = run_gate2(speedup_registry(4700.0), config(tmp_path, implausible_speedup=2500.0))
+    check = next(c for c in report.checks if c.id == "coherence.plausibility")
+    assert check.evidence["ceiling"] == 2500.0
+    assert check.evidence["ceiling_origin"] == "declared"
+
+
+def test_plausibility_feedback_asks_for_the_relation_not_a_smaller_number(tmp_path):
+    """The remedy is to show the arithmetic, and the text has to say so."""
+    report = run_gate2(speedup_registry(4700.0), config(tmp_path))
+    check = next(c for c in report.checks if c.id == "coherence.plausibility")
+    assert any("relation" in d for d in check.evidence["discrepancies"])
+
+
+def test_a_non_finite_speedup_is_left_to_the_range_check(tmp_path):
+    """One defect, one check, one fix.
+
+    ``range_valid`` owns nan and inf. A registry whose only speedup is
+    non-finite leaves the plausibility check nothing it can compare, so it emits
+    no check at all rather than a pass that would read as "the speedups here are
+    fine".
+    """
+    report = run_gate2(speedup_registry(float("inf")), config(tmp_path))
+    assert not report.passed
+    assert [c for c in report.checks if c.id == "coherence.plausibility"] == []
+    ranges = next(c for c in report.checks if c.id == "coherence.range_valid")
+    assert ranges.evidence["violations"][0]["key"] == "a.speedup"
+
+
+def test_a_finite_speedup_is_still_checked_beside_a_non_finite_one(tmp_path):
+    """Dropping the unusable subject must not drop the usable one with it."""
+    reg = speedup_registry(float("nan"))
+    reg["values"]["a.other_speedup"] = {
+        "value": 5000.0, "unit": "speedup", "trace_id": "t-other"
+    }
+    report = run_gate2(reg, config(tmp_path))
+    check = next(c for c in report.checks if c.id == "coherence.plausibility")
+    assert check.evidence["checked"] == 1
+    assert check.evidence["violations"][0]["key"] == "a.other_speedup"
+
+
+def test_the_plausibility_finding_reaches_the_agent(tmp_path):
+    """Half two of the feedback loop: the finding has to render, not just exist.
+
+    ``render_evidence`` dispatches on a per-id registry, so a check added
+    without an entry produces a report that names the failure and withholds the
+    fix. A rejection the agent cannot act on is a stall, not a gate.
+    """
+    report = run_gate2(speedup_registry(4700.0), config(tmp_path))
+    check = next(c for c in report.checks if c.id == "coherence.plausibility")
+    # The message alone already names the number, so assert on the two things
+    # only a registered renderer and a registered directive can produce.
+    assert render_evidence(check), "the check has no evidence renderer"
+    text = render_feedback(report)
+    assert "no declared relation derives it" in text
+    assert "REQUIRED FIXES" in text
+    assert "the arithmetic is on the record" in text
+
+
+def test_every_check_gate2_emits_can_be_rendered_and_has_a_fix(tmp_path):
+    """Structural guard over the two registries in ``gates.report``.
+
+    Keyed lookups fail silently when a key is missing, so a new check ships a
+    report with no evidence rows and no required fix, and nothing complains.
+    That is how ``coherence.plausibility`` first shipped.
+    """
+    from gates.report import _EVIDENCE_RENDERERS, _FIXES
+
+    reg = registry({
+        "a.acc": (1.4, "ratio"),
+        "a.baseline_s": (4700.0, "seconds"),
+        "a.ours_s": (1.0, "seconds"),
+        "a.speedup": (9999.0, "speedup"),
+    })
+    cfg = config(tmp_path, relations=(DERIVES_SPEEDUP,), sources=(WU2019,))
+    emitted = {check.id for check in run_gate2(reg, cfg).checks}
+
+    assert emitted, "the fixture emitted no checks at all"
+    assert sorted(i for i in emitted if i not in _EVIDENCE_RENDERERS) == []
+    assert sorted(i for i in emitted if i not in _FIXES) == []
 
 
 # --------------------------------------------------------------------------- #
@@ -681,13 +821,22 @@ def tier_config(tmp_path, *, b: bool, c: bool):
 @pytest.mark.parametrize(
     "b, c, expected",
     [
-        (False, False, ["coherence.range_valid", "coherence.internal_consistency"]),
+        (
+            False,
+            False,
+            [
+                "coherence.range_valid",
+                "coherence.internal_consistency",
+                "coherence.plausibility",
+            ],
+        ),
         (
             True,
             False,
             [
                 "coherence.range_valid",
                 "coherence.internal_consistency",
+                "coherence.plausibility",
                 "coherence.reference_interval",
             ],
         ),
@@ -697,6 +846,7 @@ def tier_config(tmp_path, *, b: bool, c: bool):
             [
                 "coherence.range_valid",
                 "coherence.internal_consistency",
+                "coherence.plausibility",
                 # A+C cannot compare a method to sources it was not given. The
                 # pass records that it did not run instead of staying silent.
                 "coherence.method_match",
@@ -708,6 +858,7 @@ def tier_config(tmp_path, *, b: bool, c: bool):
             [
                 "coherence.range_valid",
                 "coherence.internal_consistency",
+                "coherence.plausibility",
                 "coherence.reference_interval",
             ],
         ),
@@ -721,6 +872,9 @@ def test_each_tier_combination_emits_exactly_its_own_checks(tmp_path, b, c, expe
 
     * Tier C contributes no check when it *ran* and found nothing — silence, not
       a green row. So A+B+C lists the same ids as A+B on a clean registry.
+    * ``plausibility`` is in every list because the clean registry records a
+      speedup, so the check has a subject. It is tier A with an input
+      condition, not a tier of its own: a registry with no speedup omits it.
     * **A+C is not a whole configuration.** ``method_match`` asks whether the
       implementation matches what the cited source describes, which is not a
       question without cited sources, so it degrades to INFO and says so. Tier C

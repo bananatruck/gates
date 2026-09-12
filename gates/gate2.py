@@ -132,6 +132,21 @@ UNIT_RANGES: dict[str, Range] = {
     "perplexity": Range(low=1.0),
 }
 
+#: The speedup above which a value no declared relation derives is treated as a
+#: measurement or reporting defect rather than a result.
+#:
+#: Declared, not derived, and the distinction is the whole point. No argument
+#: makes 1000 the right number; it is a judgement someone made, so it travels
+#: into the report as ``ceiling_origin: "declared"`` and a reviewer can move it.
+#: The bound is deliberately not in ``UNIT_RANGES``: everything in that table is
+#: a fact about the numbers, and mixing a prior into it would weaken the
+#: elimination-by-construction claim that ``coherence.range_valid`` supports.
+#:
+#: SAGE (arXiv 2606.31478) reports a real FVA runtime about 4,700x FBA, which is
+#: why magnitude alone cannot be the test. A value two recorded measurements
+#: derive is exempt at any size.
+IMPLAUSIBLE_SPEEDUP = 1000.0
+
 #: The arithmetic a plan can declare between recorded values. Enough for the
 #: relation `PLAN.md` §4.3 gives as the worked example — a speedup that must
 #: equal the ratio of two recorded times — and nothing more. An expression
@@ -256,6 +271,10 @@ class Gate2Config:
     #: Per-key range overrides, for a metric whose unit the table does not know
     #: or whose admissible range is narrower than its unit's.
     ranges: dict[str, Range] = field(default_factory=dict)
+    #: The speedup above which an *underived* value is treated as a defect. A
+    #: config field rather than a bare constant so the number reaches the
+    #: report, where a reviewer can disagree with it instead of guessing at it.
+    implausible_speedup: float = IMPLAUSIBLE_SPEEDUP
     artifact_root: str = "gate_artifacts"
 
     # -- tier B ------------------------------------------------------------- #
@@ -309,6 +328,12 @@ def run_gate2(
         _check_range_valid(values, config),
         _check_internal_consistency(values, config),
     ]
+
+    # Tier A, but only with a subject. A declared ceiling is still deterministic;
+    # it just has nothing to say about a registry that recorded no speedup.
+    plausibility = _check_plausibility(values, config)
+    if plausibility is not None:
+        checks.append(plausibility)
 
     # Tier B — only with a corpus. Deterministic once a band exists; the
     # judgement is in where the band came from, which the check records.
@@ -456,6 +481,107 @@ def _check_range_valid(
             "checked": checked,
             "unchecked": sorted(unchecked),
             "discrepancies": [_describe_violation(v) for v in violations],
+        },
+    )
+
+
+def _relation_holds(values: dict[str, Any], relation: Relation) -> bool:
+    """Whether every operand resolves and the declared identity holds.
+
+    A yes-or-no reading of the same arithmetic ``_check_internal_consistency``
+    reports on in detail. Kept separate because that check has to distinguish a
+    relation that failed from one whose operands were never recorded, and here
+    both answers are the same: nothing was derived.
+    """
+    operands: dict[str, float] = {}
+    for role, key in (("key", relation.key), ("left", relation.left), ("right", relation.right)):
+        value = _numeric(values.get(key))
+        if value is None:
+            return False
+        operands[role] = value
+    expected = relation.compute(operands["left"], operands["right"])
+    if math.isnan(expected):
+        return False
+    return math.isclose(operands["key"], expected, rel_tol=relation.rel_tol)
+
+
+def _check_plausibility(
+    values: dict[str, Any], config: Gate2Config
+) -> CheckResult | None:
+    """A speedup above the declared ceiling that no declared relation derives.
+
+    Separate from ``range_valid`` on purpose. A unit's admissible range is a
+    fact about the numbers; a ceiling is a prior about what results occur. Both
+    are useful and only one is provable, so they get separate ids and the report
+    says which kind of finding it is carrying.
+
+    The gate is provenance, not magnitude. A speedup two recorded times derive
+    passes at any size, because the arithmetic is on the record. The remedy for
+    a violation is therefore to declare the relation, not to report a smaller
+    number, and the feedback says so.
+
+    Returns ``None`` when nothing recorded a speedup. A gate with no speedups in
+    front of it has no opinion about speedups, and an opinion it never formed
+    must not render as a passing check.
+    """
+    subjects: dict[str, float] = {}
+    for key, entry in values.items():
+        unit = entry.get("unit")
+        if not isinstance(unit, str) or unit.strip().lower() != "speedup":
+            continue
+        value = entry.get("value")
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        # nan and inf belong to range_valid. One defect, one check, one fix.
+        if math.isfinite(float(value)):
+            subjects[key] = float(value)
+
+    if not subjects:
+        return None
+
+    ceiling = config.implausible_speedup
+    derived = {r.key for r in config.relations if _relation_holds(values, r)}
+    over = {k: v for k, v in subjects.items() if v > ceiling}
+    exempt = sorted(k for k in over if k in derived)
+    violations = [
+        {"key": k, "value": v, "ceiling": ceiling}
+        for k, v in sorted(over.items())
+        if k not in derived
+    ]
+
+    if violations:
+        first = violations[0]
+        message = (
+            f"{len(violations)} speedup(s) above the declared ceiling of "
+            f"{ceiling:g}x that no declared relation derives, "
+            f"e.g. {first['key']} = {first['value']:g}x"
+        )
+    else:
+        message = (
+            f"{len(subjects)} speedup(s) checked against a declared ceiling of "
+            f"{ceiling:g}x; {len(exempt)} above it and derived by a declared relation"
+        )
+
+    return CheckResult(
+        id="coherence.plausibility",
+        passed=not violations,
+        severity=Severity.FAIL,
+        message=message,
+        evidence={
+            "violations": violations,
+            "exempt": exempt,
+            "checked": len(subjects),
+            "ceiling": ceiling,
+            # Says out loud that this bound was chosen rather than computed, for
+            # the same reason Band.origin does.
+            "ceiling_origin": "declared",
+            "discrepancies": [
+                f"{v['key']} = {v['value']:g}x is above the declared ceiling of "
+                f"{v['ceiling']:g}x and no declared relation derives it; declare the "
+                f"relation that computes it from the recorded measurements, or "
+                f"correct the value"
+                for v in violations
+            ],
         },
     )
 
