@@ -117,6 +117,19 @@ UNIT_RANGES: dict[str, Range] = {
     "ms": Range(low=0.0, low_open=True),
     "wallclock_s": Range(low=0.0, low_open=True),
     "speedup": Range(low=0.0, low_open=True),
+    # Scores whose definition bounds them, added as units rather than as metric
+    # names. An author who writes unit="f1" has declared what the number is; a
+    # table keyed on the name would instead be guessing, which is what the note
+    # above rules out. A metric this table does not know stays unchecked, and
+    # the report says so.
+    "auc": Range(0.0, 1.0),
+    "f1": Range(0.0, 1.0),
+    "precision": Range(0.0, 1.0),
+    "recall": Range(0.0, 1.0),
+    # Perplexity is exp(H) and cross entropy cannot be negative, so ppl >= 1 is
+    # arithmetic rather than convention. It is the only entry here that can be
+    # claimed as elimination by construction without further argument.
+    "perplexity": Range(low=1.0),
 }
 
 #: The arithmetic a plan can declare between recorded values. Enough for the

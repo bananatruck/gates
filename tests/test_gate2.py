@@ -173,6 +173,44 @@ def test_a_non_finite_violation_names_the_value_as_non_finite(tmp_path):
     assert any("not a finite number" in d for d in check.evidence["discrepancies"])
 
 
+def test_perplexity_below_one_cannot_survive(tmp_path):
+    """Perplexity is exp(H) and cross entropy cannot be negative.
+
+    This bound is arithmetic, not convention, so it is the one range in the
+    table that can be claimed as elimination by construction.
+    """
+    assert not run_gate2(registry({"a.ppl": (0.3, "perplexity")}), config(tmp_path)).passed
+    assert run_gate2(registry({"a.ppl": (1.0, "perplexity")}), config(tmp_path)).passed
+    assert run_gate2(registry({"a.ppl": (42.7, "perplexity")}), config(tmp_path)).passed
+
+
+def test_an_auc_above_one_cannot_survive(tmp_path):
+    assert not run_gate2(registry({"a.auc": (1.02, "auc")}), config(tmp_path)).passed
+    assert not run_gate2(registry({"a.auc": (-0.1, "auc")}), config(tmp_path)).passed
+    assert run_gate2(registry({"a.auc": (0.87, "auc")}), config(tmp_path)).passed
+
+
+@pytest.mark.parametrize("unit", ["f1", "precision", "recall"])
+def test_a_classification_score_above_one_cannot_survive(tmp_path, unit):
+    assert not run_gate2(registry({"a.m": (1.5, unit)}), config(tmp_path)).passed
+    assert run_gate2(registry({"a.m": (0.5, unit)}), config(tmp_path)).passed
+
+
+def test_a_metric_name_alone_never_implies_a_range(tmp_path):
+    """The bounds are keyed on the declared unit, never on the metric's name.
+
+    Guessing from the name would reject a legitimately negative score that some
+    scaffold happens to call ``f1``. A value whose unit this gate does not know
+    stays *unchecked*, which the report says out loud.
+    """
+    reg = registry({"a.f1": (1.5, None), "a.precision": (-3.0, "furlongs")})
+    report = run_gate2(reg, config(tmp_path))
+    check = next(c for c in report.checks if c.id == "coherence.range_valid")
+    assert report.passed
+    assert check.evidence["checked"] == 0
+    assert check.evidence["unchecked"] == ["a.f1", "a.precision"]
+
+
 # --------------------------------------------------------------------------- #
 # coherence.internal_consistency
 # --------------------------------------------------------------------------- #
