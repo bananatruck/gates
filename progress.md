@@ -15,11 +15,11 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: research/gate2-gate3-readout
-head: 6c88687
+head: 01591a7
 head_date: 2026-09-11
-tests_total: 427
+tests_total: 439
 tests_gate1: 92
-tests_gate2: 88
+tests_gate2: 100
 tests_gate3: 19
 tests_llm_scan: 21
 tests_llm_layer: 14
@@ -42,7 +42,7 @@ checks with severities, no tier structure, and Gate 1's feedback loop reused as-
 | Tier | What it does | Input required |
 |---|---|---|
 | A | boundaries — deterministic ranges, declared relations, declared plausibility | none for ranges; a speedup for plausibility |
-| B | **methodology conformance** — declared plan vs recorded run | `plan_fields` |
+| B | methodology conformance — declared plan vs recorded run | `plan_fields` |
 | C | harness / feedback loop | wraps A+B |
 
 **Gate 3 — flat check list, Gate 1's shape**
@@ -65,8 +65,8 @@ forever, but an unverifiable manuscript must not ship.
 | Component | State | Entry point | Tests |
 |---|---|---|---|
 | Gate 1 — execution validity | complete, evidence frozen | `gated_execute()` | 92 |
-| Gate 2 tier A — boundaries | **complete** — ranges, relations, non-finite guard, plausibility ceiling | `run_gate2()` | part of 88 |
-| Gate 2 tier B — methodology conformance | **to build**; B7 closed, unblocked | `run_gate2()` | 0 |
+| Gate 2 tier A — boundaries | **complete** — ranges, relations, non-finite guard, plausibility ceiling | `run_gate2()` | part of 100 |
+| Gate 2 tier B — methodology conformance | **complete** — `method_conformance` FAIL, `method_traceable` WARN | `run_gate2()` | part of 100 |
 | Gate 2 tier C — loop | **not written**; mirrors `rig/loop.py` | — | 0 |
 | Gate 3 — `report.*` regex checks | numeric + figure binding done | `run_gate3()` | 19 |
 | Gate 3 — `source.*` | **not written** | — | 0 |
@@ -74,7 +74,7 @@ forever, but an unverifiable manuscript must not ship.
 | Gate 3 loop | **not written**; reuses `rig/loop.py` unchanged | — | 0 |
 | LLM scan layer | complete, Gate 1 only | `gates/llm_scan.py` | 21 |
 | LLM plumbing (`ModelFn`, budget) | complete, Gate 1 only | `gates/llm.py` | 14 |
-| `gates/gate2_semantic.py` | **scheduled for deletion — D4** | — | ~15 of 88 |
+| `gates/gate2_semantic.py` | **scheduled for deletion — D4** | — | ~15 of 100 |
 | Agent Laboratory adapter | `gated_execute` + `gated_review` via `make_review_context()`; **`gated_report` absent** | `gates/adapters/agentlab.py` | — |
 | Tier A evaluation harness | complete | `rig/gate2_tier_a_eval.py` | 45 labelled registries |
 
@@ -110,7 +110,7 @@ Re-record the `STATE` block after deleting, or `tests/test_progress.py` fails.
 
 ## next steps
 
-1. Build Gate 2 tier B per `GATE2_implementation_spec.md` §2, with D10–D13 applied.
+1. Wire `plan_fields` through `make_review_context()` and extract them in the adapter (tier B has the check, not yet the host path).
 2. Delete `gate2_semantic.py` per D4; rewrite the two tests named above; re-record `STATE`.
 3. Land `rig/gate2_loop.py` + scenarios + tests from the working tree, or restate B5.
 4. Build Gate 3 per `GATE3_implementation_plan.md`, steps 1-9 in order. Network work last.
@@ -136,6 +136,9 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-11 | D11 | **`IMPLAUSIBLE_SPEEDUP = 500.0`**, not 1000, to keep it clear of `MAX_LEN = 1000`, the stdout truncation this project diagnosed. Declared, not derived; reaches the report as `ceiling_origin`. | `gates/gate2.py` |
 | 09-11 | D12 | **Bounded scores are units, never metric names.** `auc`/`f1`/`precision`/`recall`/`perplexity` in `UNIT_RANGES`. Name-based inference stays refused. | `test_a_metric_name_alone_never_implies_a_range` |
 | 09-11 | D13 | **Tier B declarations arrive at wiring time**, not by parsing plan prose. The host passes `plan_fields`; `gates/` never reads a plan. | pending — blocked on B7 |
+| 09-12 | D18 | **A value recorded as a call-site literal cannot prove conformance.** `arg_kind == "literal"` means the number was typed at `record_result`, so matching it proves the agent typed it twice. `constant` (read from a binding) does prove it. | `test_a_value_typed_at_the_call_site_cannot_prove_conformance` |
+| 09-12 | D17 | **Tier B is two checks, not one.** `method_conformance` FAIL for divergence, `method_traceable` WARN for unverifiable. Different findings, different remedies, and collapsing them would let "nobody can tell" read as "the run did something else". No `strict_conformance` flag: divergence is provable, so it fails, and Gate 2 proceeds on exhaustion anyway. | `gates/gate2.py` |
+| 09-12 | D16 | **`PlanField` has no per-field tolerance.** A plan field is a declaration, not a measurement. A tolerance knob would let a run declare 0.001, use 0.0015, and widen until it conformed. Floats compare with representation slack only. | `test_float_slack_absorbs_representation_and_nothing_else` |
 | 09-11 | D15 | **Gate 2 gets its own context builder.** `make_review_context()` builds a `Gate2Config`; `make_context()` stays Gate 1's. Two gates, two phases, two budgets, so one context holding both would need two rejection counters. | `test_the_host_wiring_path_actually_reaches_gate_2` |
 | 09-11 | D14 | **Every check id must have an evidence renderer and a fix directive.** A keyed lookup that misses returns nothing and the agent gets a rejection it cannot act on. | `test_every_check_gate2_emits_can_be_rendered_and_has_a_fix` |
 
@@ -149,6 +152,8 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-11 | `fb59b5b` | `rig/gate2_tier_a_evidence.py`: 12 fixtures, 7/12 before, 12/12 after. |
 | 09-11 | `fe40702` | Ceiling 1000 → 500 to avoid collision with `MAX_LEN`. |
 | 09-11 | `6c88687` | Canonical `progress.md` adopted; `tests/test_progress.py` makes its counts true. |
-| 09-11 | *this* | `make_review_context()` closes B7. Gate 2 is reachable from the host. |
+| 09-11 | `11da445` | `make_review_context()` closes B7. Gate 2 is reachable from the host. |
+| 09-11 | `01591a7` | Tier A scored as a detector: 45 labelled registries, 27/27 and 0/18, Wilson intervals. |
+| 09-12 | *this* | Tier B: `method_conformance` and `method_traceable`, 13 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.

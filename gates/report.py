@@ -260,6 +260,35 @@ def _evidence_relations(check: CheckResult) -> list[str]:
     return out
 
 
+def _evidence_conformance(check: CheckResult) -> list[str]:
+    out = []
+    for row in check.evidence.get("divergent", [])[:_MAX_EVIDENCE_ROWS]:
+        out.append(
+            f"  {row['key']}: plan declared {row['declared']!r}, "
+            f"run recorded {row['recorded']!r}"
+        )
+        if row.get("source_span"):
+            out.append(f"    declared at {row['source_span']}")
+    return out
+
+
+def _evidence_traceable(check: CheckResult) -> list[str]:
+    why = {
+        "not_recorded": "the run never recorded it",
+        "literal": "recorded, but typed at the record_result call",
+        "no_provenance": "recorded, but the registry carries no provenance",
+    }
+    out = []
+    for row in check.evidence.get("unverifiable", [])[:_MAX_EVIDENCE_ROWS]:
+        out.append(
+            f"  {row['key']} (declared {row['declared']!r}): "
+            f"{why.get(row['reason'], row['reason'])}"
+        )
+        if row.get("source_span"):
+            out.append(f"    declared at {row['source_span']}")
+    return out
+
+
 def _evidence_reference(check: CheckResult) -> list[str]:
     ev = check.evidence
     out = []
@@ -367,6 +396,8 @@ _EVIDENCE_RENDERERS = {
     "coherence.range_valid": _evidence_range,
     "coherence.plausibility": _evidence_plausibility,
     "coherence.internal_consistency": _evidence_relations,
+    "coherence.method_conformance": _evidence_conformance,
+    "coherence.method_traceable": _evidence_traceable,
     "coherence.reference_interval": _evidence_reference,
     "coherence.method_match": _evidence_findings,
     "coherence.claim_supported": _evidence_findings,
@@ -446,6 +477,18 @@ _FIXES = {
         "A value the plan derives from other recorded values does not match "
         "them. Compute it from the recorded numbers rather than measuring it "
         "separately, and record every operand it depends on."
+    ),
+    "coherence.method_conformance": (
+        "The run used a setting the plan did not declare. Either change the run "
+        "to use what the plan says, or change the plan and say why it changed. "
+        "Do not leave the two disagreeing: a paper describing one method and a "
+        "run performing another is the defect, whichever of them is right."
+    ),
+    "coherence.method_traceable": (
+        "The plan declared something the run cannot be checked against. Record "
+        "the value the run actually used, passing the variable rather than "
+        "retyping the number: record_result(\"config.lr\", lr) is evidence, "
+        "record_result(\"config.lr\", 0.001) is the same claim twice."
     ),
     "coherence.reference_interval": (
         "A result disagrees with every comparable number in the retrieved "

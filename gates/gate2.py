@@ -191,6 +191,32 @@ class Relation:
 
 
 @dataclass(frozen=True)
+class PlanField:
+    """One thing the plan declared about how the experiment would run.
+
+    Tier B's whole input. It arrives from the host at wiring time, through
+    ``make_review_context``, because a plan is host knowledge and `gates/` never
+    reads one. Extracting these from Agent Laboratory's plan artifact is the
+    adapter's job, exactly as every other piece of host knowledge is.
+
+    **There is no per-field tolerance, deliberately.** A plan field is a
+    declaration, not a measurement: the plan said 0.001 and the run either used
+    0.001 or it did not. A configurable tolerance would let a run declare 0.001,
+    use 0.0015, and widen the tolerance until it conformed, which is the loophole
+    rather than the check. Floats compare with representation slack only, so
+    ``0.1 + 0.2`` still matches ``0.3``.
+    """
+
+    #: Registry key holding the recorded value, e.g. ``config.learning_rate``.
+    key: str
+    #: What the plan said it would be.
+    declared: Any
+    #: Where in the plan it was declared. Quoted in the feedback so the engineer
+    #: can find it without searching.
+    source_span: str = ""
+
+
+@dataclass(frozen=True)
 class SourceClaim:
     """One number a cited source reports, for one metric key and setting.
 
@@ -282,6 +308,9 @@ class Gate2Config:
     artifact_root: str = "gate_artifacts"
 
     # -- tier B ------------------------------------------------------------- #
+    #: What the plan declared about this run. Empty means tier B does not run,
+    #: and emits no check.
+    plan_fields: tuple[PlanField, ...] = ()
     #: What the cited literature reports. Empty means tier B does not run, and
     #: emits no check.
     sources: tuple[SourceClaim, ...] = ()
@@ -338,6 +367,13 @@ def run_gate2(
     plausibility = _check_plausibility(values, config)
     if plausibility is not None:
         checks.append(plausibility)
+
+    # Tier B — only with a declared plan. Deterministic once the plan exists;
+    # the judgement was made by whoever declared the fields, at wiring time.
+    for build in (_check_method_conformance, _check_method_traceable):
+        emitted = build(values, config)
+        if emitted is not None:
+            checks.append(emitted)
 
     # Tier B — only with a corpus. Deterministic once a band exists; the
     # judgement is in where the band came from, which the check records.
@@ -683,6 +719,183 @@ def _check_internal_consistency(
 # --------------------------------------------------------------------------- #
 # tier B — the reference interval
 # --------------------------------------------------------------------------- #
+
+
+def _declared_matches(declared: Any, recorded: Any) -> bool:
+    """Whether the run used what the plan declared.
+
+    Exact, with two accommodations that are about representation rather than
+    tolerance. A declared ``32`` matches a recorded ``32.0``, because they are
+    the same batch size written two ways. A declared float matches within
+    ``math.isclose``'s default relative tolerance, so ``0.1 + 0.2`` matches
+    ``0.3``; that absorbs binary representation and nothing an engineer would
+    call a different setting.
+    """
+    if isinstance(declared, bool) or isinstance(recorded, bool):
+        return declared is recorded
+    if isinstance(declared, (int, float)) and isinstance(recorded, (int, float)):
+        if not (math.isfinite(declared) and math.isfinite(recorded)):
+            return False
+        return math.isclose(float(declared), float(recorded))
+    if isinstance(declared, str) and isinstance(recorded, str):
+        return declared.strip() == recorded.strip()
+    return declared == recorded
+
+
+def _resolve_field(values: dict[str, Any], plan_field: PlanField) -> tuple[str, Any, str]:
+    """Classify one declared field: conforming, divergent, or unverifiable.
+
+    Returns ``(outcome, recorded, reason)``. ``reason`` is only meaningful for
+    ``unverifiable``, and it distinguishes three genuinely different situations
+    that would be misleading to collapse.
+    """
+    entry = values.get(plan_field.key)
+    if entry is None or "value" not in entry:
+        return "unverifiable", None, "not_recorded"
+
+    recorded = entry["value"]
+    arg_kind = (entry.get("provenance") or {}).get("arg_kind")
+    if arg_kind is None:
+        # Gate 1 records arg_kind for every value, so its absence means this
+        # registry did not come from Gate 1. Unknown is not the same as fine.
+        return "unverifiable", recorded, "no_provenance"
+    if arg_kind == "literal":
+        # The number was typed at the record_result call rather than read from
+        # anything the run used. Matching it proves the agent typed the same
+        # value twice, which is not evidence about the experiment.
+        return "unverifiable", recorded, "literal"
+
+    if _declared_matches(plan_field.declared, recorded):
+        return "conforming", recorded, ""
+    return "divergent", recorded, ""
+
+
+def _check_method_conformance(
+    values: dict[str, Any], config: Gate2Config
+) -> CheckResult | None:
+    """Every declared plan field the run recorded matches what the plan said.
+
+    FAIL, because a run that used a different setting than the plan declared
+    provably did something else, and that is MLR-Bench's *Hallucinated
+    Methodology* type — the one at published baselines of 60% and 90%. Gate 2
+    proceeds on exhaustion regardless, so failing costs revisions rather than
+    blocking a genuine result forever.
+
+    Returns ``None`` when the host declared nothing. A gate shown no plan has no
+    opinion about the plan.
+    """
+    if not config.plan_fields:
+        return None
+
+    conforming: list[str] = []
+    divergent: list[dict[str, Any]] = []
+    for plan_field in config.plan_fields:
+        outcome, recorded, _ = _resolve_field(values, plan_field)
+        if outcome == "conforming":
+            conforming.append(plan_field.key)
+        elif outcome == "divergent":
+            divergent.append(
+                {
+                    "key": plan_field.key,
+                    "declared": plan_field.declared,
+                    "recorded": recorded,
+                    "source_span": plan_field.source_span,
+                }
+            )
+
+    if divergent:
+        first = divergent[0]
+        message = (
+            f"{len(divergent)} declared field(s) the run did not use, "
+            f"e.g. {first['key']}: plan declared {first['declared']!r}, "
+            f"run recorded {first['recorded']!r}"
+        )
+    else:
+        message = (
+            f"{len(conforming)} declared field(s) match what the run recorded; "
+            f"{len(config.plan_fields) - len(conforming)} could not be checked"
+        )
+
+    return CheckResult(
+        id="coherence.method_conformance",
+        passed=not divergent,
+        severity=Severity.FAIL,
+        message=message,
+        evidence={
+            "divergent": divergent,
+            "conforming": conforming,
+            "declared": len(config.plan_fields),
+            "discrepancies": [
+                f"{d['key']}: the plan declared {d['declared']!r} and the run "
+                f"recorded {d['recorded']!r}"
+                + (f" ({d['source_span']})" if d["source_span"] else "")
+                for d in divergent
+            ],
+        },
+    )
+
+
+def _check_method_traceable(
+    values: dict[str, Any], config: Gate2Config
+) -> CheckResult | None:
+    """Every declared plan field can be checked against something recorded.
+
+    WARN, not FAIL, and the split from ``method_conformance`` is the point. A
+    divergence is provable: the run used another value. An unverifiable field is
+    the absence of proof either way, which must be reported and must not block.
+
+    Collapsing the two would be the worse mistake. A plan that declares a
+    learning rate the run never records is not conforming, it is unfalsifiable,
+    and unfalsifiable is the actual shape of hallucinated methodology.
+    """
+    if not config.plan_fields:
+        return None
+
+    unverifiable: list[dict[str, Any]] = []
+    for plan_field in config.plan_fields:
+        outcome, recorded, reason = _resolve_field(values, plan_field)
+        if outcome == "unverifiable":
+            unverifiable.append(
+                {
+                    "key": plan_field.key,
+                    "declared": plan_field.declared,
+                    "reason": reason,
+                    "source_span": plan_field.source_span,
+                }
+            )
+
+    why = {
+        "not_recorded": "the run never recorded it",
+        "literal": "the recorded value was typed at the record_result call, "
+                   "so it is not evidence about what the run used",
+        "no_provenance": "the registry carries no provenance for it",
+    }
+
+    if unverifiable:
+        first = unverifiable[0]
+        message = (
+            f"{len(unverifiable)} declared field(s) cannot be checked, "
+            f"e.g. {first['key']}: {why[first['reason']]}"
+        )
+    else:
+        message = f"all {len(config.plan_fields)} declared field(s) are checkable"
+
+    return CheckResult(
+        id="coherence.method_traceable",
+        passed=not unverifiable,
+        severity=Severity.WARN,
+        message=message,
+        evidence={
+            "unverifiable": unverifiable,
+            "declared": len(config.plan_fields),
+            "discrepancies": [
+                f"{u['key']}: the plan declared {u['declared']!r} but "
+                f"{why[u['reason']]}"
+                + (f" ({u['source_span']})" if u["source_span"] else "")
+                for u in unverifiable
+            ],
+        },
+    )
 
 
 def _check_reference_interval(

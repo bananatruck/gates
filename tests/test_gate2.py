@@ -23,6 +23,7 @@ from gates.errors import GateError, GateFailure
 from gates.gate2 import (
     GATE_NAME,
     IMPLAUSIBLE_SPEEDUP,
+    PlanField,
     Band,
     Gate2Config,
     Range,
@@ -356,12 +357,169 @@ def test_every_check_gate2_emits_can_be_rendered_and_has_a_fix(tmp_path):
         "a.ours_s": (1.0, "seconds"),
         "a.speedup": (9999.0, "speedup"),
     })
-    cfg = config(tmp_path, relations=(DERIVES_SPEEDUP,), sources=(WU2019,))
+    cfg = config(
+        tmp_path,
+        relations=(DERIVES_SPEEDUP,),
+        sources=(WU2019,),
+        # Tier B too, or the guard covers only the checks it happens to trip.
+        # The first version of this test missed coherence.method_conformance
+        # for exactly that reason.
+        plan_fields=(
+            PlanField(key="a.declared_but_absent", declared=1, source_span="p L1"),
+            PlanField(key="a.acc", declared=0.5, source_span="p L2"),
+        ),
+    )
     emitted = {check.id for check in run_gate2(reg, cfg).checks}
 
     assert emitted, "the fixture emitted no checks at all"
     assert sorted(i for i in emitted if i not in _EVIDENCE_RENDERERS) == []
     assert sorted(i for i in emitted if i not in _FIXES) == []
+
+
+# --------------------------------------------------------------------------- #
+# tier B: coherence.method_conformance and coherence.method_traceable
+# --------------------------------------------------------------------------- #
+
+
+def plan_registry(values: dict, kinds: dict | None = None) -> dict:
+    """A registry carrying provenance, which real ones always do.
+
+    ``build_registry`` records ``provenance.arg_kind`` for every value. Tier B
+    reads it, so a fixture without it is not a registry Gate 1 would have
+    emitted.
+    """
+    reg = registry(values)
+    kinds = kinds or {}
+    for key, entry in reg["values"].items():
+        entry["provenance"] = {"arg_kind": kinds.get(key, "computed")}
+    return reg
+
+
+LR = PlanField(key="config.lr", declared=0.001, source_span="plan.md L14: learning rate 0.001")
+
+
+def conformance(report):
+    return next(c for c in report.checks if c.id == "coherence.method_conformance")
+
+
+def traceable(report):
+    return next(c for c in report.checks if c.id == "coherence.method_traceable")
+
+
+def test_tier_b_emits_nothing_when_the_host_declared_nothing(tmp_path):
+    """Absent, never green. No plan means no opinion about the plan."""
+    report = run_gate2(plan_registry({"config.lr": (0.001, None)}), config(tmp_path))
+    ids = [c.id for c in report.checks]
+    assert "coherence.method_conformance" not in ids
+    assert "coherence.method_traceable" not in ids
+
+
+def test_a_run_that_did_what_the_plan_said_conforms(tmp_path):
+    reg = plan_registry({"config.lr": (0.001, None)})
+    report = run_gate2(reg, config(tmp_path, plan_fields=(LR,)))
+    assert report.passed
+    assert conformance(report).evidence["conforming"] == ["config.lr"]
+
+
+def test_a_run_that_used_a_different_value_is_a_divergence(tmp_path):
+    """The run provably did something else. That is the type we claim to catch."""
+    reg = plan_registry({"config.lr": (0.01, None)})
+    report = run_gate2(reg, config(tmp_path, plan_fields=(LR,)))
+    check = conformance(report)
+    assert check.severity is Severity.FAIL
+    assert not check.passed
+    assert check.evidence["divergent"][0]["declared"] == 0.001
+    assert check.evidence["divergent"][0]["recorded"] == 0.01
+
+
+def test_a_field_the_run_never_recorded_is_unverifiable_not_conforming(tmp_path):
+    """The shape of hallucinated methodology: a claim nobody can check.
+
+    Counting this as conforming would let a plan declare anything at all, record
+    none of it, and collect a green check for the lot.
+    """
+    report = run_gate2(plan_registry({"a.acc": (0.8, "ratio")}), config(tmp_path, plan_fields=(LR,)))
+    assert conformance(report).evidence["conforming"] == []
+    check = traceable(report)
+    assert check.severity is Severity.WARN
+    assert check.evidence["unverifiable"][0]["reason"] == "not_recorded"
+
+
+def test_a_value_typed_at_the_call_site_cannot_prove_conformance(tmp_path):
+    """record_result("config.lr", 0.001) proves the agent typed 0.001 twice.
+
+    It says nothing about what the optimizer received. A constant read from a
+    named binding does; a literal at the call site does not.
+    """
+    reg = plan_registry({"config.lr": (0.001, None)}, kinds={"config.lr": "literal"})
+    report = run_gate2(reg, config(tmp_path, plan_fields=(LR,)))
+    assert conformance(report).evidence["conforming"] == []
+    assert traceable(report).evidence["unverifiable"][0]["reason"] == "literal"
+
+
+def test_a_constant_read_from_a_binding_does_prove_conformance(tmp_path):
+    """The counterpart. A hyperparameter is legitimately a constant."""
+    reg = plan_registry({"config.lr": (0.001, None)}, kinds={"config.lr": "constant"})
+    report = run_gate2(reg, config(tmp_path, plan_fields=(LR,)))
+    assert conformance(report).evidence["conforming"] == ["config.lr"]
+    assert report.passed
+
+
+def test_a_registry_without_provenance_cannot_prove_conformance(tmp_path):
+    """Unknown is not the same as fine."""
+    reg = registry({"config.lr": (0.001, None)})
+    report = run_gate2(reg, config(tmp_path, plan_fields=(LR,)))
+    assert traceable(report).evidence["unverifiable"][0]["reason"] == "no_provenance"
+
+
+def test_divergence_fails_while_untraceability_only_warns(tmp_path):
+    """Two findings, two severities, two remedies.
+
+    The run doing something else is provable. Nobody being able to tell is not,
+    and must not block a run on its own.
+    """
+    reg = plan_registry({"config.lr": (0.001, None)})
+    missing = PlanField(key="config.seed", declared=7, source_span="plan.md L15")
+    report = run_gate2(reg, config(tmp_path, plan_fields=(LR, missing)))
+    assert report.verdict is Verdict.PASS
+    assert traceable(report).severity is Severity.WARN
+    assert conformance(report).passed
+
+
+def test_an_integer_and_its_float_recording_conform(tmp_path):
+    """32 and 32.0 are the same batch size."""
+    reg = plan_registry({"config.batch": (32.0, "count")})
+    field = PlanField(key="config.batch", declared=32, source_span="plan.md L9")
+    assert run_gate2(reg, config(tmp_path, plan_fields=(field,))).passed
+
+
+def test_float_slack_absorbs_representation_and_nothing_else(tmp_path):
+    """0.1 + 0.2 is 0.30000000000000004 and that is not a divergence.
+
+    0.31 is. There is no per-field tolerance knob, deliberately: one would let a
+    run declare 0.001, use 0.0015, and set the tolerance wide enough to conform.
+    """
+    near = PlanField(key="config.x", declared=0.1 + 0.2, source_span="plan.md L3")
+    assert run_gate2(plan_registry({"config.x": (0.3, None)}),
+                     config(tmp_path, plan_fields=(near,))).passed
+    assert not run_gate2(plan_registry({"config.x": (0.31, None)}),
+                         config(tmp_path, plan_fields=(near,))).passed
+
+
+def test_declared_strings_compare_exactly_apart_from_padding(tmp_path):
+    reg = plan_registry({"config.dataset": ("  CIFAR-10 ", None)})
+    same = PlanField(key="config.dataset", declared="CIFAR-10", source_span="plan.md L2")
+    other = PlanField(key="config.dataset", declared="CIFAR-100", source_span="plan.md L2")
+    assert run_gate2(reg, config(tmp_path, plan_fields=(same,))).passed
+    assert not run_gate2(reg, config(tmp_path, plan_fields=(other,))).passed
+
+
+def test_the_feedback_quotes_where_the_plan_said_it(tmp_path):
+    """The engineer has to find the declaration without guessing."""
+    reg = plan_registry({"config.lr": (0.01, None)})
+    text = render_feedback(run_gate2(reg, config(tmp_path, plan_fields=(LR,))))
+    assert "plan.md L14" in text
+    assert "REQUIRED FIXES" in text
 
 
 # --------------------------------------------------------------------------- #
