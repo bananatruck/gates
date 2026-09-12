@@ -8,6 +8,43 @@ Nothing in `reports/finalized-report-and-results/` was touched.
 
 ---
 
+## Metrics at a glance
+
+![Gate 2 tier A defect coverage before and after](gate2-tier-a-metrics.svg)
+
+| Measure | Before `2da4eff` | After `11da445` |
+|---|---|---|
+| Defect classes caught, of 12 | 7 | 12 |
+| Suite passing | 395 | 426 |
+| Tier A median latency, 40 values | — | 0.145 ms |
+| Model calls | 0 | 0 |
+
+### Cost
+
+Measured on this machine, 200 runs per size, warm. Includes writing
+`gate2_report.json` to disk each run, so every figure is an upper bound on the
+checks themselves.
+
+| Registry size | Median | p95 |
+|---|---|---|
+| 4 values | 0.122 ms | 0.229 ms |
+| 40 values | 0.145 ms | 0.299 ms |
+| 400 values | 0.294 ms | 1.071 ms |
+
+Growth is sublinear across two orders of magnitude because the per-run constant,
+the report write, dominates the per-value work. The zero in the model-calls row
+is structural rather than observed: tier A takes no `ModelFn` and cannot make a
+call. MLR-Judge needs one LLM call per rubric dimension per artifact for the
+comparable judgement.
+
+The colours are the validated categorical slots 1, 2 and 7. Red and green were
+rejected: the palette validator scores that pair at ΔE 4.1 under deuteranopia,
+far below the ΔE 8 target, so the two states would be indistinguishable to a
+red-green colourblind reader. Blue against orange scores 24.7. Every cell also
+carries its state as a word, so nothing depends on colour alone.
+
+---
+
 ## The measurement
 
 One fixture per defect class, run through `run_gate2` before and after the three
