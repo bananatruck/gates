@@ -17,6 +17,7 @@ from typing import Any
 from pathlib import Path
 
 from ..report import render_evidence
+from ..gate2 import IMPLAUSIBLE_SPEEDUP, Range, Relation
 from .. import (
     REGISTRY_FILENAME,
     Gate1Config,
@@ -208,6 +209,52 @@ def make_context(
         # inference.query_model; absent one, the gate issues the same verdict and
         # falls back to the deterministic feedback template.
         consult_model=consult_model,
+    )
+    return GateContext(
+        config=config,
+        ledger=Ledger(os.path.join(artifact_root, "divergence.jsonl")),
+        phase=phase,
+        reward_model=reward_model,
+    )
+
+
+def make_review_context(
+    *,
+    research_dir: str = "./research_dir",
+    phase: str = "results interpretation",
+    max_attempts: int = 2,
+    relations: tuple[Relation, ...] = (),
+    ranges: dict[str, Range] | None = None,
+    implausible_speedup: float = IMPLAUSIBLE_SPEEDUP,
+    reward_model: str | None = None,
+) -> GateContext:
+    """Build the gate context for the review phase, the one Gate 2 runs in.
+
+    ``make_context`` builds a ``Gate1Config``, and ``gated_review`` hands the
+    context's config straight to ``run_gate2``. Driven the way the host is
+    documented to drive it, that raised ``AttributeError: 'Gate1Config' object
+    has no attribute 'ranges'``: Gate 2 had no reachable entry point, and only
+    looked wired because every test built its config by hand. This is that entry
+    point.
+
+    Separate from ``make_context`` rather than folded into it, because the two
+    gates run in different phases and carry different budgets. Gate 1 gets three
+    revisions and Gate 2 gets two, per `PLAN.md` §4, and one context holding both
+    would have to hold two ``consecutive_rejections`` counters to keep them
+    apart.
+
+    ``relations`` and ``ranges`` are what the plan declared about this
+    experiment, so they arrive from the host at wiring time rather than being
+    inferred from anything `gates/` reads. Tier B's ``plan_fields`` will arrive
+    the same way and through this same function.
+    """
+    artifact_root = os.path.join(research_dir, "gate_artifacts")
+    config = Gate2Config(
+        max_attempts=max_attempts,
+        relations=relations,
+        ranges=dict(ranges or {}),
+        implausible_speedup=implausible_speedup,
+        artifact_root=artifact_root,
     )
     return GateContext(
         config=config,

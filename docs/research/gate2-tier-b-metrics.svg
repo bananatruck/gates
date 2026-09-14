@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="620" viewBox="0 0 1000 620" role="img" aria-labelledby="title desc">
+  <title id="title">Gate 2 tier B scored against a labelled corpus of 29 cases</title>
+  <desc id="desc">Twelve cases where the run used a value the plan did not declare, eleven where it conformed, and six where the declared field could not be checked at all. The divergence detector caught 12 of 12 with 0 false positives in 17. The traceability detector flagged 6 of 6 with 0 false positives in 23. All six unverifiable cases were reported as unverifiable and none as a divergence. Twenty-nine of twenty-nine cases reached their labelled outcome. The intervals are wide because the corpus is small: the traceability denominator is only six, giving a lower bound of 61 percent.</desc>
+  <rect width="1000" height="620" fill="#fcfcfb"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" fill="#111111">
+
+    <text x="40" y="42" font-size="24" font-weight="700">Gate 2 tier B, scored against a labelled corpus</text>
+    <text x="40" y="66" font-size="14" fill="#555555">29 cases: 12 where the run diverged from the plan, 11 where it conformed, 6 where the declared field cannot be checked at all.</text>
+
+    <!-- two confusion matrices -->
+    <text x="40" y="104" font-size="12" fill="#6b6b68" letter-spacing="0.4">DIVERGENCE DETECTOR &#183; method_conformance &#183; FAIL</text>
+    <g font-size="12">
+      <text x="243" y="128" fill="#6b6b68" text-anchor="end">flagged</text>
+      <text x="366" y="128" fill="#6b6b68" text-anchor="end">not flagged</text>
+      <rect x="150" y="136" width="104" height="40" rx="4" fill="#2a78d6"/>
+      <rect x="258" y="136" width="104" height="40" rx="4" fill="#ffffff" stroke="#e4e4e0"/>
+      <text x="140" y="161" font-size="13" text-anchor="end">diverged</text>
+      <text x="202" y="162" font-size="18" font-weight="700" fill="#ffffff" text-anchor="middle">12</text>
+      <text x="310" y="162" font-size="18" font-weight="700" fill="#b9b9b4" text-anchor="middle">0</text>
+      <rect x="150" y="180" width="104" height="40" rx="4" fill="#ffffff" stroke="#e4e4e0"/>
+      <rect x="258" y="180" width="104" height="40" rx="4" fill="#2a78d6"/>
+      <text x="140" y="205" font-size="13" text-anchor="end">did not diverge</text>
+      <text x="202" y="206" font-size="18" font-weight="700" fill="#b9b9b4" text-anchor="middle">0</text>
+      <text x="310" y="206" font-size="18" font-weight="700" fill="#ffffff" text-anchor="middle">17</text>
+    </g>
+
+    <text x="530" y="104" font-size="12" fill="#6b6b68" letter-spacing="0.4">TRACEABILITY DETECTOR &#183; method_traceable &#183; WARN</text>
+    <g font-size="12">
+      <text x="733" y="128" fill="#6b6b68" text-anchor="end">flagged</text>
+      <text x="856" y="128" fill="#6b6b68" text-anchor="end">not flagged</text>
+      <rect x="640" y="136" width="104" height="40" rx="4" fill="#4a3aa7"/>
+      <rect x="748" y="136" width="104" height="40" rx="4" fill="#ffffff" stroke="#e4e4e0"/>
+      <text x="630" y="161" font-size="13" text-anchor="end">not checkable</text>
+      <text x="692" y="162" font-size="18" font-weight="700" fill="#ffffff" text-anchor="middle">6</text>
+      <text x="800" y="162" font-size="18" font-weight="700" fill="#b9b9b4" text-anchor="middle">0</text>
+      <rect x="640" y="180" width="104" height="40" rx="4" fill="#ffffff" stroke="#e4e4e0"/>
+      <rect x="748" y="180" width="104" height="40" rx="4" fill="#4a3aa7"/>
+      <text x="630" y="205" font-size="13" text-anchor="end">checkable</text>
+      <text x="692" y="206" font-size="18" font-weight="700" fill="#b9b9b4" text-anchor="middle">0</text>
+      <text x="800" y="206" font-size="18" font-weight="700" fill="#ffffff" text-anchor="middle">23</text>
+    </g>
+
+    <!-- rates -->
+    <text x="40" y="262" font-size="12" fill="#6b6b68" letter-spacing="0.4">RATES, WITH WILSON 95% INTERVALS</text>
+
+    <g stroke="#e4e4e0" stroke-width="1">
+      <line x1="400" y1="274" x2="400" y2="424"/>
+      <line x1="515" y1="274" x2="515" y2="424"/>
+      <line x1="630" y1="274" x2="630" y2="424"/>
+      <line x1="745" y1="274" x2="745" y2="424"/>
+    </g>
+    <line x1="860" y1="274" x2="860" y2="424" stroke="#c9c9c4" stroke-width="1"/>
+    <g font-size="11" fill="#6b6b68" text-anchor="middle">
+      <text x="400" y="440">0%</text><text x="515" y="440">25%</text><text x="630" y="440">50%</text>
+      <text x="745" y="440">75%</text><text x="860" y="440">100%</text>
+    </g>
+
+    <g font-size="13">
+      <!-- divergence detection 100%, CI 75.7-100, n=12 -->
+      <text x="390" y="294" text-anchor="end">divergence detection</text>
+      <line x1="748.2" y1="290" x2="860" y2="290" stroke="#a9c7ec" stroke-width="6" stroke-linecap="round"/>
+      <circle cx="860" cy="290" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+      <text x="875" y="294" font-size="12" fill="#555555">100%  n=12</text>
+
+      <!-- divergence FPR 0%, CI 0-18.4, n=17 -->
+      <text x="390" y="324" text-anchor="end">divergence false positives</text>
+      <line x1="400" y1="320" x2="484.6" y2="320" stroke="#a9c7ec" stroke-width="6" stroke-linecap="round"/>
+      <circle cx="400" cy="320" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+      <text x="875" y="324" font-size="12" fill="#555555">0%  n=17</text>
+
+      <!-- traceability detection 100%, CI 61.0-100, n=6 -->
+      <text x="390" y="354" text-anchor="end">traceability detection</text>
+      <line x1="680.6" y1="350" x2="860" y2="350" stroke="#c2bce4" stroke-width="6" stroke-linecap="round"/>
+      <circle cx="860" cy="350" r="5" fill="#4a3aa7" stroke="#fcfcfb" stroke-width="2"/>
+      <text x="875" y="354" font-size="12" fill="#555555">100%  n=6</text>
+
+      <!-- traceability FPR 0%, CI 0-14.3, n=23 -->
+      <text x="390" y="384" text-anchor="end">traceability false positives</text>
+      <line x1="400" y1="380" x2="465.8" y2="380" stroke="#c2bce4" stroke-width="6" stroke-linecap="round"/>
+      <circle cx="400" cy="380" r="5" fill="#4a3aa7" stroke="#fcfcfb" stroke-width="2"/>
+      <text x="875" y="384" font-size="12" fill="#555555">0%  n=23</text>
+
+      <!-- overall 100%, CI 88.3-100, n=29 -->
+      <text x="390" y="414" text-anchor="end" font-weight="600">reached its labelled outcome</text>
+      <line x1="806.2" y1="410" x2="860" y2="410" stroke="#a9c7ec" stroke-width="6" stroke-linecap="round"/>
+      <circle cx="860" cy="410" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+      <text x="875" y="414" font-size="12" fill="#555555">100%  n=29</text>
+    </g>
+
+    <line x1="40" y1="462" x2="960" y2="462" stroke="#c9c9c4" stroke-width="1.5"/>
+
+    <text x="40" y="490" font-size="14" font-weight="600">The rate the tier is actually built around</text>
+    <g font-size="13" fill="#555555">
+      <text x="40" y="514">All 6 unverifiable cases were reported as unverifiable and none as a divergence. That separation is the whole design: a plan that</text>
+      <text x="40" y="534">declares a learning rate the run never records is not conforming, it is unfalsifiable, and unfalsifiable is the shape hallucinated</text>
+      <text x="40" y="554">methodology actually takes. Scoring it as a divergence would claim the run did something else, which nobody can know.</text>
+      <text x="40" y="582">Read the intervals, not the point estimates. Traceability detection rests on 6 cases, so 6/6 is consistent with a true rate of 61%.</text>
+      <text x="40" y="602">Reproduce: python -m rig.gate2_tier_b_eval</text>
+    </g>
+  </g>
+</svg>

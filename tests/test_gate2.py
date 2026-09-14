@@ -13,10 +13,17 @@ import pathlib
 import pytest
 
 import gates.gate2_semantic
-from gates.adapters.agentlab import GateContext, declared_limitations, gated_review
+from gates.adapters.agentlab import (
+    GateContext,
+    declared_limitations,
+    gated_review,
+    make_review_context,
+)
 from gates.errors import GateError, GateFailure
 from gates.gate2 import (
     GATE_NAME,
+    IMPLAUSIBLE_SPEEDUP,
+    PlanField,
     Band,
     Gate2Config,
     Range,
@@ -26,7 +33,7 @@ from gates.gate2 import (
     run_gate2,
     unresolved_discrepancies,
 )
-from gates.report import render_feedback
+from gates.report import render_evidence, render_feedback
 from gates.schema import Severity, Verdict
 
 
@@ -123,6 +130,396 @@ def test_non_numeric_values_are_skipped(tmp_path):
     check = next(c for c in report.checks if c.id == "coherence.range_valid")
     assert report.passed
     assert check.evidence["checked"] == 0
+
+
+def test_a_nan_value_cannot_pass_as_a_measurement(tmp_path):
+    """NaN is not a value in range; it is the absence of one.
+
+    ``Range.admits`` rejects NaN only where an upper bound exists, because
+    ``value <= high`` is what NaN fails. Every unbounded-above unit — the
+    timings, the counts, the losses, the speedups — admitted it.
+    """
+    for unit in ("seconds", "loss", "count", "speedup", "ms", "wallclock_s"):
+        reg = registry({"a.x": (float("nan"), unit)})
+        report = run_gate2(reg, config(tmp_path))
+        assert not report.passed, f"NaN passed range_valid for unit {unit!r}"
+
+
+def test_an_infinite_value_cannot_pass_as_a_measurement(tmp_path):
+    for unit in ("seconds", "loss", "count", "speedup"):
+        reg = registry({"a.x": (float("inf"), unit)})
+        assert not run_gate2(reg, config(tmp_path)).passed, unit
+
+
+def test_a_speedup_divided_by_an_unmeasured_wallclock_cannot_pass(tmp_path):
+    """The case the two halves of Gate 2 were already half-guarding.
+
+    ``low_open`` exists so a wallclock of exactly zero is rejected as unmeasured.
+    ``OPS["ratio"]`` returns NaN when its denominator is zero. So the gate caught
+    the unmeasured time and then admitted the speedup derived from it.
+    """
+    reg = registry({
+        "a.baseline_s": (13.61, "seconds"),
+        "a.ours_s": (0.0, "seconds"),
+        "a.speedup": (float("nan"), "speedup"),
+    })
+    report = run_gate2(reg, config(tmp_path))
+    check = next(c for c in report.checks if c.id == "coherence.range_valid")
+    flagged = {v["key"] for v in check.evidence["violations"]}
+    assert "a.speedup" in flagged, "the NaN speedup was not flagged"
+
+
+def test_a_non_finite_violation_names_the_value_as_non_finite(tmp_path):
+    """The feedback has to say what is wrong, not just that something is.
+
+    "nan lies outside (0, +inf]" is not an instruction anybody can act on.
+    """
+    reg = registry({"a.t": (float("nan"), "seconds")})
+    report = run_gate2(reg, config(tmp_path))
+    check = next(c for c in report.checks if c.id == "coherence.range_valid")
+    assert any("not a finite number" in d for d in check.evidence["discrepancies"])
+
+
+def test_perplexity_below_one_cannot_survive(tmp_path):
+    """Perplexity is exp(H) and cross entropy cannot be negative.
+
+    This bound is arithmetic, not convention, so it is the one range in the
+    table that can be claimed as elimination by construction.
+    """
+    assert not run_gate2(registry({"a.ppl": (0.3, "perplexity")}), config(tmp_path)).passed
+    assert run_gate2(registry({"a.ppl": (1.0, "perplexity")}), config(tmp_path)).passed
+    assert run_gate2(registry({"a.ppl": (42.7, "perplexity")}), config(tmp_path)).passed
+
+
+def test_an_auc_above_one_cannot_survive(tmp_path):
+    assert not run_gate2(registry({"a.auc": (1.02, "auc")}), config(tmp_path)).passed
+    assert not run_gate2(registry({"a.auc": (-0.1, "auc")}), config(tmp_path)).passed
+    assert run_gate2(registry({"a.auc": (0.87, "auc")}), config(tmp_path)).passed
+
+
+@pytest.mark.parametrize("unit", ["f1", "precision", "recall"])
+def test_a_classification_score_above_one_cannot_survive(tmp_path, unit):
+    assert not run_gate2(registry({"a.m": (1.5, unit)}), config(tmp_path)).passed
+    assert run_gate2(registry({"a.m": (0.5, unit)}), config(tmp_path)).passed
+
+
+def test_a_metric_name_alone_never_implies_a_range(tmp_path):
+    """The bounds are keyed on the declared unit, never on the metric's name.
+
+    Guessing from the name would reject a legitimately negative score that some
+    scaffold happens to call ``f1``. A value whose unit this gate does not know
+    stays *unchecked*, which the report says out loud.
+    """
+    reg = registry({"a.f1": (1.5, None), "a.precision": (-3.0, "furlongs")})
+    report = run_gate2(reg, config(tmp_path))
+    check = next(c for c in report.checks if c.id == "coherence.range_valid")
+    assert report.passed
+    assert check.evidence["checked"] == 0
+    assert check.evidence["unchecked"] == ["a.f1", "a.precision"]
+
+
+# --------------------------------------------------------------------------- #
+# coherence.plausibility
+# --------------------------------------------------------------------------- #
+
+
+def speedup_registry(value, **extra):
+    reg = registry({"a.baseline_s": (4700.0, "seconds"), "a.ours_s": (1.0, "seconds"),
+                    "a.speedup": (value, "speedup")})
+    reg.update(extra)
+    return reg
+
+
+DERIVES_SPEEDUP = Relation(key="a.speedup", op="ratio", left="a.baseline_s", right="a.ours_s")
+
+
+def test_an_unexplained_speedup_above_the_ceiling_cannot_survive(tmp_path):
+    """A large speedup nothing derives is a reporting defect, not a result."""
+    report = run_gate2(speedup_registry(4700.0), config(tmp_path))
+    assert not report.passed
+    check = next(c for c in report.checks if c.id == "coherence.plausibility")
+    assert check.severity is Severity.FAIL
+    assert check.evidence["violations"][0]["key"] == "a.speedup"
+
+
+def test_a_speedup_a_declared_relation_derives_is_exempt_at_any_magnitude(tmp_path):
+    """4,700x is a real published ratio, so the ceiling must not reject it.
+
+    SAGE (arXiv 2606.31478) reports an FVA runtime about 4,700x FBA. The gate
+    asks for the arithmetic, not for a smaller number: once a relation derives
+    the value from two recorded times, the magnitude stops being evidence.
+    """
+    cfg = config(tmp_path, relations=(DERIVES_SPEEDUP,))
+    report = run_gate2(speedup_registry(4700.0), cfg)
+    assert report.passed
+    check = next(c for c in report.checks if c.id == "coherence.plausibility")
+    assert check.evidence["exempt"] == ["a.speedup"]
+
+
+def test_a_speedup_whose_declared_relation_does_not_hold_is_not_exempt(tmp_path):
+    """A relation that fails cannot buy an exemption it did not earn."""
+    cfg = config(tmp_path, relations=(DERIVES_SPEEDUP,))
+    report = run_gate2(speedup_registry(9999.0), cfg)
+    check = next(c for c in report.checks if c.id == "coherence.plausibility")
+    assert not check.passed
+    assert check.evidence["exempt"] == []
+
+
+def test_plausibility_emits_no_check_when_nothing_recorded_a_speedup(tmp_path):
+    """Absent, never green: no speedup means no opinion about speedups."""
+    report = run_gate2(registry({"a.acc": (0.81, "ratio")}), config(tmp_path))
+    assert [c for c in report.checks if c.id == "coherence.plausibility"] == []
+
+
+def test_the_declared_ceiling_is_recorded_in_the_report(tmp_path):
+    """A hand-chosen bound appears in the evidence, not only in the source.
+
+    A reviewer has to be able to disagree with the number rather than guess at
+    it, which is the same reason ``Band.origin`` exists.
+    """
+    report = run_gate2(speedup_registry(4700.0), config(tmp_path, implausible_speedup=2500.0))
+    check = next(c for c in report.checks if c.id == "coherence.plausibility")
+    assert check.evidence["ceiling"] == 2500.0
+    assert check.evidence["ceiling_origin"] == "declared"
+
+    # The shipped default travels the same way, so the report never leaves a
+    # reviewer to infer which bound was applied.
+    default = run_gate2(speedup_registry(4700.0), config(tmp_path))
+    assert next(
+        c for c in default.checks if c.id == "coherence.plausibility"
+    ).evidence["ceiling"] == IMPLAUSIBLE_SPEEDUP
+
+
+def test_plausibility_feedback_asks_for_the_relation_not_a_smaller_number(tmp_path):
+    """The remedy is to show the arithmetic, and the text has to say so."""
+    report = run_gate2(speedup_registry(4700.0), config(tmp_path))
+    check = next(c for c in report.checks if c.id == "coherence.plausibility")
+    assert any("relation" in d for d in check.evidence["discrepancies"])
+
+
+def test_a_non_finite_speedup_is_left_to_the_range_check(tmp_path):
+    """One defect, one check, one fix.
+
+    ``range_valid`` owns nan and inf. A registry whose only speedup is
+    non-finite leaves the plausibility check nothing it can compare, so it emits
+    no check at all rather than a pass that would read as "the speedups here are
+    fine".
+    """
+    report = run_gate2(speedup_registry(float("inf")), config(tmp_path))
+    assert not report.passed
+    assert [c for c in report.checks if c.id == "coherence.plausibility"] == []
+    ranges = next(c for c in report.checks if c.id == "coherence.range_valid")
+    assert ranges.evidence["violations"][0]["key"] == "a.speedup"
+
+
+def test_a_finite_speedup_is_still_checked_beside_a_non_finite_one(tmp_path):
+    """Dropping the unusable subject must not drop the usable one with it."""
+    reg = speedup_registry(float("nan"))
+    reg["values"]["a.other_speedup"] = {
+        "value": 5000.0, "unit": "speedup", "trace_id": "t-other"
+    }
+    report = run_gate2(reg, config(tmp_path))
+    check = next(c for c in report.checks if c.id == "coherence.plausibility")
+    assert check.evidence["checked"] == 1
+    assert check.evidence["violations"][0]["key"] == "a.other_speedup"
+
+
+def test_the_plausibility_finding_reaches_the_agent(tmp_path):
+    """Half two of the feedback loop: the finding has to render, not just exist.
+
+    ``render_evidence`` dispatches on a per-id registry, so a check added
+    without an entry produces a report that names the failure and withholds the
+    fix. A rejection the agent cannot act on is a stall, not a gate.
+    """
+    report = run_gate2(speedup_registry(4700.0), config(tmp_path))
+    check = next(c for c in report.checks if c.id == "coherence.plausibility")
+    # The message alone already names the number, so assert on the two things
+    # only a registered renderer and a registered directive can produce.
+    assert render_evidence(check), "the check has no evidence renderer"
+    text = render_feedback(report)
+    assert "no declared relation derives it" in text
+    assert "REQUIRED FIXES" in text
+    assert "the arithmetic is on the record" in text
+
+
+def test_every_check_gate2_emits_can_be_rendered_and_has_a_fix(tmp_path):
+    """Structural guard over the two registries in ``gates.report``.
+
+    Keyed lookups fail silently when a key is missing, so a new check ships a
+    report with no evidence rows and no required fix, and nothing complains.
+    That is how ``coherence.plausibility`` first shipped.
+    """
+    from gates.report import _EVIDENCE_RENDERERS, _FIXES
+
+    reg = registry({
+        "a.acc": (1.4, "ratio"),
+        "a.baseline_s": (4700.0, "seconds"),
+        "a.ours_s": (1.0, "seconds"),
+        "a.speedup": (9999.0, "speedup"),
+    })
+    cfg = config(
+        tmp_path,
+        relations=(DERIVES_SPEEDUP,),
+        sources=(WU2019,),
+        # Tier B too, or the guard covers only the checks it happens to trip.
+        # The first version of this test missed coherence.method_conformance
+        # for exactly that reason.
+        plan_fields=(
+            PlanField(key="a.declared_but_absent", declared=1, source_span="p L1"),
+            PlanField(key="a.acc", declared=0.5, source_span="p L2"),
+        ),
+    )
+    emitted = {check.id for check in run_gate2(reg, cfg).checks}
+
+    assert emitted, "the fixture emitted no checks at all"
+    assert sorted(i for i in emitted if i not in _EVIDENCE_RENDERERS) == []
+    assert sorted(i for i in emitted if i not in _FIXES) == []
+
+
+# --------------------------------------------------------------------------- #
+# tier B: coherence.method_conformance and coherence.method_traceable
+# --------------------------------------------------------------------------- #
+
+
+def plan_registry(values: dict, kinds: dict | None = None) -> dict:
+    """A registry carrying provenance, which real ones always do.
+
+    ``build_registry`` records ``provenance.arg_kind`` for every value. Tier B
+    reads it, so a fixture without it is not a registry Gate 1 would have
+    emitted.
+    """
+    reg = registry(values)
+    kinds = kinds or {}
+    for key, entry in reg["values"].items():
+        entry["provenance"] = {"arg_kind": kinds.get(key, "computed")}
+    return reg
+
+
+LR = PlanField(key="config.lr", declared=0.001, source_span="plan.md L14: learning rate 0.001")
+
+
+def conformance(report):
+    return next(c for c in report.checks if c.id == "coherence.method_conformance")
+
+
+def traceable(report):
+    return next(c for c in report.checks if c.id == "coherence.method_traceable")
+
+
+def test_tier_b_emits_nothing_when_the_host_declared_nothing(tmp_path):
+    """Absent, never green. No plan means no opinion about the plan."""
+    report = run_gate2(plan_registry({"config.lr": (0.001, None)}), config(tmp_path))
+    ids = [c.id for c in report.checks]
+    assert "coherence.method_conformance" not in ids
+    assert "coherence.method_traceable" not in ids
+
+
+def test_a_run_that_did_what_the_plan_said_conforms(tmp_path):
+    reg = plan_registry({"config.lr": (0.001, None)})
+    report = run_gate2(reg, config(tmp_path, plan_fields=(LR,)))
+    assert report.passed
+    assert conformance(report).evidence["conforming"] == ["config.lr"]
+
+
+def test_a_run_that_used_a_different_value_is_a_divergence(tmp_path):
+    """The run provably did something else. That is the type we claim to catch."""
+    reg = plan_registry({"config.lr": (0.01, None)})
+    report = run_gate2(reg, config(tmp_path, plan_fields=(LR,)))
+    check = conformance(report)
+    assert check.severity is Severity.FAIL
+    assert not check.passed
+    assert check.evidence["divergent"][0]["declared"] == 0.001
+    assert check.evidence["divergent"][0]["recorded"] == 0.01
+
+
+def test_a_field_the_run_never_recorded_is_unverifiable_not_conforming(tmp_path):
+    """The shape of hallucinated methodology: a claim nobody can check.
+
+    Counting this as conforming would let a plan declare anything at all, record
+    none of it, and collect a green check for the lot.
+    """
+    report = run_gate2(plan_registry({"a.acc": (0.8, "ratio")}), config(tmp_path, plan_fields=(LR,)))
+    assert conformance(report).evidence["conforming"] == []
+    check = traceable(report)
+    assert check.severity is Severity.WARN
+    assert check.evidence["unverifiable"][0]["reason"] == "not_recorded"
+
+
+def test_a_value_typed_at_the_call_site_cannot_prove_conformance(tmp_path):
+    """record_result("config.lr", 0.001) proves the agent typed 0.001 twice.
+
+    It says nothing about what the optimizer received. A constant read from a
+    named binding does; a literal at the call site does not.
+    """
+    reg = plan_registry({"config.lr": (0.001, None)}, kinds={"config.lr": "literal"})
+    report = run_gate2(reg, config(tmp_path, plan_fields=(LR,)))
+    assert conformance(report).evidence["conforming"] == []
+    assert traceable(report).evidence["unverifiable"][0]["reason"] == "literal"
+
+
+def test_a_constant_read_from_a_binding_does_prove_conformance(tmp_path):
+    """The counterpart. A hyperparameter is legitimately a constant."""
+    reg = plan_registry({"config.lr": (0.001, None)}, kinds={"config.lr": "constant"})
+    report = run_gate2(reg, config(tmp_path, plan_fields=(LR,)))
+    assert conformance(report).evidence["conforming"] == ["config.lr"]
+    assert report.passed
+
+
+def test_a_registry_without_provenance_cannot_prove_conformance(tmp_path):
+    """Unknown is not the same as fine."""
+    reg = registry({"config.lr": (0.001, None)})
+    report = run_gate2(reg, config(tmp_path, plan_fields=(LR,)))
+    assert traceable(report).evidence["unverifiable"][0]["reason"] == "no_provenance"
+
+
+def test_divergence_fails_while_untraceability_only_warns(tmp_path):
+    """Two findings, two severities, two remedies.
+
+    The run doing something else is provable. Nobody being able to tell is not,
+    and must not block a run on its own.
+    """
+    reg = plan_registry({"config.lr": (0.001, None)})
+    missing = PlanField(key="config.seed", declared=7, source_span="plan.md L15")
+    report = run_gate2(reg, config(tmp_path, plan_fields=(LR, missing)))
+    assert report.verdict is Verdict.PASS
+    assert traceable(report).severity is Severity.WARN
+    assert conformance(report).passed
+
+
+def test_an_integer_and_its_float_recording_conform(tmp_path):
+    """32 and 32.0 are the same batch size."""
+    reg = plan_registry({"config.batch": (32.0, "count")})
+    field = PlanField(key="config.batch", declared=32, source_span="plan.md L9")
+    assert run_gate2(reg, config(tmp_path, plan_fields=(field,))).passed
+
+
+def test_float_slack_absorbs_representation_and_nothing_else(tmp_path):
+    """0.1 + 0.2 is 0.30000000000000004 and that is not a divergence.
+
+    0.31 is. There is no per-field tolerance knob, deliberately: one would let a
+    run declare 0.001, use 0.0015, and set the tolerance wide enough to conform.
+    """
+    near = PlanField(key="config.x", declared=0.1 + 0.2, source_span="plan.md L3")
+    assert run_gate2(plan_registry({"config.x": (0.3, None)}),
+                     config(tmp_path, plan_fields=(near,))).passed
+    assert not run_gate2(plan_registry({"config.x": (0.31, None)}),
+                         config(tmp_path, plan_fields=(near,))).passed
+
+
+def test_declared_strings_compare_exactly_apart_from_padding(tmp_path):
+    reg = plan_registry({"config.dataset": ("  CIFAR-10 ", None)})
+    same = PlanField(key="config.dataset", declared="CIFAR-10", source_span="plan.md L2")
+    other = PlanField(key="config.dataset", declared="CIFAR-100", source_span="plan.md L2")
+    assert run_gate2(reg, config(tmp_path, plan_fields=(same,))).passed
+    assert not run_gate2(reg, config(tmp_path, plan_fields=(other,))).passed
+
+
+def test_the_feedback_quotes_where_the_plan_said_it(tmp_path):
+    """The engineer has to find the declaration without guessing."""
+    reg = plan_registry({"config.lr": (0.01, None)})
+    text = render_feedback(run_gate2(reg, config(tmp_path, plan_fields=(LR,))))
+    assert "plan.md L14" in text
+    assert "REQUIRED FIXES" in text
 
 
 # --------------------------------------------------------------------------- #
@@ -595,13 +992,22 @@ def tier_config(tmp_path, *, b: bool, c: bool):
 @pytest.mark.parametrize(
     "b, c, expected",
     [
-        (False, False, ["coherence.range_valid", "coherence.internal_consistency"]),
+        (
+            False,
+            False,
+            [
+                "coherence.range_valid",
+                "coherence.internal_consistency",
+                "coherence.plausibility",
+            ],
+        ),
         (
             True,
             False,
             [
                 "coherence.range_valid",
                 "coherence.internal_consistency",
+                "coherence.plausibility",
                 "coherence.reference_interval",
             ],
         ),
@@ -611,6 +1017,7 @@ def tier_config(tmp_path, *, b: bool, c: bool):
             [
                 "coherence.range_valid",
                 "coherence.internal_consistency",
+                "coherence.plausibility",
                 # A+C cannot compare a method to sources it was not given. The
                 # pass records that it did not run instead of staying silent.
                 "coherence.method_match",
@@ -622,6 +1029,7 @@ def tier_config(tmp_path, *, b: bool, c: bool):
             [
                 "coherence.range_valid",
                 "coherence.internal_consistency",
+                "coherence.plausibility",
                 "coherence.reference_interval",
             ],
         ),
@@ -635,6 +1043,9 @@ def test_each_tier_combination_emits_exactly_its_own_checks(tmp_path, b, c, expe
 
     * Tier C contributes no check when it *ran* and found nothing — silence, not
       a green row. So A+B+C lists the same ids as A+B on a clean registry.
+    * ``plausibility`` is in every list because the clean registry records a
+      speedup, so the check has a subject. It is tier A with an input
+      condition, not a tier of its own: a registry with no speedup omits it.
     * **A+C is not a whole configuration.** ``method_match`` asks whether the
       implementation matches what the cited source describes, which is not a
       question without cited sources, so it degrades to INFO and says so. Tier C
@@ -800,6 +1211,52 @@ def test_no_fix_directive_exists_for_a_check_that_cannot_block():
 # --------------------------------------------------------------------------- #
 # the adapter: gate 2 driven the way gate 1 is
 # --------------------------------------------------------------------------- #
+
+
+def test_the_host_wiring_path_actually_reaches_gate_2(tmp_path):
+    """B7: ``make_context`` builds a Gate1Config, which ``run_gate2`` cannot use.
+
+    Gate 2 looked wired because ``gated_review`` exists, and every test built its
+    own ``Gate2Config`` by hand. Driven the way a host is documented to drive it,
+    the call raised ``AttributeError: 'Gate1Config' object has no attribute
+    'ranges'``. A gate with no reachable entry point is not installed.
+    """
+    ctx = make_review_context(research_dir=str(tmp_path))
+    assert isinstance(ctx.config, Gate2Config)
+
+    reg = registry({"exp1.acc": (0.81, "ratio")})
+    result = gated_review(reg, ctx)
+    assert result.report.verdict is Verdict.PASS
+
+
+def test_the_review_context_carries_gate_2_configuration(tmp_path):
+    """Whatever the host declares has to survive into the verdict.
+
+    A context that accepted relations and ranges and then dropped them would
+    fail open, which is worse than not accepting them.
+    """
+    ctx = make_review_context(
+        research_dir=str(tmp_path),
+        relations=(DERIVES_SPEEDUP,),
+        ranges={"a.acc": Range(0.9, 1.0)},
+        implausible_speedup=250.0,
+    )
+    assert ctx.config.relations == (DERIVES_SPEEDUP,)
+    assert ctx.config.implausible_speedup == 250.0
+
+    # The range override is the cheapest one to prove end to end: 0.81 is a
+    # legal ratio and an illegal one under the declared override.
+    result = gated_review(registry({"a.acc": (0.81, "ratio")}), ctx)
+    assert result.report.verdict is Verdict.FAIL
+
+
+def test_the_review_budget_is_two_attempts_not_gate_ones_three(tmp_path):
+    """Gate 2 gets two revisions per PLAN.md 4, Gate 1 gets three.
+
+    They are different budgets for different jobs, and a shared default would
+    silently give Gate 2 an extra turn it was never allotted.
+    """
+    assert make_review_context(research_dir=str(tmp_path)).config.max_attempts == 2
 
 
 def test_gated_review_counts_agent_turns_not_executions(tmp_path):
