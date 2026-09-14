@@ -910,10 +910,13 @@ def _annotate_provenance(source: str, execution: ExecutionRecord) -> None:
     """Decide, from the source, whether each recorded value was computed."""
     try:
         kinds = static_checks.classify_record_calls(source)
+        unused = static_checks.find_unused_record_values(source)
     except SyntaxError:
         return
     for metric in execution.metrics.values():
         metric.arg_kind = kinds.get(metric.lineno or -1, "unknown")
+        if metric.arg_kind in ("constant", "computed"):
+            metric.used_by_run = metric.lineno not in unused
 
 
 def _looks_like_ratio(metric: MetricRecord) -> bool:

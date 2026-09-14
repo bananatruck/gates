@@ -277,6 +277,7 @@ def _evidence_traceable(check: CheckResult) -> list[str]:
         "not_recorded": "the run never recorded it",
         "literal": "recorded, but typed at the record_result call",
         "no_provenance": "recorded, but the registry carries no provenance",
+        "unused": "recorded, but the run never reads it",
     }
     out = []
     for row in check.evidence.get("unverifiable", [])[:_MAX_EVIDENCE_ROWS]:

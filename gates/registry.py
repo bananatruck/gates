@@ -83,6 +83,7 @@ def build_registry(report: GateReport, *, task_ref: str | None = None) -> dict[s
                 "lineno": metric.lineno,
                 "source_line": metric.source_line,
                 "arg_kind": metric.arg_kind,
+                "used_by_run": metric.used_by_run,
                 "call_count": metric.call_count,
                 "observations": list(metric.observations),
                 "observations_truncated": metric.observations_truncated,

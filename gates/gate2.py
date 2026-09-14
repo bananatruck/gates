@@ -719,6 +719,10 @@ def _resolve_field(values: dict[str, Any], plan_field: PlanField) -> tuple[str, 
         # anything the run used. Matching it proves the agent typed the same
         # value twice, which is not evidence about the experiment.
         return "unverifiable", recorded, "literal"
+    if entry["provenance"].get("used_by_run") is False:
+        # B8, the decoy: the recorded binding is read by nothing but the record
+        # call, so matching it says nothing about what the computation used.
+        return "unverifiable", recorded, "unused"
 
     if _declared_matches(plan_field.declared, recorded):
         return "conforming", recorded, ""
@@ -824,6 +828,8 @@ def _check_method_traceable(
         "literal": "the recorded value was typed at the record_result call, "
                    "so it is not evidence about what the run used",
         "no_provenance": "the registry carries no provenance for it",
+        "unused": "the run records it but never reads it, so the recorded "
+                  "value is not evidence about what the run used",
     }
 
     if unverifiable:

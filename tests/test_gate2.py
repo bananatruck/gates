@@ -467,6 +467,31 @@ def test_a_constant_read_from_a_binding_does_prove_conformance(tmp_path):
     assert report.passed
 
 
+def test_a_constant_the_run_never_used_cannot_prove_conformance(tmp_path):
+    """B8, the decoy hole, end to end through a real Gate 1 run.
+
+    The run records the declared 0.001 and builds its optimizer with 0.01.
+    Which value the optimizer got is unprovable from the registry, so the field
+    is unverifiable rather than divergent (D17), and never conforming.
+    """
+    from gates.gate1 import Gate1Config, run_gate1
+    from gates.registry import build_registry
+
+    src = (
+        "lr = 0.001\n"
+        "optimizer_lr = 0.01\n"
+        "loss = optimizer_lr * 3\n"
+        "record_result('config.lr', lr)\n"
+        "record_result('train.loss', loss)\n"
+    )
+    gate1 = run_gate1(src, Gate1Config(artifact_root=str(tmp_path / "g1"), timeout_s=30))
+    reg = build_registry(gate1)
+    report = run_gate2(reg, config(tmp_path / "g2", plan_fields=(LR,)))
+    assert conformance(report).evidence["conforming"] == []
+    assert traceable(report).evidence["unverifiable"][0]["reason"] == "unused"
+    assert "never reads" in render_feedback(report) or "never reads" in traceable(report).message
+
+
 def test_a_registry_without_provenance_cannot_prove_conformance(tmp_path):
     """Unknown is not the same as fine."""
     reg = registry({"config.lr": (0.001, None)})

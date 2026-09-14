@@ -15,11 +15,11 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: feature/gate2-feedback-loop
-head: 85af14c
+head: 13438ca
 head_date: 2026-09-14
-tests_total: 439
-tests_gate1: 92
-tests_gate2: 86
+tests_total: 446
+tests_gate1: 98
+tests_gate2: 87
 tests_gate3: 19
 tests_llm_scan: 21
 tests_llm_layer: 14
@@ -83,6 +83,7 @@ Frozen and checksum-signed — do not edit: `reports/finalized-report-and-result
 ## gate 2 - missing to complete
 
 Verified 09-14 against `85af14c` and `../AgentLaboratory-Gemini` (`feat/gates-verification-layer`, 7 files uncommitted).
+**Scope 09-14:** gates repo only. AgentLaboratory-Gemini is a test bed for results and data, not edited. F1-F3, F5, F6 are delivered as adapter entry points a host can call, not as host edits.
 Tiers A and B already run as one call (`run_gate2`); tier C wraps them in `rig/` only. Nothing below exists yet.
 
 | ID | Missing | Evidence | Needs |
@@ -105,21 +106,19 @@ Tiers A and B already run as one call (`run_gate2`); tier C wraps them in `rig/`
 |---|---|---|---|
 | B2 | Gate 3 `source.*` needs network, rate limits, caching, and an offline fallback so the suite stays hermetic. Only non-offline component in the plan. Build order puts it last deliberately. | Gate 3 step 5 | 09-10 |
 | B3 | `PR_SET_DUMPABLE` guard is inert under uid 0; not detected, not reported. Skips on macOS. CI runs non-root so CI is green. | portability claim | 09-07 |
-| B8 | **Decoy hole.** Tier B accepts a `constant` binding the run never uses: record `lr = 0.001`, build the optimizer with 0.01, `method_conformance` passes. Named in merge `d738e49` as recorded here; it was not. Gate 1 provenance holds `arg_kind` and `lineno` (`gates/registry.py:80`), nothing about whether the binding reaches the computation. | tier B conformance claim | 09-12 |
 | B4 | Gate 3 `ARCHIVED` fixture points at `generated_readme.md` (8 literals) not `generated_report.txt` (29). | Gate 3 headline number | 09-07 |
 
-**Closed:** B1 (benchmark selection) — MLR-Bench chosen, see D8. B7 (Gate 2 host entry point) — `make_review_context()` added 09-11; `test_the_host_wiring_path_actually_reaches_gate_2` keeps it reachable. B5 (unpushed WIP loop) - restated 09-13: that loop targets the retired `sources`/`consult_model` API, so tier C is rebuilt from `main`; the old code survives only on the local branch `backup/local-main-f1b9fe2`. B6 (host retrieval registry) - yes: Agent Laboratory keeps `self.lit_review`, entries keyed by `arxiv_id` (`AgentLaboratory/agents.py:574,682`); see D21.
+**Closed:** B8 (decoy hole) - 09-14: Gate 1 records `provenance.used_by_run` from `static_checks.find_unused_record_values`; tier B reports a recorded-but-unread plan value as unverifiable `unused` (WARN, D17). Ceiling: names only, see the `ponytail:` comment. B1 (benchmark selection) — MLR-Bench chosen, see D8. B7 (Gate 2 host entry point) — `make_review_context()` added 09-11; `test_the_host_wiring_path_actually_reaches_gate_2` keeps it reachable. B5 (unpushed WIP loop) - restated 09-13: that loop targets the retired `sources`/`consult_model` API, so tier C is rebuilt from `main`; the old code survives only on the local branch `backup/local-main-f1b9fe2`. B6 (host retrieval registry) - yes: Agent Laboratory keeps `self.lit_review`, entries keyed by `arxiv_id` (`AgentLaboratory/agents.py:574,682`); see D21.
 
 ## next steps
 
-1. Record the missing list and re-record STATE (this commit).
-2. F4, test first.
-3. F1 + F3 + F5: wire `gated_review` into the host, limitations into report writing, setup budget into both contexts.
-4. F2 and F6, once decided.
-5. F10, then F7 from the ledger.
-6. Gate 3 per `GATE3_implementation_plan.md`, steps 1-9 in order, network work last; `gated_report()` in the adapter.
-7. `env.parent_proc_guard` INFO check (B3).
-8. F9 + F8 with model spend; F11 last.
+1. F4 test first, with the loop body moved into the adapter as `review_loop` so rig and host share one loop.
+2. F1 + F3 + F5 as adapter surface only (scope 09-14): `review_loop` is the host call site, declared limitations returned for the writer, budgets accepted by both context builders.
+3. F6: design `SourceClaim` extraction from `lit_review` in the adapter, then build (user chose wire now, 09-14).
+4. F10, then F7 from the ledger.
+5. Gate 3 per `GATE3_implementation_plan.md`, steps 1-9 in order, network work last; `gated_report()` in the adapter.
+6. `env.parent_proc_guard` INFO check (B3).
+7. F9 + F8 with model spend; F11 last.
 
 ## decision log
 
@@ -168,6 +167,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-13 | `066ee68` | D4: `gate2_semantic.py` deleted, 15 tests removed, combination test rewritten over plan and sources. 424 tests. |
 | 09-13 | `65c5ed5` | `make_review_context(plan_fields=...)`: tier B reachable from the host. 425 tests. |
 | 09-13 | `85af14c` | Tier C: `rig/gate2_loop.py`, 5 scenarios, 14 tests. Also committed `reports/*.zip` (6.3 MB). 439 tests. |
-| 09-14 | *this* | Gate 2 missing list F1-F11, B8 recorded, STATE re-recorded. 439 tests. |
+| 09-14 | `13438ca` | Gate 2 missing list F1-F11, B8 recorded, STATE re-recorded. 439 tests. |
+| 09-14 | *this* | B8 closed: `used_by_run` provenance, tier B reason `unused`. 446 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.

@@ -261,6 +261,45 @@ def classify_record_calls(
     return kinds
 
 
+def find_unused_record_values(
+    source: str, filename: str = "<experiment>", func_name: str = "record_result"
+) -> set[int]:
+    """Lines whose recorded value is read by nothing but a record or print call.
+
+    The decoy (B8): ``lr = 0.001``, the optimizer built with ``0.01``, then
+    ``record_result("config.lr", lr)``. The recorded value matches the plan and
+    the computation never saw it. A line is returned only when no name its value
+    reads is read anywhere else, so one real use clears it. A call-site literal
+    reads no name and is never returned; ``classify_record_calls`` owns that.
+    """
+    # ponytail: names only. cfg.lr recorded while cfg.batch is used reads as
+    # used, and so does a value passed to a logger; follow attributes and
+    # subscripts if a decoy is ever caught hiding behind one.
+    tree = parse(source, filename)
+    ignored: set[int] = set()
+    recorded: dict[int, set[str]] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        called = _called_name(node.func)
+        if called not in {func_name, "print"}:
+            continue
+        ignored.update(id(n) for n in ast.walk(node) if isinstance(n, ast.Name))
+        value = _value_argument(node) if called == func_name else None
+        if value is not None:
+            recorded.setdefault(node.lineno, set()).update(
+                n.id
+                for n in ast.walk(value)
+                if isinstance(n, ast.Name) and not hasattr(builtins, n.id)
+            )
+    read = {
+        n.id
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) and id(n) not in ignored
+    }
+    return {line for line, names in recorded.items() if names and not names & read}
+
+
 # --------------------------------------------------------------------------- #
 # internals
 # --------------------------------------------------------------------------- #

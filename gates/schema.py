@@ -86,6 +86,11 @@ class MetricRecord:
     #: "literal"  — the call site is a constant expression.
     #: "unknown"  — the call site could not be resolved statically.
     arg_kind: str = "unknown"
+    #: Whether anything besides ``record_result`` or ``print`` reads the names
+    #: the value is built from. ``None`` when the call site reads no name or
+    #: could not be resolved. Tier B needs it: a plan value recorded and never
+    #: used matches the plan without being evidence about the run (B8).
+    used_by_run: bool | None = None
     #: Every ``record_result`` call for this key, oldest first, capped by the
     #: harness. Retained because the last value is not necessarily the reported
     #: one.
