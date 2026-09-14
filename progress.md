@@ -14,10 +14,10 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 ## state
 
 <!-- STATE:BEGIN -->
-branch: main
-head: d738e49
-head_date: 2026-09-13
-tests_total: 425
+branch: feature/gate2-feedback-loop
+head: 85af14c
+head_date: 2026-09-14
+tests_total: 439
 tests_gate1: 92
 tests_gate2: 86
 tests_gate3: 19
@@ -67,7 +67,7 @@ forever, but an unverifiable manuscript must not ship.
 | Gate 1 — execution validity | complete, evidence frozen | `gated_execute()` | 92 |
 | Gate 2 tier A — boundaries | **complete** — ranges, relations, non-finite guard, plausibility ceiling | `run_gate2()` | part of 86 |
 | Gate 2 tier B — methodology conformance | **complete** — `method_conformance` FAIL, `method_traceable` WARN; host path via `make_review_context(plan_fields=...)` | `run_gate2()` | part of 86 |
-| Gate 2 tier C — loop | **not written**; mirrors `rig/loop.py` | — | 0 |
+| Gate 2 tier C — loop | **loop closes model-free**, 5 scenarios, exhaustion proceeds declared. **Not reachable from a host** (F1) | `rig/gate2_loop.py` `run_gate2_loop()` | 14 |
 | Gate 3 — `report.*` regex checks | numeric + figure binding done | `run_gate3()` | 19 |
 | Gate 3 — `source.*` | **not written** | — | 0 |
 | Gate 3 — `style.*` | **not written** | — | 0 |
@@ -80,22 +80,46 @@ forever, but an unverifiable manuscript must not ship.
 
 Frozen and checksum-signed — do not edit: `reports/finalized-report-and-results/`.
 
+## gate 2 - missing to complete
+
+Verified 09-14 against `85af14c` and `../AgentLaboratory-Gemini` (`feat/gates-verification-layer`, 7 files uncommitted).
+Tiers A and B already run as one call (`run_gate2`); tier C wraps them in `rig/` only. Nothing below exists yet.
+
+| ID | Missing | Evidence | Needs |
+|---|---|---|---|
+| F1 | **No host calls Gate 2.** A, B and C never run in a real run. | host calls only `gated_execute` (`mlesolver.py:110,147`, `ai_lab_repo.py:388`) | call site in `running_experiments()`, after the final `gated_execute` |
+| F2 | Nobody declares `plan_fields` or `relations` in a real run, so tier B never activates and tier A checks ranges only. | D13; the host plan is free text | a declaration source |
+| F3 | Declared limitations stop at the loop's return value. | `gated_review` returns them as `evidence_bundle` (`agentlab.py:423`); no host code hands them to report writing; `run_gate3` has no input for them (`gate3.py:312`) | host appends them to `exp_results`; Gate 3 check |
+| F4 | The loop drops declared limitations when the engineer stops before the budget does. | `rig/gate2_loop.py:133` breaks with `declared=""` | set `declared` after every review; failing test first |
+| F5 | Setup budgets reach nothing. | `gates/setup.py:121` prints JSON only; `make_review_context(max_attempts=2)` default always applies | host passes the chosen budget |
+| F6 | `coherence.reference_interval` has no host path. | `make_review_context` takes no `sources` (`agentlab.py:221`) | decide: wire from `lit_review`, or leave unwired per D9 |
+| F7 | M5 loop metrics are not computed. | spec §4 M5; `resolution_rate` appears nowhere in the tree | derive from ledger rows (`divergence.jsonl`) |
+| F8 | M6 wallclock overhead is not measured. | spec §4 M6 | paired timing, with F9 |
+| F9 | E1 not run: MLR-Bench's 10 tasks, gated vs ungated, paired. | spec §5 E1 | F1, F2, model spend |
+| F10 | Published tier A/B numbers are not guarded. | no test imports `rig/gate2_tier_a_eval.py` or `rig/gate2_tier_b_eval.py`; 27/27 and 12/12 can drift silently | one test per rig asserting the published counts |
+| F11 | No `SKILL.md` install path, for any gate. | `CLAUDE.md` §3; no `SKILL.md` in the tree | after F1 fixes the call sites |
+
 ## blockers
 
 | ID | Blocker | Blocks | Opened |
 |---|---|---|---|
 | B2 | Gate 3 `source.*` needs network, rate limits, caching, and an offline fallback so the suite stays hermetic. Only non-offline component in the plan. Build order puts it last deliberately. | Gate 3 step 5 | 09-10 |
 | B3 | `PR_SET_DUMPABLE` guard is inert under uid 0; not detected, not reported. Skips on macOS. CI runs non-root so CI is green. | portability claim | 09-07 |
+| B8 | **Decoy hole.** Tier B accepts a `constant` binding the run never uses: record `lr = 0.001`, build the optimizer with 0.01, `method_conformance` passes. Named in merge `d738e49` as recorded here; it was not. Gate 1 provenance holds `arg_kind` and `lineno` (`gates/registry.py:80`), nothing about whether the binding reaches the computation. | tier B conformance claim | 09-12 |
 | B4 | Gate 3 `ARCHIVED` fixture points at `generated_readme.md` (8 literals) not `generated_report.txt` (29). | Gate 3 headline number | 09-07 |
 
 **Closed:** B1 (benchmark selection) — MLR-Bench chosen, see D8. B7 (Gate 2 host entry point) — `make_review_context()` added 09-11; `test_the_host_wiring_path_actually_reaches_gate_2` keeps it reachable. B5 (unpushed WIP loop) - restated 09-13: that loop targets the retired `sources`/`consult_model` API, so tier C is rebuilt from `main`; the old code survives only on the local branch `backup/local-main-f1b9fe2`. B6 (host retrieval registry) - yes: Agent Laboratory keeps `self.lit_review`, entries keyed by `arxiv_id` (`AgentLaboratory/agents.py:574,682`); see D21.
 
 ## next steps
 
-1. Tier C: `rig/gate2_scenarios.py`, `rig/gate2_loop.py`, `tests/test_gate2_loop.py`. Five scenarios, scenario 5 (exhaustion proceeds with the caveat) first. Scenario 4 is an unverifiable field passing with `method_traceable` WARN, since D17 made divergence FAIL.
-2. Build Gate 3 per `GATE3_implementation_plan.md`, steps 1-9 in order. Network work last.
-3. Add `gated_report()` to `gates/adapters/agentlab.py`.
-4. Emit an `env.parent_proc_guard` INFO check recording whether the guard actually held (B3).
+1. Record the missing list and re-record STATE (this commit).
+2. F4, test first.
+3. F1 + F3 + F5: wire `gated_review` into the host, limitations into report writing, setup budget into both contexts.
+4. F2 and F6, once decided.
+5. F10, then F7 from the ledger.
+6. Gate 3 per `GATE3_implementation_plan.md`, steps 1-9 in order, network work last; `gated_report()` in the adapter.
+7. `env.parent_proc_guard` INFO check (B3).
+8. F9 + F8 with model spend; F11 last.
 
 ## decision log
 
@@ -123,6 +147,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-11 | D14 | **Every check id must have an evidence renderer and a fix directive.** A keyed lookup that misses returns nothing and the agent gets a rejection it cannot act on. | `test_every_check_gate2_emits_can_be_rendered_and_has_a_fix` |
 | 09-13 | D19 | **Gate 2 is model-free by construction.** Nothing `gate2.py` imports reaches `gates.llm`, and `Gate2Config` has no model field. Replaces `test_the_model_is_never_shown_a_value_the_registry_lacks`: no value can be shown to a model Gate 2 cannot call. | `test_no_model_can_reach_a_gate_2_verdict` |
 | 09-13 | D20 | **No random-baseline plausibility band.** The spec's `suspicious_baseline` fixture (binary baseline at 0.65) is dropped: D12 refuses a range keyed on a metric name, and a fair coin on a small test set can land at 0.65, so the bound depends on sample size and is not a fact about the number. The other six E2 fixtures exist as cases in `rig/gate2_tier_a_eval.py` and `rig/gate2_tier_b_eval.py`. | scope |
+| 09-13 | D22 | **Scenario 4 is an unverifiable field, not a justified divergence.** D17 made divergence FAIL, so a justification changes nothing and that story is scenario 5. Gate 2's only WARN-and-proceed path is a declared field nobody can check. | `test_an_unverifiable_plan_warns_proceeds_and_reaches_the_writer` |
 | 09-13 | D21 | **Gate 3's retrieval registry is Agent Laboratory's `lit_review`, `ADD_PAPER` entries only.** A paper read with `FULL_TEXT` but never added does not count as retrieved. Identifier is the host's `arxiv_id`. Decided by Kesh. | pending - Gate 3 `source.cited_papers_in_registry` |
 
 ## session log
@@ -141,6 +166,8 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-12 | `b0a2b31` | Tier B scored as two detectors: 29 cases, 12/12 and 0/17, 6/6 and 0/23. |
 | 09-12 | `d738e49` | Merged to `main`. 439 tests. |
 | 09-13 | `066ee68` | D4: `gate2_semantic.py` deleted, 15 tests removed, combination test rewritten over plan and sources. 424 tests. |
-| 09-13 | *this* | `make_review_context(plan_fields=...)`: tier B reachable from the host. 425 tests. |
+| 09-13 | `65c5ed5` | `make_review_context(plan_fields=...)`: tier B reachable from the host. 425 tests. |
+| 09-13 | `85af14c` | Tier C: `rig/gate2_loop.py`, 5 scenarios, 14 tests. Also committed `reports/*.zip` (6.3 MB). 439 tests. |
+| 09-14 | *this* | Gate 2 missing list F1-F11, B8 recorded, STATE re-recorded. 439 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.
