@@ -497,7 +497,11 @@ def review_loop(
             context,
             reviewed.report,
             reward_score=None,
-            extra={"turn": len(result.reviews), **(extra or {})},
+            extra={
+                "turn": len(result.reviews),
+                "max_attempts": context.config.max_attempts,
+                **(extra or {}),
+            },
         )
         context.close_turn(reviewed.passed)
         result.reviews.append(reviewed)

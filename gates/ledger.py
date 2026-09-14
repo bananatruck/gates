@@ -87,3 +87,37 @@ class Ledger:
                 (float(r["reward_score"]) for r in rejected), default=None
             ),
         }
+
+    def loop_summary(self) -> dict[str, Any]:
+        """Gate 2 loop behaviour (spec M5), from rows ``review_loop`` wrote.
+
+        A run starts at ``turn`` 0. It enters the loop only if its first review
+        failed; a run admitted first time is counted in ``runs_reviewed`` and
+        nowhere else. ``unresolved_declared`` is Gate 2 working as designed: the
+        budget was spent and the run proceeded with its discrepancies declared.
+        """
+        # ponytail: runs are split on turn 0, so two loops appending to one
+        # ledger at the same time would merge; key rows by run id if hosts ever
+        # review concurrently.
+        runs: list[list[dict[str, Any]]] = []
+        for row in self.rows():
+            if "turn" not in row or "max_attempts" not in row:
+                continue
+            if row["turn"] == 0 or not runs:
+                runs.append([])
+            runs[-1].append(row)
+        entered = [r for r in runs if r[0]["verdict"] == "FAIL"]
+        resolved = [r for r in entered if r[-1]["verdict"] != "FAIL"]
+        unresolved = [r for r in entered if r[-1]["verdict"] == "FAIL"]
+        declared = [r for r in unresolved if len(r) >= r[-1]["max_attempts"]]
+        return {
+            "runs_reviewed": len(runs),
+            "runs_entering_loop": len(entered),
+            "resolved_within_budget": len(resolved),
+            "resolution_rate": len(resolved) / len(entered) if entered else None,
+            "mean_attempts": (
+                sum(len(r) for r in resolved) / len(resolved) if resolved else None
+            ),
+            "unresolved_declared": len(declared),
+            "abandoned": len(unresolved) - len(declared),
+        }

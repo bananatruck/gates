@@ -15,9 +15,9 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: feature/gate2-feedback-loop
-head: 12aa1d9
+head: 60af585
 head_date: 2026-09-14
-tests_total: 452
+tests_total: 453
 tests_gate1: 98
 tests_gate2: 92
 tests_gate3: 19
@@ -83,7 +83,7 @@ Frozen and checksum-signed — do not edit: `reports/finalized-report-and-result
 ## gate 2 - missing to complete
 
 Verified 09-14 against `85af14c` and `../AgentLaboratory-Gemini` (`feat/gates-verification-layer`, 7 files uncommitted).
-**Closed 09-14:** F4 (`0baf625`); F1 + F3 at adapter level, `review_loop` + `ReviewOutcome.declared` (`0baf625`); F6, `make_review_context(sources=, lit_review=)` (D23, `12aa1d9`); F10, exact published tallies asserted in `tests/test_gate2.py`.
+**Closed 09-14:** F4 (`0baf625`); F1 + F3 at adapter level, `review_loop` + `ReviewOutcome.declared` (`0baf625`); F6, `make_review_context(sources=, lit_review=)` (D23, `12aa1d9`); F10, exact published tallies asserted in `tests/test_gate2.py` (`60af585`); F7, `Ledger.loop_summary()` from `review_loop` rows (M5; a run enters the loop only if its first review failed).
 **Scope 09-14:** gates repo only. AgentLaboratory-Gemini is a test bed for results and data, not edited. Host-facing items are delivered as adapter entry points a host can call, not as host edits.
 Tiers A and B run as one call (`run_gate2`); tier C is `review_loop` in the adapter, which the rig drives. Nothing below exists yet.
 
@@ -91,7 +91,6 @@ Tiers A and B run as one call (`run_gate2`); tier C is `review_loop` in the adap
 |---|---|---|---|
 | F2 | Nobody declares `plan_fields` or `relations` in a real run, so tier B never activates and tier A checks ranges only. | D13; the host plan is free text | a declaration source |
 | F5 | Setup budgets reach nothing. **Host side only**: both context builders take `max_attempts` and their defaults match `setup.defaults()`. | `gates/setup.py:121` prints JSON only | host passes the chosen budget (out of scope 09-14) |
-| F7 | M5 loop metrics are not computed. | spec §4 M5; `resolution_rate` appears nowhere in the tree | derive from ledger rows (`divergence.jsonl`) |
 | F8 | M6 wallclock overhead is not measured. | spec §4 M6 | paired timing, with F9 |
 | F9 | E1 not run: MLR-Bench's 10 tasks, gated vs ungated, paired. | spec §5 E1 | F1, F2, model spend |
 | F11 | No `SKILL.md` install path, for any gate. | `CLAUDE.md` §3; no `SKILL.md` in the tree | after F1 fixes the call sites |
@@ -108,10 +107,9 @@ Tiers A and B run as one call (`run_gate2`); tier C is `review_loop` in the adap
 
 ## next steps
 
-1. F7: M5 loop metrics (`resolution_rate`, `mean_attempts`, `unresolved_declared`) from `divergence.jsonl` rows.
-2. Gate 3 per `GATE3_implementation_plan.md`, steps 1-9 in order, network work last; `gated_report()` in the adapter; Gate 3 input for `ReviewOutcome.declared` (F3 gate side).
-3. `env.parent_proc_guard` INFO check (B3).
-4. F9 + F8 with model spend; F11 last. F2 and F5 wait on a host call site (out of scope 09-14).
+1. Gate 3 per `GATE3_implementation_plan.md`, steps 1-9 in order, network work last; `gated_report()` in the adapter; Gate 3 input for `ReviewOutcome.declared` (F3 gate side).
+2. `env.parent_proc_guard` INFO check (B3).
+3. F9 + F8 with model spend; F11 last. F2 and F5 wait on a host call site (out of scope 09-14).
 
 ## decision log
 
@@ -165,6 +163,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-14 | `59511a0` | B8 closed: `used_by_run` provenance, tier B reason `unused`. 446 tests. |
 | 09-14 | `0baf625` | F4 closed: loop body moved to adapter `review_loop`, rig calls it; `declared` set every turn. 447 tests. |
 | 09-14 | `12aa1d9` | F6 closed: declared `sources` bound to `lit_review` in `make_review_context` (D23). 450 tests. |
-| 09-14 | *this* | F10 closed: tier A 27 TP / 18 TN and tier B 12/17, 6/23, 29/29 asserted. 452 tests. |
+| 09-14 | `60af585` | F10 closed: tier A 27 TP / 18 TN and tier B 12/17, 6/23, 29/29 asserted. 452 tests. |
+| 09-14 | *this* | F7 closed: `Ledger.loop_summary()`; `review_loop` rows carry `max_attempts`. 453 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.

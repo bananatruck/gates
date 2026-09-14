@@ -155,3 +155,22 @@ def test_giving_up_after_a_rejection_still_declares_it(tmp_path):
     assert outcome.outcome == "no_pass"
     assert outcome.turns_used == 1
     assert "the plan declared 0.001 and the run recorded 0.01" in outcome.declared
+
+
+def test_loop_metrics_come_from_the_ledger_alone(tmp_path):
+    """F7, spec M5. A run that passes its first review never entered the loop,
+    so it counts in neither side of resolution_rate: counting it would inflate
+    the rate with runs the loop did nothing for."""
+    for name, scenario in SCENARIOS.items():
+        outcome = run_gate2_loop(scenario, workdir=tmp_path)
+
+    summary = Ledger(outcome.ledger_path).loop_summary()
+    assert summary == {
+        "runs_reviewed": 5,
+        "runs_entering_loop": 3,
+        "resolved_within_budget": 2,
+        "resolution_rate": 2 / 3,
+        "mean_attempts": 2.0,
+        "unresolved_declared": 1,
+        "abandoned": 0,
+    }
