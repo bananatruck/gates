@@ -311,22 +311,6 @@ def _evidence_reference(check: CheckResult) -> list[str]:
     return out
 
 
-def _evidence_findings(check: CheckResult) -> list[str]:
-    """Model findings from Gate 2's semantic tier.
-
-    Both semantic checks emit the same ``{ref, note, detail}`` rows, so both ids
-    point here. Same precedent as ``logs.model_error_signals`` sharing the
-    pattern scanner's renderer: the agent should never have to learn a second
-    format because a finding came from a model.
-    """
-    out = []
-    for row in check.evidence.get("findings", [])[:_MAX_EVIDENCE_ROWS]:
-        out.append(f"  {row['ref']}: {row['note']}")
-        if row.get("detail") and row["detail"] != row["note"]:
-            out.append(f"    {row['detail']}")
-    return out
-
-
 def _evidence_typed_numbers(check: CheckResult) -> list[str]:
     """Numerals the writer typed instead of citing.
 
@@ -399,8 +383,6 @@ _EVIDENCE_RENDERERS = {
     "coherence.method_conformance": _evidence_conformance,
     "coherence.method_traceable": _evidence_traceable,
     "coherence.reference_interval": _evidence_reference,
-    "coherence.method_match": _evidence_findings,
-    "coherence.claim_supported": _evidence_findings,
     # Gate 3. all_tokens_resolve reuses Gate 1's renderer unchanged: it is the
     # same {missing, recorded} question asked of a manuscript instead of a run.
     "report.no_numeric_literals_in_results": _evidence_typed_numbers,

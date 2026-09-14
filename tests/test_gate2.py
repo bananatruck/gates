@@ -7,12 +7,14 @@ Gate 1 twice.
 
 from __future__ import annotations
 
+import ast
+import dataclasses
 import json
 import pathlib
 
 import pytest
 
-import gates.gate2_semantic
+import gates.gate2
 from gates.adapters.agentlab import (
     GateContext,
     declared_limitations,
@@ -802,170 +804,49 @@ def test_an_inverted_interval_is_normalised(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# tier C — the semantic tier
+# no model reaches gate 2
 # --------------------------------------------------------------------------- #
 
 
-def model_returning(*payloads):
-    """A fake model that answers each call with the next payload in turn."""
-    replies = list(payloads)
-    calls = []
+def _gates_modules_imported_by(module: str, seen: set[str] | None = None) -> set[str]:
+    """Every ``gates`` module ``module`` imports, followed transitively.
 
-    def fn(prompt, system=""):
-        calls.append((prompt, system))
-        return replies.pop(0) if replies else "[]"
-
-    fn.calls = calls
-    return fn
-
-
-def semantic(report, check_id):
-    return next((c for c in report.checks if c.id == check_id), None)
-
-
-def test_c_does_not_run_without_a_model(tmp_path):
-    report = run_gate2(registry({"a.acc": (0.8, "ratio")}), config(tmp_path))
-    assert semantic(report, "coherence.method_match") is None
-    assert semantic(report, "coherence.claim_supported") is None
-    assert report.model is None
-
-
-def test_method_mismatch_is_reported_as_a_warning(tmp_path):
-    fn = model_returning(
-        '[{"source_id": "arXiv:1902.07153", "aspect": "row-normalised adjacency",'
-        ' "why": "source uses symmetric normalisation, which changes the accuracy"}]',
-        "[]",
-    )
-    reg = registry({"exp1.K2.test_acc": (0.812, "ratio")})
-    report = run_gate2(
-        reg,
-        config(
-            tmp_path,
-            sources=(WU2019,),
-            consult_model=fn,
-            method_source="A = row_normalise(adj)",
-            claims=("SGC matches GCN accuracy on Cora",),
-        ),
-    )
-    check = semantic(report, "coherence.method_match")
-    assert check.severity is Severity.WARN
-    assert check.evidence["findings"][0]["ref"] == "arXiv:1902.07153"
-
-
-def test_q3_the_semantic_tier_cannot_move_the_verdict(tmp_path):
-    """Q3. BadScientist puts this at ≈ chance, so it must decide nothing.
-
-    Both passes flag everything they are shown; the verdict stays PASS.
+    Read from source rather than ``sys.modules``: importing ``gates`` at all runs
+    the package ``__init__``, which loads Gate 1's model layer whether Gate 2
+    needs it or not.
     """
-    fn = model_returning(
-        '[{"source_id": "arXiv:1902.07153", "aspect": "different splits", "why": "x"}]',
-        '[{"claim": 0, "why": "a trend cannot be established from one point"}]',
-    )
-    reg = registry({"exp1.K2.test_acc": (0.812, "ratio")})
-    report = run_gate2(
-        reg,
-        config(
-            tmp_path,
-            sources=(WU2019,),
-            consult_model=fn,
-            method_source="whatever",
-            claims=("accuracy degrades with depth",),
-        ),
-    )
-    assert report.verdict is Verdict.PASS
-    assert all(
-        c.severity is not Severity.FAIL
-        for c in report.checks
-        if c.id.startswith("coherence.method") or c.id.startswith("coherence.claim")
-    )
+    seen = set() if seen is None else seen
+    path = pathlib.Path(gates.gate2.__file__).parent / f"{module}.py"
+    if not path.exists():
+        return seen
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.ImportFrom) and node.level == 1:
+            names = [node.module] if node.module else [a.name for a in node.names]
+            for name in names:
+                if name not in seen:
+                    seen.add(name)
+                    _gates_modules_imported_by(name, seen)
+    return seen
 
 
-def test_severity_fail_is_absent_from_the_semantic_module():
-    """The structural guarantee, asserted the way Gate 1 asserts its own."""
-    source = (pathlib.Path(gates.gate2_semantic.__file__)).read_text()
-    body = source.split('"""', 2)[-1]
-    assert "Severity.FAIL" not in body
+def test_no_model_can_reach_a_gate_2_verdict():
+    """D19: Gate 2 is model-free by construction, not by configuration.
 
-
-def test_an_ungrounded_source_id_is_discarded(tmp_path):
-    """A finding citing a paper nobody retrieved must never reach the engineer."""
-    fn = model_returning(
-        '[{"source_id": "arXiv:0000.00000", "aspect": "invented", "why": "x"}]', "[]"
-    )
-    reg = registry({"exp1.K2.test_acc": (0.812, "ratio")})
-    report = run_gate2(
-        reg,
-        config(tmp_path, sources=(WU2019,), consult_model=fn, method_source="code"),
-    )
-    assert semantic(report, "coherence.method_match") is None
-
-
-def test_an_out_of_range_claim_index_is_discarded(tmp_path):
-    fn = model_returning("[]", '[{"claim": 7, "why": "unsupported"}]')
-    reg = registry({"a.acc": (0.8, "ratio")})
-    report = run_gate2(
-        tmp_path and reg,
-        config(tmp_path, consult_model=fn, claims=("only one claim",)),
-    )
-    assert semantic(report, "coherence.claim_supported") is None
-
-
-def test_a_model_that_fails_degrades_to_info_and_records_it(tmp_path):
-    def boom(prompt, system=""):
-        raise RuntimeError("ollama is down")
-
-    reg = registry({"a.acc": (0.8, "ratio")})
-    report = run_gate2(
-        reg,
-        config(
-            tmp_path,
-            sources=(WU2019,),
-            consult_model=boom,
-            method_source="code",
-            claims=("a claim",),
-        ),
-    )
-    check = semantic(report, "coherence.method_match")
-    assert check.severity is Severity.INFO and check.passed
-    assert check.evidence["degraded"] is True
-    assert report.verdict is Verdict.PASS
-    assert report.model["failures"] == 2
-
-
-def test_prose_wrapped_json_is_still_parsed(tmp_path):
-    """Small models fence the array however firmly the prompt says not to."""
-    fn = model_returning(
-        'Sure!\n```json\n[{"source_id": "arXiv:1902.07153", "aspect": "splits",'
-        ' "why": "different"}]\n```',
-        "[]",
-    )
-    reg = registry({"exp1.K2.test_acc": (0.812, "ratio")})
-    report = run_gate2(
-        reg, config(tmp_path, sources=(WU2019,), consult_model=fn, method_source="c")
-    )
-    assert semantic(report, "coherence.method_match") is not None
-
-
-def test_the_model_is_never_shown_a_value_the_registry_lacks(tmp_path):
-    fn = model_returning("[]", "[]")
-    reg = registry({"a.acc": (0.8, "ratio")})
-    run_gate2(
-        reg,
-        config(
-            tmp_path,
-            sources=(WU2019,),
-            consult_model=fn,
-            method_source="code",
-            claims=("a claim",),
-        ),
-    )
-    claim_prompt = fn.calls[1][0]
-    assert "a.acc = 0.8" in claim_prompt
-    assert "exp1.K2.test_acc" not in claim_prompt
+    This replaces the semantic tier's safety tests, including
+    ``test_the_model_is_never_shown_a_value_the_registry_lacks``, which guarded
+    what a model was shown. With the tier deleted (D4) a stronger property holds:
+    nothing Gate 2 imports can call a model, and its config has no field a model
+    could arrive through, so no registry value is shown to one and no finding
+    comes from one.
+    """
+    assert "llm" not in _gates_modules_imported_by("gate2")
+    assert not {"consult_model", "method_source", "claims"} & {
+        f.name for f in dataclasses.fields(Gate2Config)
+    }
 
 
 # --------------------------------------------------------------------------- #
-# the tier combinations the slides ask for
+# the tier combinations
 # --------------------------------------------------------------------------- #
 
 
@@ -974,122 +855,60 @@ CLEAN = {
     "exp2.speedup": (13.611, "speedup"),
     "exp2.gcn.wallclock_s": (0.2450, "seconds"),
     "exp2.sgc.wallclock_s": (0.0180, "seconds"),
+    "config.lr": (0.001, None),
 }
 
 
-def tier_config(tmp_path, *, b: bool, c: bool):
-    quiet = model_returning("[]", "[]")
+def tier_config(tmp_path, *, plan: bool, sources: bool):
     return config(
         tmp_path,
         relations=(SPEEDUP,),
-        sources=(WU2019,) if b else (),
-        consult_model=quiet if c else None,
-        method_source="A = normalise(adj)" if c else "",
-        claims=("SGC matches GCN on Cora",) if c else (),
+        plan_fields=(LR,) if plan else (),
+        sources=(WU2019,) if sources else (),
     )
 
 
+A = ["coherence.range_valid", "coherence.internal_consistency", "coherence.plausibility"]
+B = ["coherence.method_conformance", "coherence.method_traceable"]
+
+
 @pytest.mark.parametrize(
-    "b, c, expected",
+    "plan, sources, expected",
     [
-        (
-            False,
-            False,
-            [
-                "coherence.range_valid",
-                "coherence.internal_consistency",
-                "coherence.plausibility",
-            ],
-        ),
-        (
-            True,
-            False,
-            [
-                "coherence.range_valid",
-                "coherence.internal_consistency",
-                "coherence.plausibility",
-                "coherence.reference_interval",
-            ],
-        ),
-        (
-            False,
-            True,
-            [
-                "coherence.range_valid",
-                "coherence.internal_consistency",
-                "coherence.plausibility",
-                # A+C cannot compare a method to sources it was not given. The
-                # pass records that it did not run instead of staying silent.
-                "coherence.method_match",
-            ],
-        ),
-        (
-            True,
-            True,
-            [
-                "coherence.range_valid",
-                "coherence.internal_consistency",
-                "coherence.plausibility",
-                "coherence.reference_interval",
-            ],
-        ),
+        (False, False, A),
+        (True, False, A + B),
+        (False, True, A + ["coherence.reference_interval"]),
+        (True, True, A + B + ["coherence.reference_interval"]),
     ],
-    ids=["A", "A+B", "A+C", "A+B+C"],
+    ids=["A", "A+B", "A+reference", "A+B+reference"],
 )
-def test_each_tier_combination_emits_exactly_its_own_checks(tmp_path, b, c, expected):
-    """A / A+B / A+C / A+B+C, on a clean registry.
+def test_each_tier_combination_emits_exactly_its_own_checks(tmp_path, plan, sources, expected):
+    """Absent, never green, across every combination of Gate 2's optional inputs.
 
-    Two behaviours this pins down:
+    Rewritten from the A/B/C version when the semantic tier was deleted (D4). It
+    is the only test that pins the invariant across combinations rather than one
+    input at a time: a check whose input was not supplied is missing from the
+    report, not present and passing.
 
-    * Tier C contributes no check when it *ran* and found nothing — silence, not
-      a green row. So A+B+C lists the same ids as A+B on a clean registry.
     * ``plausibility`` is in every list because the clean registry records a
       speedup, so the check has a subject. It is tier A with an input
       condition, not a tier of its own: a registry with no speedup omits it.
-    * **A+C is not a whole configuration.** ``method_match`` asks whether the
-      implementation matches what the cited source describes, which is not a
-      question without cited sources, so it degrades to INFO and says so. Tier C
-      depends on tier B's corpus for half of its work.
+    * Tier B's two checks arrive together or not at all. ``method_traceable``
+      passing here is a finding, because a plan was supplied for it to check.
+    * No combination reports model spend. Gate 2 has no way to make a call.
     """
-    report = run_gate2(registry(CLEAN), tier_config(tmp_path, b=b, c=c))
+    report = run_gate2(plan_registry(CLEAN), tier_config(tmp_path, plan=plan, sources=sources))
     assert [check.id for check in report.checks] == expected
     assert report.passed
+    assert report.model is None
 
 
-@pytest.mark.parametrize("b, c", [(False, False), (True, False), (False, True), (True, True)])
-def test_no_combination_lets_a_tier_a_violation_through(tmp_path, b, c):
+@pytest.mark.parametrize("plan, sources", [(False, False), (True, False), (False, True), (True, True)])
+def test_no_combination_lets_a_tier_a_violation_through(tmp_path, plan, sources):
     """Whatever else is switched on, A still decides. The gate is the authority."""
     broken = dict(CLEAN, **{"exp1.K2.test_acc": (1.4, "ratio")})
-    report = run_gate2(registry(broken), tier_config(tmp_path, b=b, c=c))
+    report = run_gate2(plan_registry(broken), tier_config(tmp_path, plan=plan, sources=sources))
     assert report.verdict is Verdict.FAIL
-
-
-@pytest.mark.parametrize(
-    "b, c, calls",
-    [(False, False, None), (True, False, None), (False, True, 1), (True, True, 2)],
-    ids=["A", "A+B", "A+C", "A+B+C"],
-)
-def test_the_model_is_called_only_in_the_c_combinations(tmp_path, b, c, calls):
-    """Tier C costs two calls per attempt, one without a corpus, zero when off.
-
-    The A+C row is one call rather than two because ``method_match`` declines
-    before spending anything: a pass with no source to compare against does not
-    get billed for asking.
-    """
-    report = run_gate2(registry(CLEAN), tier_config(tmp_path, b=b, c=c))
-    if calls is None:
-        assert report.model is None
-    else:
-        assert report.model["calls"] == calls
-        assert report.model["degraded"] is False
-
-
-def test_a_plus_c_reports_method_match_as_unavailable_not_clean(tmp_path):
-    """The A+C degradation, stated as its own assertion rather than a list diff."""
-    report = run_gate2(registry(CLEAN), tier_config(tmp_path, b=False, c=True))
-    check = semantic(report, "coherence.method_match")
-    assert check.severity is Severity.INFO and check.evidence["degraded"] is True
-    assert "no cited source" in check.evidence["error"]
 
 
 # --------------------------------------------------------------------------- #
@@ -1169,43 +988,11 @@ def test_an_unreferenced_result_reaches_the_writer(tmp_path):
     assert "novel rather than as a replication" in text
 
 
-def test_semantic_findings_render_in_the_deterministic_shape(tmp_path):
-    """A finding from a model must not look different from a measured one."""
-    fn = model_returning(
-        '[{"source_id": "arXiv:1902.07153", "aspect": "row-normalized adjacency",'
-        ' "why": "changes the propagation matrix and the reported accuracy"}]'
-    )
-    report = run_gate2(
-        registry({"exp1.K2.test_acc": (0.812, "ratio")}),
-        config(
-            tmp_path,
-            sources=(WU2019,),
-            consult_model=fn,
-            method_source="A = adj / adj.sum(1)",
-        ),
-    )
-    text = render_feedback(report)
-    assert "arXiv:1902.07153: row-normalized adjacency" in text
-    assert "changes the propagation matrix" in text
-
-
 def test_required_fixes_are_offered_for_the_blocking_checks(tmp_path):
     reg = registry({"exp1.acc": (1.4, "ratio")})
     text = render_feedback(run_gate2(reg, config(tmp_path)))
     assert "REQUIRED FIXES" in text
     assert "the unit it actually has" in text
-
-
-def test_no_fix_directive_exists_for_a_check_that_cannot_block():
-    """A fix the agent can never be shown is dead code, not caution.
-
-    Both semantic checks are built through ``model_warning``, so neither can
-    ever be ``blocking``, so neither can ever reach ``_required_fixes``.
-    """
-    from gates.report import _FIXES
-
-    assert "coherence.method_match" not in _FIXES
-    assert "coherence.claim_supported" not in _FIXES
 
 
 # --------------------------------------------------------------------------- #

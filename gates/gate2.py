@@ -1,46 +1,35 @@
 """Gate 2 — source ↔ result coherence.
 
-Answers: *are these measured results consistent with what the cited literature
-reports for this method, dataset and setting?*
+Answers: *can these measured results be believed, and did the run do what the
+plan said it would?*
 
 Gate 2 runs on Gate 1's registry, not on source. By the time it fires the
 numbers already exist and are already attributable to one execution; the
 question is no longer whether they were produced but whether they can be
 believed. That is why its input is `registry.json` and not a program.
 
-Two tiers, and the difference between them is the honesty boundary
-(`PLAN.md` §4.4):
-
-* **Deterministic.** Provable, and claimable as elimination-by-construction. A
-  value outside its unit's admissible range, or a declared arithmetic relation
-  that does not hold, is a fact about the numbers alone.
-* **Semantic.** Model-assisted, reported as a rate with an interval, never as a
-  guarantee. Not built yet.
-
-Three tiers, and which of them run is decided by **what the caller supplies**,
-not by a flag:
+Every check is deterministic and Gate 2 makes no model calls (D4, D19). Which
+checks run is decided by **what the caller supplies**, not by a flag:
 
     A  coherence.range_valid           FAIL   always
        coherence.internal_consistency  FAIL   always
-    B  coherence.reference_interval    WARN   iff `sources` were supplied
+       coherence.plausibility          FAIL   iff a value has unit `speedup`
+    B  coherence.method_conformance    FAIL   iff `plan_fields` were supplied
+       coherence.method_traceable      WARN   ""
+       coherence.reference_interval    WARN   iff `sources` were supplied
                                        FAIL   ...and `strict_reference` is set
-    C  coherence.method_match          WARN   iff `consult_model` was supplied
-       coherence.claim_supported       WARN   ""
+    C  the feedback loop that wraps A and B. It adds no check.
 
-Deriving the tier from its input rather than from a `tiers` flag removes the
-one failure mode a flag introduces: a run configured for tier B with no corpus
-loaded, reporting a green literature check it never performed. A tier with no
-input does not emit a check at all — absent, never green.
-
-`PLAN.md` §4.4's honesty boundary falls exactly on the A/B–C line: A and B are
-provable and may be claimed as elimination-by-construction; C may only be
-reported as a rate with an interval.
+Deriving a check from its input rather than from a `tiers` flag removes the
+one failure mode a flag introduces: a run configured for tier B with no plan
+supplied, reporting a green conformance check it never performed. A check with
+no input does not emit at all — absent, never green.
 
 Gate 2's exhaustion behaviour differs from Gates 1 and 3 and the difference is
 deliberate. Gate 1 refuses to hand on a run that did not happen; Gate 3 refuses
 to emit an unverifiable manuscript. Gate 2 *proceeds* — an unresolved
-discrepancy with the literature is a limitation to declare, not grounds to
-discard a real measurement. Carrying it forward is `unresolved_discrepancies`.
+discrepancy is a limitation to declare, not grounds to discard a real
+measurement. Carrying it forward is `unresolved_discrepancies`.
 """
 
 from __future__ import annotations
@@ -50,14 +39,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import gate2_semantic
 from .errors import GateError
-from .llm import (
-    DEFAULT_MAX_PROMPT_CHARS,
-    DEFAULT_TIMEOUT_S as DEFAULT_MODEL_TIMEOUT_S,
-    ModelFn,
-    ModelLayer,
-)
 from .schema import CheckResult, GateReport, Severity, Verdict, decide
 
 GATE_NAME = "GATE 2 — SOURCE ↔ RESULT COHERENCE"
@@ -320,17 +302,6 @@ class Gate2Config:
     #: `PLAN.md` §4.2: reference_interval is WARN, "→ FAIL in strict mode".
     strict_reference: bool = False
 
-    # -- tier C ------------------------------------------------------------- #
-    #: The model. Absent means tier C does not run, and emits no check.
-    consult_model: ModelFn | None = None
-    #: The implementation tier C compares against the sources — normally the
-    #: experiment source Gate 1 already executed.
-    method_source: str = ""
-    #: The claims the plan says these results establish.
-    claims: tuple[str, ...] = ()
-    model_timeout_s: float = DEFAULT_MODEL_TIMEOUT_S
-    max_prompt_chars: int = DEFAULT_MAX_PROMPT_CHARS
-
     def attempt_dir(self, attempt: int) -> Path:
         return Path(self.artifact_root) / "gate2" / f"attempt_{attempt:02d}"
 
@@ -381,32 +352,16 @@ def run_gate2(
     if reference is not None:
         checks.append(reference)
 
-    # Tier C — only with a model, and WARN-only by construction. Appended before
-    # decide() purely because grouping the report by tier reads better than
-    # grouping it by author; decide() is blind to everything here either way.
-    model = ModelLayer(
-        config.consult_model,
-        timeout_s=config.model_timeout_s,
-        max_prompt_chars=config.max_prompt_chars,
-    )
-    if model.available:
-        checks.extend(_semantic_checks(model, values, config))
-
     artifact_dir = config.attempt_dir(attempt)
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
     report = GateReport(
         gate=GATE_NAME,
-        # Fixed from tier A and tier B alone. Tier C is WARN by construction and
-        # cannot reach this line — the same guarantee Gate 1 makes, for the same
-        # reason, and here it also carries BadScientist's near-chance detection
-        # rate, which is why C must never decide anything.
         verdict=decide(checks),
         attempt=attempt,
         max_attempts=config.max_attempts,
         checks=checks,
         artifact_dir=str(artifact_dir),
-        model=model.budget.to_dict() if model.available else None,
     )
     (artifact_dir / "gate2_report.json").write_text(
         report.to_json(), encoding="utf-8"
@@ -717,7 +672,7 @@ def _check_internal_consistency(
 
 
 # --------------------------------------------------------------------------- #
-# tier B — the reference interval
+# tier B — methodology conformance
 # --------------------------------------------------------------------------- #
 
 
@@ -898,6 +853,11 @@ def _check_method_traceable(
     )
 
 
+# --------------------------------------------------------------------------- #
+# tier B — the reference interval
+# --------------------------------------------------------------------------- #
+
+
 def _check_reference_interval(
     values: dict[str, Any], config: Gate2Config
 ) -> CheckResult | None:
@@ -1044,39 +1004,6 @@ def _band_origin_counts(
             origin = candidate["band_origin"]
             counts[origin] = counts.get(origin, 0) + 1
     return counts
-
-
-# --------------------------------------------------------------------------- #
-# tier C — the semantic tier
-# --------------------------------------------------------------------------- #
-
-
-def _semantic_checks(
-    model: ModelLayer, values: dict[str, Any], config: Gate2Config
-) -> list[CheckResult]:
-    """Tier C's checks, or nothing when a pass had no input and found nothing.
-
-    Every result here is WARN or INFO by construction; see ``gate2_semantic``.
-    """
-    sources = [
-        {
-            "source_id": c.source_id,
-            "describes": c.describes,
-            "setting": c.setting,
-        }
-        for c in config.sources
-    ]
-    produced = [
-        gate2_semantic.build_method_check(
-            gate2_semantic.scan_method_match(
-                model, config.method_source, sources
-            )
-        ),
-        gate2_semantic.build_claim_check(
-            gate2_semantic.scan_claims_supported(model, list(config.claims), values)
-        ),
-    ]
-    return [c for c in produced if c is not None]
 
 
 # --------------------------------------------------------------------------- #
