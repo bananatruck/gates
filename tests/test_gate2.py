@@ -1171,3 +1171,35 @@ def test_an_exhausted_budget_is_labelled_by_the_gate_that_spent_it(tmp_path):
     with pytest.raises(GateFailure) as excinfo:
         ctx.check_can_continue()
     assert excinfo.value.gate == GATE_NAME
+
+
+# --------------------------------------------------------------------------- #
+# published evaluation numbers (F10)
+# --------------------------------------------------------------------------- #
+
+
+def test_tier_a_evaluation_still_reproduces_its_published_numbers():
+    """`docs/research/gate2-tier-a-evidence.md`: 27/27 detected, 0/18 false
+    positives, 27/27 attributed. A check change that moves these must update
+    the document in the same commit, not drift past it."""
+    from collections import Counter
+
+    from rig.gate2_tier_a_eval import CASES, run
+
+    rows = [run(c) for c in CASES]
+    assert Counter(r["outcome"] for r in rows) == Counter(TP=27, TN=18)
+    labelled = [r for c, r in zip(CASES, rows) if c.expect_check]
+    assert (sum(r["right_check"] for r in labelled), len(labelled)) == (27, 27)
+
+
+def test_tier_b_evaluation_still_reproduces_its_published_numbers():
+    """`docs/research/gate2-tier-b-evidence.md`: divergence 12/12 with 0/17
+    false positives, traceability 6/6 with 0/23, 29/29 cases correct."""
+    from collections import Counter
+
+    from rig.gate2_tier_b_eval import CASES, run
+
+    rows = [run(c) for c in CASES]
+    assert Counter(r["divergence"] for r in rows) == Counter(TP=12, TN=17)
+    assert Counter(r["traceability"] for r in rows) == Counter(TP=6, TN=23)
+    assert all(r["correct"] for r in rows) and len(rows) == 29
