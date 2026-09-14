@@ -1062,6 +1062,36 @@ def test_the_review_context_carries_gate_2_configuration(tmp_path):
     assert result.report.verdict is Verdict.FAIL
 
 
+def test_sources_declared_at_wiring_time_reach_the_reference_interval(tmp_path):
+    """F6. Declared like plan fields (D13), bound to papers the host fetched (D23)."""
+    lit_review = [{"arxiv_id": "1902.07153", "full_text": "...", "summary": "SGC"}]
+    claim = SourceClaim(key="exp1.acc", source_id="1902.07153", value=0.81, setting="Cora")
+    ctx = make_review_context(research_dir=str(tmp_path), sources=(claim,), lit_review=lit_review)
+
+    report = gated_review(registry({"exp1.acc": (0.40, "ratio")}), ctx).report
+    check = next(c for c in report.checks if c.id == "coherence.reference_interval")
+    assert not check.passed
+    assert check.evidence["out_of_band"][0]["candidates"][0]["source_id"] == "1902.07153"
+
+
+def test_a_source_nobody_fetched_is_refused_at_wiring_time(tmp_path):
+    """A band must never come from a paper that is not in the host's lit_review."""
+    claim = SourceClaim(key="exp1.acc", source_id="2401.00001", value=0.81)
+    with pytest.raises(GateError, match="2401.00001"):
+        make_review_context(
+            research_dir=str(tmp_path),
+            sources=(claim,),
+            lit_review=[{"arxiv_id": "1902.07153"}],
+        )
+
+
+def test_declared_sources_without_a_lit_review_are_refused(tmp_path):
+    """Unbound sources would reopen the hole the binding closes."""
+    claim = SourceClaim(key="exp1.acc", source_id="1902.07153", value=0.81)
+    with pytest.raises(GateError, match="lit_review"):
+        make_review_context(research_dir=str(tmp_path), sources=(claim,))
+
+
 def test_a_plan_declared_at_wiring_time_reaches_tier_b(tmp_path):
     """Tier B had its checks and no host path to them.
 

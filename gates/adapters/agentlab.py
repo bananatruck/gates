@@ -17,7 +17,8 @@ from typing import Any, Callable
 from pathlib import Path
 
 from ..report import render_evidence
-from ..gate2 import IMPLAUSIBLE_SPEEDUP, PlanField, Range, Relation
+from ..errors import GateError
+from ..gate2 import IMPLAUSIBLE_SPEEDUP, PlanField, Range, Relation, SourceClaim
 from .. import (
     REGISTRY_FILENAME,
     Gate1Config,
@@ -228,6 +229,8 @@ def make_review_context(
     implausible_speedup: float = IMPLAUSIBLE_SPEEDUP,
     plan_fields: tuple[PlanField, ...] = (),
     reward_model: str | None = None,
+    sources: tuple[SourceClaim, ...] = (),
+    lit_review: list[dict[str, Any]] | None = None,
 ) -> GateContext:
     """Build the gate context for the review phase, the one Gate 2 runs in.
 
@@ -249,7 +252,23 @@ def make_review_context(
     than being inferred from anything `gates/` reads (D13). Agent Laboratory's
     plan is free text, so whoever wires the host declares the fields; with none
     declared, tier B does not run and the report carries no tier B check.
+
+    ``sources`` are declared the same way, and bound to ``lit_review``, the
+    host's list of papers it actually fetched (D21, D23): a claim citing any
+    other ``source_id`` is refused here, so no band comes from a paper nobody
+    read. The numbers are declared rather than parsed from ``full_text``,
+    because only a model could bind a number in prose to a registry key, and no
+    model reaches a Gate 2 verdict (D19).
     """
+    if sources:
+        if lit_review is None:
+            raise GateError("sources were declared without a lit_review to bind them to")
+        fetched = {entry.get("arxiv_id") for entry in lit_review}
+        unfetched = sorted({c.source_id for c in sources} - fetched)
+        if unfetched:
+            raise GateError(
+                f"source(s) not in lit_review, so never fetched: {', '.join(unfetched)}"
+            )
     artifact_root = os.path.join(research_dir, "gate_artifacts")
     config = Gate2Config(
         max_attempts=max_attempts,
@@ -257,6 +276,7 @@ def make_review_context(
         ranges=dict(ranges or {}),
         implausible_speedup=implausible_speedup,
         plan_fields=tuple(plan_fields),
+        sources=tuple(sources),
         artifact_root=artifact_root,
     )
     return GateContext(

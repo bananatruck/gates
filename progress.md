@@ -15,11 +15,11 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: feature/gate2-feedback-loop
-head: 59511a0
+head: 0baf625
 head_date: 2026-09-14
-tests_total: 447
+tests_total: 450
 tests_gate1: 98
-tests_gate2: 87
+tests_gate2: 90
 tests_gate3: 19
 tests_llm_scan: 21
 tests_llm_layer: 14
@@ -83,16 +83,14 @@ Frozen and checksum-signed — do not edit: `reports/finalized-report-and-result
 ## gate 2 - missing to complete
 
 Verified 09-14 against `85af14c` and `../AgentLaboratory-Gemini` (`feat/gates-verification-layer`, 7 files uncommitted).
-**Scope 09-14:** gates repo only. AgentLaboratory-Gemini is a test bed for results and data, not edited. F1-F3, F5, F6 are delivered as adapter entry points a host can call, not as host edits.
-Tiers A and B already run as one call (`run_gate2`); tier C wraps them in `rig/` only. Nothing below exists yet.
+**Closed 09-14:** F4 (`0baf625`); F1 + F3 at adapter level, `review_loop` + `ReviewOutcome.declared` (`0baf625`); F6, `make_review_context(sources=, lit_review=)` (D23).
+**Scope 09-14:** gates repo only. AgentLaboratory-Gemini is a test bed for results and data, not edited. Host-facing items are delivered as adapter entry points a host can call, not as host edits.
+Tiers A and B run as one call (`run_gate2`); tier C is `review_loop` in the adapter, which the rig drives. Nothing below exists yet.
 
 | ID | Missing | Evidence | Needs |
 |---|---|---|---|
-| F1 | **No host calls Gate 2.** A, B and C never run in a real run. | host calls only `gated_execute` (`mlesolver.py:110,147`, `ai_lab_repo.py:388`) | call site in `running_experiments()`, after the final `gated_execute` |
 | F2 | Nobody declares `plan_fields` or `relations` in a real run, so tier B never activates and tier A checks ranges only. | D13; the host plan is free text | a declaration source |
-| F3 | Declared limitations stop at the loop's return value. | `gated_review` returns them as `evidence_bundle` (`agentlab.py:423`); no host code hands them to report writing; `run_gate3` has no input for them (`gate3.py:312`) | host appends them to `exp_results`; Gate 3 check |
-| F5 | Setup budgets reach nothing. | `gates/setup.py:121` prints JSON only; `make_review_context(max_attempts=2)` default always applies | host passes the chosen budget |
-| F6 | `coherence.reference_interval` has no host path. | `make_review_context` takes no `sources` (`agentlab.py:221`) | decide: wire from `lit_review`, or leave unwired per D9 |
+| F5 | Setup budgets reach nothing. **Host side only**: both context builders take `max_attempts` and their defaults match `setup.defaults()`. | `gates/setup.py:121` prints JSON only | host passes the chosen budget (out of scope 09-14) |
 | F7 | M5 loop metrics are not computed. | spec §4 M5; `resolution_rate` appears nowhere in the tree | derive from ledger rows (`divergence.jsonl`) |
 | F8 | M6 wallclock overhead is not measured. | spec §4 M6 | paired timing, with F9 |
 | F9 | E1 not run: MLR-Bench's 10 tasks, gated vs ungated, paired. | spec §5 E1 | F1, F2, model spend |
@@ -111,12 +109,11 @@ Tiers A and B already run as one call (`run_gate2`); tier C wraps them in `rig/`
 
 ## next steps
 
-1. F5 gates side: context builder defaults read from `Gate1Config`/`Gate2Config`, as `setup.defaults()` does. F1 + F3 are met at adapter level by `review_loop` (host call site, `ReviewOutcome.declared` for the writer); no host edit (scope 09-14).
-2. F6: design `SourceClaim` extraction from `lit_review` in the adapter, then build (user chose wire now, 09-14).
-3. F10, then F7 from the ledger.
-4. Gate 3 per `GATE3_implementation_plan.md`, steps 1-9 in order, network work last; `gated_report()` in the adapter.
-5. `env.parent_proc_guard` INFO check (B3).
-6. F9 + F8 with model spend; F11 last.
+1. F10: one test per rig (`gate2_tier_a_eval`, `gate2_tier_b_eval`) asserting the published counts.
+2. F7: M5 loop metrics (`resolution_rate`, `mean_attempts`, `unresolved_declared`) from `divergence.jsonl` rows.
+3. Gate 3 per `GATE3_implementation_plan.md`, steps 1-9 in order, network work last; `gated_report()` in the adapter; Gate 3 input for `ReviewOutcome.declared` (F3 gate side).
+4. `env.parent_proc_guard` INFO check (B3).
+5. F9 + F8 with model spend; F11 last. F2 and F5 wait on a host call site (out of scope 09-14).
 
 ## decision log
 
@@ -144,6 +141,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-11 | D14 | **Every check id must have an evidence renderer and a fix directive.** A keyed lookup that misses returns nothing and the agent gets a rejection it cannot act on. | `test_every_check_gate2_emits_can_be_rendered_and_has_a_fix` |
 | 09-13 | D19 | **Gate 2 is model-free by construction.** Nothing `gate2.py` imports reaches `gates.llm`, and `Gate2Config` has no model field. Replaces `test_the_model_is_never_shown_a_value_the_registry_lacks`: no value can be shown to a model Gate 2 cannot call. | `test_no_model_can_reach_a_gate_2_verdict` |
 | 09-13 | D20 | **No random-baseline plausibility band.** The spec's `suspicious_baseline` fixture (binary baseline at 0.65) is dropped: D12 refuses a range keyed on a metric name, and a fair coin on a small test set can land at 0.65, so the bound depends on sample size and is not a fact about the number. The other six E2 fixtures exist as cases in `rig/gate2_tier_a_eval.py` and `rig/gate2_tier_b_eval.py`. | scope |
+| 09-14 | D23 | **Reference sources are declared, and bound to `lit_review`.** Partly reopens D9: `reference_interval` gets a host path. `SourceClaim`s arrive at wiring time like plan fields (D13); a `source_id` not in the host's `lit_review` raises `GateError`. Rejected: a model extracting claims from `full_text`, which would put a model upstream of a Gate 2 check (D19). Decided by Kesh. | `test_a_source_nobody_fetched_is_refused_at_wiring_time` |
 | 09-13 | D22 | **Scenario 4 is an unverifiable field, not a justified divergence.** D17 made divergence FAIL, so a justification changes nothing and that story is scenario 5. Gate 2's only WARN-and-proceed path is a declared field nobody can check. | `test_an_unverifiable_plan_warns_proceeds_and_reaches_the_writer` |
 | 09-13 | D21 | **Gate 3's retrieval registry is Agent Laboratory's `lit_review`, `ADD_PAPER` entries only.** A paper read with `FULL_TEXT` but never added does not count as retrieved. Identifier is the host's `arxiv_id`. Decided by Kesh. | pending - Gate 3 `source.cited_papers_in_registry` |
 
@@ -167,6 +165,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-13 | `85af14c` | Tier C: `rig/gate2_loop.py`, 5 scenarios, 14 tests. Also committed `reports/*.zip` (6.3 MB). 439 tests. |
 | 09-14 | `13438ca` | Gate 2 missing list F1-F11, B8 recorded, STATE re-recorded. 439 tests. |
 | 09-14 | `59511a0` | B8 closed: `used_by_run` provenance, tier B reason `unused`. 446 tests. |
-| 09-14 | *this* | F4 closed: loop body moved to adapter `review_loop`, rig calls it; `declared` set every turn. 447 tests. |
+| 09-14 | `0baf625` | F4 closed: loop body moved to adapter `review_loop`, rig calls it; `declared` set every turn. 447 tests. |
+| 09-14 | *this* | F6 closed: declared `sources` bound to `lit_review` in `make_review_context` (D23). 450 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.
