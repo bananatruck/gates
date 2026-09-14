@@ -140,3 +140,18 @@ def test_json_cli_output_is_machine_parseable(capsys):
     assert gate2_loop_main(["divergence-exhausts", "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["scenarios"][0]["outcome"] == "proceeded"
+
+
+def test_giving_up_after_a_rejection_still_declares_it(tmp_path):
+    """F4. An engineer that stops before the budget does must not drop the
+    divergence it was sent: the writer still has to disclose it."""
+    scenario = SCENARIOS["divergence-exhausts"]
+
+    class StopsAfterOne:
+        def turn(self, feedback, turn_index):
+            return scenario.turns[0] if turn_index == 0 else None
+
+    outcome = run_gate2_loop(scenario, workdir=tmp_path, engineer=StopsAfterOne())
+    assert outcome.outcome == "no_pass"
+    assert outcome.turns_used == 1
+    assert "the plan declared 0.001 and the run recorded 0.01" in outcome.declared

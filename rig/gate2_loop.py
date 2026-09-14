@@ -24,7 +24,6 @@ from __future__ import annotations
 import argparse
 import contextlib
 import io
-import itertools
 import json
 import shutil
 import sys
@@ -36,11 +35,7 @@ from typing import Any, Protocol
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from gates import GateReport  # noqa: E402
-from gates.adapters.agentlab import (  # noqa: E402
-    gated_review,
-    make_review_context,
-    record_divergence,
-)
+from gates.adapters.agentlab import make_review_context, review_loop  # noqa: E402
 
 from rig.gate2_scenarios import SCENARIOS, Scenario, Turn  # noqa: E402
 
@@ -127,40 +122,30 @@ def run_gate2_loop(
         ledger_path=str(context.ledger.path) if context.ledger else None,
     )
 
-    feedback: str | None = None
-    for index in itertools.count():
-        submitted = engineer.turn(feedback, index)
-        if submitted is None:
-            break
+    submitted: list[Turn] = []
 
-        reviewed = gated_review(submitted.registry(), context)
-        record_divergence(
-            context,
-            reviewed.report,
-            reward_score=None,
-            extra={"turn": index, "step": submitted.label, "scenario": scenario.name},
-        )
-        context.close_turn(reviewed.passed)
+    def revise(feedback: str | None) -> dict[str, Any] | None:
+        turn = engineer.turn(feedback, len(submitted))
+        if turn is None:
+            return None
+        submitted.append(turn)
+        return turn.registry()
+
+    reviewed = review_loop(context, revise, extra={"scenario": scenario.name})
+    outcome.outcome = reviewed.outcome
+    outcome.declared = reviewed.declared
+    for index, (turn, review) in enumerate(zip(submitted, reviewed.reviews)):
         outcome.turns.append(
             TurnOutcome(
                 index=index,
-                label=submitted.label,
-                report=reviewed.report,
-                feedback=reviewed.feedback,
-                rejections_after=context.consecutive_rejections,
+                label=turn.label,
+                report=review.report,
+                feedback=review.feedback,
+                # rewrite was the rejection count plus one when this turn was
+                # reviewed, so it is the count after a rejection closes it.
+                rejections_after=0 if review.passed else review.report.rewrite,
             )
         )
-
-        if reviewed.passed:
-            outcome.outcome = "pass"
-            outcome.declared = reviewed.evidence_bundle
-            break
-        if context.budget_exhausted:
-            # Gate 2's policy, not a fallback: no check_can_continue, no raise.
-            outcome.outcome = "proceeded"
-            outcome.declared = reviewed.evidence_bundle
-            break
-        feedback = reviewed.feedback
 
     return outcome
 

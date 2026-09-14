@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 from pathlib import Path
 
@@ -437,6 +437,61 @@ def declared_limitations(report: GateReport) -> str:
     lines = ["DECLARED LIMITATIONS", ""]
     lines.extend(f"  - {item}" for item in limitations)
     return "\n".join(lines) + "\n"
+
+
+@dataclass
+class ReviewOutcome:
+    """How Gate 2's feedback loop ended, and what the writer must disclose."""
+
+    #: "pass" - a registry was admitted. "proceeded" - the budget was spent and
+    #: the run continues with its discrepancies declared. "no_pass" - ``revise``
+    #: stopped before the budget did.
+    outcome: str = "no_pass"
+    #: From the last review, on every exit. Empty means nothing to declare, not
+    #: that nothing was checked.
+    declared: str = ""
+    reviews: list[GatedExecution] = field(default_factory=list)
+
+
+def review_loop(
+    context: GateContext,
+    revise: Callable[[str | None], dict[str, Any] | None],
+    *,
+    extra: dict[str, Any] | None = None,
+) -> ReviewOutcome:
+    """Gate 2's feedback loop, tier C: the one call site a host needs.
+
+    ``revise(feedback)`` returns the next Gate 1 registry, or ``None`` to stop.
+    It is called with ``None`` for the first submission. In a host it re-runs the
+    experiment with the feedback in hand; in `rig/gate2_loop.py` it replays a
+    script. Both drive this loop, so the rig's tests hold the loop a host runs.
+
+    Bounded by the budget: every turn either passes or adds a consecutive
+    rejection. A spent budget does not raise (`CLAUDE.md` §4).
+    """
+    result = ReviewOutcome()
+    feedback: str | None = None
+    while (registry := revise(feedback)) is not None:
+        reviewed = gated_review(registry, context)
+        record_divergence(
+            context,
+            reviewed.report,
+            reward_score=None,
+            extra={"turn": len(result.reviews), **(extra or {})},
+        )
+        context.close_turn(reviewed.passed)
+        result.reviews.append(reviewed)
+        # Set on every turn, so a revise that gives up still hands the writer
+        # the discrepancies it was sent (F4).
+        result.declared = reviewed.evidence_bundle
+        if reviewed.passed:
+            result.outcome = "pass"
+            break
+        if context.budget_exhausted:
+            result.outcome = "proceeded"
+            break
+        feedback = reviewed.feedback
+    return result
 
 
 def build_evidence_bundle(report: GateReport, budget: int = STDOUT_BUDGET_CHARS) -> str:
