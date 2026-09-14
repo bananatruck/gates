@@ -1037,6 +1037,25 @@ def test_the_review_context_carries_gate_2_configuration(tmp_path):
     assert result.report.verdict is Verdict.FAIL
 
 
+def test_a_plan_declared_at_wiring_time_reaches_tier_b(tmp_path):
+    """Tier B had its checks and no host path to them.
+
+    ``make_review_context`` accepted relations and ranges but not plan fields, so
+    a host driving Gate 2 the documented way could never run tier B: every
+    conformance rate measured so far came from a hand-built ``Gate2Config``.
+    The declaration arrives here, at wiring time (D13), because Agent
+    Laboratory's plan is free text and `gates/` never parses one.
+    """
+    ctx = make_review_context(research_dir=str(tmp_path), plan_fields=(LR,))
+    assert ctx.config.plan_fields == (LR,)
+
+    diverged = plan_registry({"config.lr": (0.01, None)})
+    result = gated_review(diverged, ctx)
+    assert result.report.verdict is Verdict.FAIL
+    assert "coherence.method_conformance" in {c.id for c in result.report.failed_checks()}
+    assert "plan.md L14" in result.feedback
+
+
 def test_the_review_budget_is_two_attempts_not_gate_ones_three(tmp_path):
     """Gate 2 gets two revisions per PLAN.md 4, Gate 1 gets three.
 

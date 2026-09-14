@@ -73,7 +73,7 @@ point estimates are all 100% and none of them is the finding.
 ## Not yet measured
 
 The corpus supplies `plan_fields` directly to `Gate2Config`. Nothing here
-exercises a host: `make_review_context()` does not accept `plan_fields` yet, and
-no adapter extracts them from Agent Laboratory's plan artifact, which our
-interface still sees as free-text `task_ref`. These rates measure the check, not
-the installation.
+exercises a host. `make_review_context()` accepts `plan_fields` since 2026-09-13,
+but nothing extracts them: Agent Laboratory's plan is free text, so a host
+declares them at wiring time (D13) and no real run has declared any yet. These
+rates measure the check, not the installation.

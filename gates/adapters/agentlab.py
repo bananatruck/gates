@@ -17,7 +17,7 @@ from typing import Any
 from pathlib import Path
 
 from ..report import render_evidence
-from ..gate2 import IMPLAUSIBLE_SPEEDUP, Range, Relation
+from ..gate2 import IMPLAUSIBLE_SPEEDUP, PlanField, Range, Relation
 from .. import (
     REGISTRY_FILENAME,
     Gate1Config,
@@ -226,6 +226,7 @@ def make_review_context(
     relations: tuple[Relation, ...] = (),
     ranges: dict[str, Range] | None = None,
     implausible_speedup: float = IMPLAUSIBLE_SPEEDUP,
+    plan_fields: tuple[PlanField, ...] = (),
     reward_model: str | None = None,
 ) -> GateContext:
     """Build the gate context for the review phase, the one Gate 2 runs in.
@@ -243,10 +244,11 @@ def make_review_context(
     would have to hold two ``consecutive_rejections`` counters to keep them
     apart.
 
-    ``relations`` and ``ranges`` are what the plan declared about this
-    experiment, so they arrive from the host at wiring time rather than being
-    inferred from anything `gates/` reads. Tier B's ``plan_fields`` will arrive
-    the same way and through this same function.
+    ``relations``, ``ranges`` and ``plan_fields`` are what the plan declared
+    about this experiment, so they arrive from the host at wiring time rather
+    than being inferred from anything `gates/` reads (D13). Agent Laboratory's
+    plan is free text, so whoever wires the host declares the fields; with none
+    declared, tier B does not run and the report carries no tier B check.
     """
     artifact_root = os.path.join(research_dir, "gate_artifacts")
     config = Gate2Config(
@@ -254,6 +256,7 @@ def make_review_context(
         relations=relations,
         ranges=dict(ranges or {}),
         implausible_speedup=implausible_speedup,
+        plan_fields=tuple(plan_fields),
         artifact_root=artifact_root,
     )
     return GateContext(

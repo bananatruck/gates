@@ -17,9 +17,9 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 branch: main
 head: d738e49
 head_date: 2026-09-13
-tests_total: 424
+tests_total: 425
 tests_gate1: 92
-tests_gate2: 85
+tests_gate2: 86
 tests_gate3: 19
 tests_llm_scan: 21
 tests_llm_layer: 14
@@ -65,8 +65,8 @@ forever, but an unverifiable manuscript must not ship.
 | Component | State | Entry point | Tests |
 |---|---|---|---|
 | Gate 1 — execution validity | complete, evidence frozen | `gated_execute()` | 92 |
-| Gate 2 tier A — boundaries | **complete** — ranges, relations, non-finite guard, plausibility ceiling | `run_gate2()` | part of 85 |
-| Gate 2 tier B — methodology conformance | **complete** — `method_conformance` FAIL, `method_traceable` WARN | `run_gate2()` | part of 85 |
+| Gate 2 tier A — boundaries | **complete** — ranges, relations, non-finite guard, plausibility ceiling | `run_gate2()` | part of 86 |
+| Gate 2 tier B — methodology conformance | **complete** — `method_conformance` FAIL, `method_traceable` WARN; host path via `make_review_context(plan_fields=...)` | `run_gate2()` | part of 86 |
 | Gate 2 tier C — loop | **not written**; mirrors `rig/loop.py` | — | 0 |
 | Gate 3 — `report.*` regex checks | numeric + figure binding done | `run_gate3()` | 19 |
 | Gate 3 — `source.*` | **not written** | — | 0 |
@@ -75,7 +75,7 @@ forever, but an unverifiable manuscript must not ship.
 | LLM scan layer | complete, Gate 1 only | `gates/llm_scan.py` | 21 |
 | LLM plumbing (`ModelFn`, budget) | complete, Gate 1 only | `gates/llm.py` | 14 |
 | `gates/gate2_semantic.py` | **deleted** 09-13 (D4). Gate 2 is model-free (D19) | - | 15 removed |
-| Agent Laboratory adapter | `gated_execute` + `gated_review` via `make_review_context()`; **`gated_report` absent** | `gates/adapters/agentlab.py` | — |
+| Agent Laboratory adapter | `gated_execute` + `gated_review` via `make_review_context()`, which takes `relations`, `ranges`, `plan_fields`; **`gated_report` absent** | `gates/adapters/agentlab.py` | — |
 | Tier A evaluation harness | complete | `rig/gate2_tier_a_eval.py` | 45 labelled registries |
 
 Frozen and checksum-signed — do not edit: `reports/finalized-report-and-results/`.
@@ -92,11 +92,10 @@ Frozen and checksum-signed — do not edit: `reports/finalized-report-and-result
 
 ## next steps
 
-1. Wire `plan_fields` through `make_review_context()` (D13). No extraction: Agent Laboratory's plan is free text (`ai_lab_repo.py:434`, `extract_prompt(resp, "PLAN")`), so the host declares the fields at wiring time.
-2. Tier C: `rig/gate2_scenarios.py`, `rig/gate2_loop.py`, `tests/test_gate2_loop.py`. Five scenarios, scenario 5 (exhaustion proceeds with the caveat) first. Scenario 4 is an unverifiable field passing with `method_traceable` WARN, since D17 made divergence FAIL.
-3. Build Gate 3 per `GATE3_implementation_plan.md`, steps 1-9 in order. Network work last.
-4. Add `gated_report()` to `gates/adapters/agentlab.py`.
-5. Emit an `env.parent_proc_guard` INFO check recording whether the guard actually held (B3).
+1. Tier C: `rig/gate2_scenarios.py`, `rig/gate2_loop.py`, `tests/test_gate2_loop.py`. Five scenarios, scenario 5 (exhaustion proceeds with the caveat) first. Scenario 4 is an unverifiable field passing with `method_traceable` WARN, since D17 made divergence FAIL.
+2. Build Gate 3 per `GATE3_implementation_plan.md`, steps 1-9 in order. Network work last.
+3. Add `gated_report()` to `gates/adapters/agentlab.py`.
+4. Emit an `env.parent_proc_guard` INFO check recording whether the guard actually held (B3).
 
 ## decision log
 
@@ -116,7 +115,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-11 | D10 | **The speedup ceiling is gated on provenance, not magnitude.** A speedup a declared `Relation` derives is exempt at any size; SAGE reports a real 4,700x. Separate check `coherence.plausibility`, so `range_valid` stays provable. | `gates/gate2.py` `_check_plausibility` |
 | 09-11 | D11 | **`IMPLAUSIBLE_SPEEDUP = 500.0`**, not 1000, to keep it clear of `MAX_LEN = 1000`, the stdout truncation this project diagnosed. Declared, not derived; reaches the report as `ceiling_origin`. | `gates/gate2.py` |
 | 09-11 | D12 | **Bounded scores are units, never metric names.** `auc`/`f1`/`precision`/`recall`/`perplexity` in `UNIT_RANGES`. Name-based inference stays refused. | `test_a_metric_name_alone_never_implies_a_range` |
-| 09-11 | D13 | **Tier B declarations arrive at wiring time**, not by parsing plan prose. The host passes `plan_fields`; `gates/` never reads a plan. | pending — blocked on B7 |
+| 09-11 | D13 | **Tier B declarations arrive at wiring time**, not by parsing plan prose. The host passes `plan_fields`; `gates/` never reads a plan. Agent Laboratory's plan is free text (`ai_lab_repo.py:434`), so nothing is extracted. | `test_a_plan_declared_at_wiring_time_reaches_tier_b` |
 | 09-12 | D18 | **A value recorded as a call-site literal cannot prove conformance.** `arg_kind == "literal"` means the number was typed at `record_result`, so matching it proves the agent typed it twice. `constant` (read from a binding) does prove it. | `test_a_value_typed_at_the_call_site_cannot_prove_conformance` |
 | 09-12 | D17 | **Tier B is two checks, not one.** `method_conformance` FAIL for divergence, `method_traceable` WARN for unverifiable. Different findings, different remedies, and collapsing them would let "nobody can tell" read as "the run did something else". No `strict_conformance` flag: divergence is provable, so it fails, and Gate 2 proceeds on exhaustion anyway. | `gates/gate2.py` |
 | 09-12 | D16 | **`PlanField` has no per-field tolerance.** A plan field is a declaration, not a measurement. A tolerance knob would let a run declare 0.001, use 0.0015, and widen until it conformed. Floats compare with representation slack only. | `test_float_slack_absorbs_representation_and_nothing_else` |
@@ -141,6 +140,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-12 | `369c968` | Tier B: `method_conformance` and `method_traceable`, 13 tests. |
 | 09-12 | `b0a2b31` | Tier B scored as two detectors: 29 cases, 12/12 and 0/17, 6/6 and 0/23. |
 | 09-12 | `d738e49` | Merged to `main`. 439 tests. |
-| 09-13 | *this* | D4: `gate2_semantic.py` deleted, 15 tests removed, combination test rewritten over plan and sources. 424 tests. |
+| 09-13 | `066ee68` | D4: `gate2_semantic.py` deleted, 15 tests removed, combination test rewritten over plan and sources. 424 tests. |
+| 09-13 | *this* | `make_review_context(plan_fields=...)`: tier B reachable from the host. 425 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.
