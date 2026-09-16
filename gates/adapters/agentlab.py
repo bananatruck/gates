@@ -26,6 +26,7 @@ from .. import (
     GateFailure,
     GateReport,
     Ledger,
+    build_registry,
     render_feedback,
     render_summary,
     run_experiment,
@@ -471,27 +472,42 @@ class ReviewOutcome:
     #: that nothing was checked.
     declared: str = ""
     reviews: list[GatedExecution] = field(default_factory=list)
+    #: Every Gate 1 run of every revision, in order, passed or not.
+    executions: list[GatedExecution] = field(default_factory=list)
 
 
 def review_loop(
     context: GateContext,
-    revise: Callable[[str | None], dict[str, Any] | None],
+    revise: Callable[[str | None], str | None],
     *,
+    gate1: GateContext,
     extra: dict[str, Any] | None = None,
 ) -> ReviewOutcome:
     """Gate 2's feedback loop, tier C: the one call site a host needs.
 
-    ``revise(feedback)`` returns the next Gate 1 registry, or ``None`` to stop.
-    It is called with ``None`` for the first submission. In a host it re-runs the
-    experiment with the feedback in hand; in `rig/gate2_loop.py` it replays a
-    script. Both drive this loop, so the rig's tests hold the loop a host runs.
+    ``revise(feedback)`` returns the next version of the experiment's code, or
+    ``None`` to stop. It is called with ``None`` for the first submission. Each
+    version runs under Gate 1 on ``gate1`` first, and Gate 2 reviews only the
+    registry Gate 1 built from that run, so a fix cannot reach Gate 2 without
+    running (F12). A Gate 1 rejection sends Gate 1's report back and costs a
+    Gate 1 turn, not a Gate 2 one.
 
-    Bounded by the budget: every turn either passes or adds a consecutive
-    rejection. A spent budget does not raise (`CLAUDE.md` §4).
+    Bounded by the budget: every reviewed turn either passes or adds a
+    consecutive rejection. A spent Gate 2 budget does not raise (`CLAUDE.md` §4).
     """
+    if not gate1_enabled():
+        raise GateError("Gate 2 reviews Gate 1's registry, and GATES_GATE1 is off")
     result = ReviewOutcome()
     feedback: str | None = None
-    while (registry := revise(feedback)) is not None:
+    while (code := revise(feedback)) is not None:
+        executed = gated_execute(code, gate1)
+        result.executions.append(executed)
+        gate1.close_turn(executed.passed)
+        if not executed.passed:
+            gate1.check_can_continue()
+            feedback = executed.feedback
+            continue
+        registry = build_registry(executed.report, task_ref=gate1.config.task_ref)
         reviewed = gated_review(registry, context)
         record_divergence(
             context,

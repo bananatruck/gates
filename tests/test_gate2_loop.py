@@ -1,9 +1,9 @@
 """Gate 2's feedback loop, tier C, held by test.
 
 ``tests/test_gate2.py`` holds each check in isolation. This file holds the loop
-they run inside: the engineer submits a registry, Gate 2 rejects it, the feedback
-goes back, the budget advances by one agent turn, and the phase ends in the state
-the design says it should.
+they run inside: the engineer submits code, Gate 1 runs it, Gate 2 rejects the
+registry that run wrote, the feedback goes back, the budget advances by one agent
+turn, and the phase ends in the state the design says it should.
 
 Gate 2's terminal state is the one that differs from Gate 1's, so it is tested
 first. A spent budget does not raise. The run proceeds, and what Gate 2 could not
@@ -89,8 +89,8 @@ def test_engineer_receives_the_feedback_report(tmp_path):
 def test_an_unverifiable_plan_warns_proceeds_and_reaches_the_writer(played):
     """Scenario 4. D17 made divergence FAIL, so this is Gate 2's WARN path.
 
-    Neither field can be checked: one was typed at the ``record_result`` call and
-    one was never recorded. That blocks nothing and hides nothing.
+    Neither field can be checked: one is recorded but never read by the run (the
+    B8 decoy) and one was never recorded. That blocks nothing and hides nothing.
     """
     outcome = played["unverifiable-plan"]
     report = outcome.turns[0].report
@@ -98,7 +98,7 @@ def test_an_unverifiable_plan_warns_proceeds_and_reaches_the_writer(played):
     assert outcome.outcome == "pass"
     assert outcome.turns_used == 1
     assert "coherence.method_traceable" in {c.id for c in report.warnings()}
-    assert "typed at the record_result call" in outcome.declared
+    assert "never reads it" in outcome.declared
     assert "never recorded it" in outcome.declared
 
 
@@ -174,3 +174,27 @@ def test_loop_metrics_come_from_the_ledger_alone(tmp_path):
         "unresolved_declared": 1,
         "abandoned": 0,
     }
+
+
+def test_a_revision_runs_under_gate_1_before_gate_2_sees_it(tmp_path):
+    """F12. A revision is code, and Gate 2 only ever reviews the registry Gate 1
+    built from running it. A number typed into the fix is Gate 1's to reject, so
+    Gate 2 never reviews it and the engineer is sent Gate 1's report."""
+    from gates.adapters.agentlab import make_context, make_review_context, review_loop
+
+    typed = 'record_metadata("seed", 0)\nrecord_result("exp1.acc", 0.812, unit="ratio")\n'
+    sent: list = []
+
+    def revise(feedback):
+        sent.append(feedback)
+        return typed if len(sent) == 1 else None
+
+    outcome = review_loop(
+        make_review_context(research_dir=str(tmp_path)),
+        revise,
+        gate1=make_context(research_dir=str(tmp_path)),
+    )
+    assert outcome.reviews == []
+    assert outcome.outcome == "no_pass"
+    assert [e.passed for e in outcome.executions] == [False]
+    assert "results.values_computed" in sent[1]

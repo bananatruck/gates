@@ -1,16 +1,18 @@
-"""Gate 2 feedback-loop scenarios: the registries a scripted engineer submits.
+"""Gate 2 feedback-loop scenarios: the experiments a scripted engineer submits.
 
-Each turn is the registry a re-run wrote after the engineer read the previous
-feedback. In a host, a Gate 2 rejection sends the engineer back through Gate 1 to
-produce that registry; a scenario supplies it directly, because Gate 2's contract
-is the registry format and a scenario that executed an experiment to reach Gate 2
-would test Gate 1 twice.
+Each turn is the code the engineer submitted after reading the previous
+feedback. ``review_loop`` runs it under Gate 1 and Gate 2 reviews the registry
+that run wrote, the same path a host takes (F12). A scenario once handed Gate 2 a
+registry directly, and that was the hole: a hand-edited registry was reviewed as
+if it had run.
 
 The five scenarios are `GATE2_implementation_spec.md` §3 C4, with scenario 4
 restated for D17. The spec wrote it as a divergence the engineer justifies and
 Gate 2 only warns on. Divergence is FAIL since D17, so a justification changes
 nothing and that story is scenario 5. Gate 2's one WARN-and-proceed path is a
-declared field nobody can check, which is what scenario 4 now plays.
+declared field nobody can check, which is what scenario 4 now plays. Its
+unverifiable learning rate is a decoy (B8), not a call-site literal: a literal
+is Gate 1's to reject, so it never reaches Gate 2.
 """
 
 from __future__ import annotations
@@ -28,7 +30,10 @@ LR = PlanField(key="config.lr", declared=0.001, source_span="plan L4: learning r
 EPOCHS = PlanField(key="config.epochs", declared=200, source_span="plan L5: 200 epochs")
 DROPOUT = PlanField(key="config.dropout", declared=0.5, source_span="plan L6: dropout 0.5")
 
-#: key -> (value, unit, provenance.arg_kind). A run that did what its plan said.
+#: key -> (value, unit, kind). A run that did what its plan said. ``kind`` is how
+#: ``Turn.code`` writes the value: ``computed``, ``constant`` (bound once, then
+#: read by the run), ``unused`` (bound once, never read: the decoy) or
+#: ``literal`` (typed at the ``record_result`` call).
 CLEAN: dict[str, tuple[Any, str | None, str]] = {
     "exp1.acc": (0.812, "ratio", "computed"),
     "exp2.gcn.wallclock_s": (0.245, "seconds", "computed"),
@@ -41,7 +46,7 @@ CLEAN: dict[str, tuple[Any, str | None, str]] = {
 
 @dataclass(frozen=True)
 class Turn:
-    """One engineer turn: the registry it submitted, and what Gate 2 must do."""
+    """One engineer turn: the code it submitted, and what the gates must do."""
 
     label: str
     values: dict[str, tuple[Any, str | None, str]]
@@ -50,18 +55,29 @@ class Turn:
     #: Check ids that must appear among the warnings.
     expect_warn: tuple[str, ...] = ()
     expect_pass: bool = False
+    #: Gate 1 rejects the run, so Gate 2 never reviews this turn.
+    expect_gate1_reject: bool = False
 
-    def registry(self) -> dict[str, Any]:
-        """The registry, in the shape ``gates.registry.build_registry`` emits."""
-        return {
-            "gate": "GATE 1 — EXECUTION VALIDITY",
-            "verdict": "PASS",
-            "citable": True,
-            "values": {
-                key: {"value": value, "unit": unit, "provenance": {"arg_kind": kind}}
-                for key, (value, unit, kind) in self.values.items()
-            },
-        }
+    def code(self) -> str:
+        """The experiment, written so Gate 1 classifies each value as its kind."""
+        lines = ['record_metadata("seed", 0)']
+        read: list[str] = []
+        for key, (value, unit, kind) in self.values.items():
+            unit_arg = f", unit={unit!r}" if unit else ""
+            if kind == "literal":
+                lines.append(f"record_result({key!r}, {value!r}{unit_arg})")
+                continue
+            name = key.replace(".", "_")
+            if kind == "computed":
+                lines.append(f"{name} = sum([{value!r}])")
+            else:
+                lines.append(f"{name} = {value!r}")
+            if kind == "constant":
+                read.append(name)
+            lines.append(f"record_result({key!r}, {name}{unit_arg})")
+        if read:
+            lines.append(f"schedule = [{', '.join(read)}]")
+        return "\n".join(lines) + "\n"
 
 
 @dataclass(frozen=True)
@@ -74,6 +90,8 @@ class Scenario:
     expect_outcome: str
     expect_turns: int
     max_attempts: int = 2
+    #: Gate 1's budget, counted apart from Gate 2's.
+    gate1_attempts: int = 3
     relations: tuple[Relation, ...] = (SPEEDUP,)
     plan_fields: tuple[PlanField, ...] = (LR, EPOCHS)
     #: Text that must reach the writer in the declared limitations.
@@ -123,8 +141,8 @@ UNVERIFIABLE_PLAN = Scenario(
     summary="Two declared fields nobody can check. WARN, proceeds, both declared.",
     turns=(
         Turn(
-            "lr typed at the record_result call, dropout never recorded",
-            {**CLEAN, "config.lr": (0.001, None, "literal")},
+            "lr recorded but never read, dropout never recorded",
+            {**CLEAN, "config.lr": (0.001, None, "unused")},
             expect_warn=("coherence.method_traceable",),
             expect_pass=True,
         ),
@@ -132,7 +150,7 @@ UNVERIFIABLE_PLAN = Scenario(
     expect_outcome="pass",
     expect_turns=1,
     plan_fields=(LR, EPOCHS, DROPOUT),
-    expect_declared=("typed at the record_result call", "never recorded it"),
+    expect_declared=("never reads it", "never recorded it"),
 )
 
 DIVERGENCE_EXHAUSTS = Scenario(

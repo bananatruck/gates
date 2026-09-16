@@ -17,7 +17,7 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 branch: feature/gate2-feedback-loop
 head: 2a3a9a4
 head_date: 2026-09-14
-tests_total: 453
+tests_total: 454
 tests_gate1: 98
 tests_gate2: 92
 tests_gate3: 19
@@ -83,7 +83,7 @@ Frozen and checksum-signed — do not edit: `reports/finalized-report-and-result
 ## gate 2 - missing to complete
 
 Verified 09-14 against `85af14c` and `../AgentLaboratory-Gemini` (`feat/gates-verification-layer`, 7 files uncommitted).
-**Closed 09-14:** F4 (`0baf625`); F1 + F3 at adapter level, `review_loop` + `ReviewOutcome.declared` (`0baf625`); F6, `make_review_context(sources=, lit_review=)` (D23, `12aa1d9`); F10, exact published tallies asserted in `tests/test_gate2.py` (`60af585`); F7, `Ledger.loop_summary()` from `review_loop` rows (M5; a run enters the loop only if its first review failed).
+**Closed 09-14:** F4 (`0baf625`); F1 + F3 at adapter level, `review_loop` + `ReviewOutcome.declared` (`0baf625`); F6, `make_review_context(sources=, lit_review=)` (D23, `12aa1d9`); F10, exact published tallies asserted in `tests/test_gate2.py` (`60af585`); F7, `Ledger.loop_summary()` from `review_loop` rows (M5; a run enters the loop only if its first review failed). F12 (09-16), `review_loop(..., gate1=)` runs every revision under Gate 1, so Gate 2 never reviews a registry no run wrote.
 **Scope 09-14:** gates repo only. AgentLaboratory-Gemini is a test bed for results and data, not edited. Host-facing items are delivered as adapter entry points a host can call, not as host edits.
 Tiers A and B run as one call (`run_gate2`); tier C is `review_loop` in the adapter, which the rig drives. Nothing below exists yet.
 
@@ -93,7 +93,6 @@ Tiers A and B run as one call (`run_gate2`); tier C is `review_loop` in the adap
 | F5 | Setup budgets reach nothing. **Host side only**: both context builders take `max_attempts` and their defaults match `setup.defaults()`. | `gates/setup.py:121` prints JSON only | host passes the chosen budget (out of scope 09-14) |
 | F8 | M6 wallclock overhead is not measured. | spec §4 M6 | paired timing, with F9 |
 | F9 | E1 not run: MLR-Bench's 10 tasks, gated vs ungated, paired. | spec §5 E1 | F1, F2, model spend |
-| F12 | Gate 2's loop never sends a revision back through Gate 1. `revise` returns a registry dict and Gate 2 checks only its `citable` flag, so a hand-edited registry is reviewed as if it had run. | `agentlab.py:494`, `gate2.py:320`, `rig/gate2_scenarios.py:56` | `review_loop` executes each revision under Gate 1 |
 | F11 | No `SKILL.md` install path, for any gate. | `CLAUDE.md` §3; no `SKILL.md` in the tree | after F1 fixes the call sites |
 
 ## blockers
@@ -167,6 +166,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-14 | `60af585` | F10 closed: tier A 27 TP / 18 TN and tier B 12/17, 6/23, 29/29 asserted. 452 tests. |
 | 09-14 | `2a3a9a4` | F7 closed: `Ledger.loop_summary()`; `review_loop` rows carry `max_attempts`. 453 tests. |
 
-| 09-16 | *this* | F12 recorded: Gate 2 to Gate 1 path open. `head` corrected. 453 tests. |
+| 09-16 | `fe4568d` | F12 recorded: Gate 2 to Gate 1 path open. `head` corrected. 453 tests. |
+| 09-16 | *this* | F12 closed: `review_loop(context, revise, gate1=)` runs each revision under Gate 1; `revise` returns code; scenarios emit code; scenario 4 is now the B8 decoy. 454 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.

@@ -15,8 +15,11 @@ proceeds, and every discrepancy Gate 2 could not get resolved is handed to the
 writing phase as a declared limitation, because a genuine novel result must not
 be blocked forever and an unresolved one must not be dropped.
 
+Every submission runs under Gate 1 first, so a turn Gate 1 rejects never reaches
+Gate 2 and costs no Gate 2 turn.
+
 Exits non-zero if any scenario departs from what it documents. No model, no API
-key, nothing executed.
+key.
 """
 
 from __future__ import annotations
@@ -35,13 +38,17 @@ from typing import Any, Protocol
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from gates import GateReport  # noqa: E402
-from gates.adapters.agentlab import make_review_context, review_loop  # noqa: E402
+from gates.adapters.agentlab import (  # noqa: E402
+    make_context,
+    make_review_context,
+    review_loop,
+)
 
 from rig.gate2_scenarios import SCENARIOS, Scenario, Turn  # noqa: E402
 
 
 class Engineer(Protocol):
-    """Whatever produces the next registry. A script here, a re-run in a host."""
+    """Whatever writes the next version of the experiment. A script here."""
 
     def turn(self, feedback: str | None, turn_index: int) -> Turn | None:
         """Return this turn's submission, or ``None`` to give up."""
@@ -69,8 +76,11 @@ class TurnOutcome:
     label: str
     report: GateReport
     feedback: str
-    #: Consecutive rejections after this turn closed.
+    #: Consecutive Gate 2 rejections after this turn closed. A turn Gate 1
+    #: rejected leaves the count where it was.
     rejections_after: int = 0
+    #: Which gate issued ``report``: 2, or 1 when Gate 1 rejected the run.
+    gate: int = 2
 
     @property
     def passed(self) -> bool:
@@ -94,6 +104,11 @@ class LoopOutcome:
     def turns_used(self) -> int:
         return len(self.turns)
 
+    @property
+    def reviews_used(self) -> int:
+        """Turns Gate 2 reviewed, the ones its budget counts."""
+        return sum(1 for turn in self.turns if turn.gate == 2)
+
 
 def run_gate2_loop(
     scenario: Scenario,
@@ -101,11 +116,10 @@ def run_gate2_loop(
     workdir: str | Path,
     engineer: Engineer | None = None,
 ) -> LoopOutcome:
-    """Play one scenario against the real Gate 2 and return what happened.
+    """Play one scenario through the real Gates 1 and 2 and return what happened.
 
-    Bounded by the budget rather than by a guard: every turn either passes and
-    ends the loop or adds a consecutive rejection, so at most ``max_attempts``
-    turns run.
+    Bounded by the budgets rather than by a guard: every reviewed turn either
+    passes and ends the loop or adds a consecutive rejection.
     """
     workdir = Path(workdir)
     workdir.mkdir(parents=True, exist_ok=True)
@@ -117,6 +131,7 @@ def run_gate2_loop(
         relations=scenario.relations,
         plan_fields=scenario.plan_fields,
     )
+    gate1 = make_context(research_dir=str(workdir), max_attempts=scenario.gate1_attempts)
     outcome = LoopOutcome(
         scenario=scenario.name,
         ledger_path=str(context.ledger.path) if context.ledger else None,
@@ -124,26 +139,31 @@ def run_gate2_loop(
 
     submitted: list[Turn] = []
 
-    def revise(feedback: str | None) -> dict[str, Any] | None:
+    def revise(feedback: str | None) -> str | None:
         turn = engineer.turn(feedback, len(submitted))
         if turn is None:
             return None
         submitted.append(turn)
-        return turn.registry()
+        return turn.code()
 
-    reviewed = review_loop(context, revise, extra={"scenario": scenario.name})
+    reviewed = review_loop(context, revise, gate1=gate1, extra={"scenario": scenario.name})
     outcome.outcome = reviewed.outcome
     outcome.declared = reviewed.declared
-    for index, (turn, review) in enumerate(zip(submitted, reviewed.reviews)):
+    reviews = iter(reviewed.reviews)
+    rejections = 0
+    for index, (turn, executed) in enumerate(zip(submitted, reviewed.executions)):
+        gate = 2 if executed.passed else 1
+        shown = next(reviews) if gate == 2 else executed
+        if gate == 2:
+            rejections = 0 if shown.passed else rejections + 1
         outcome.turns.append(
             TurnOutcome(
                 index=index,
                 label=turn.label,
-                report=review.report,
-                feedback=review.feedback,
-                # rewrite was the rejection count plus one when this turn was
-                # reviewed, so it is the count after a rejection closes it.
-                rejections_after=0 if review.passed else review.report.rewrite,
+                report=shown.report,
+                feedback=shown.feedback,
+                rejections_after=rejections,
+                gate=gate,
             )
         )
 
@@ -162,9 +182,9 @@ def check_expectations(scenario: Scenario, outcome: LoopOutcome) -> list[str]:
         problems.append(
             f"used {outcome.turns_used} turn(s), expected {scenario.expect_turns}"
         )
-    if outcome.outcome == "proceeded" and outcome.turns_used != scenario.max_attempts:
+    if outcome.outcome == "proceeded" and outcome.reviews_used != scenario.max_attempts:
         problems.append(
-            f"proceeded after {outcome.turns_used} turn(s) on a budget of "
+            f"proceeded after {outcome.reviews_used} review(s) on a budget of "
             f"{scenario.max_attempts}"
         )
 
@@ -172,6 +192,11 @@ def check_expectations(scenario: Scenario, outcome: LoopOutcome) -> list[str]:
         where = f"turn {turn.index + 1} / {spec.label!r}"
         failed = {c.id for c in turn.report.failed_checks()}
         warned = {c.id for c in turn.report.warnings()}
+        if spec.expect_gate1_reject != (turn.gate == 1):
+            problems.append(
+                f"{where}: expected Gate {1 if spec.expect_gate1_reject else 2} "
+                f"to issue the verdict, got Gate {turn.gate}"
+            )
         if spec.expect_pass != turn.passed:
             problems.append(
                 f"{where}: expected {'PASS' if spec.expect_pass else 'FAIL'}, "
@@ -204,7 +229,7 @@ def _print_transcript(scenario: Scenario, outcome: LoopOutcome) -> None:
     print(f"\nSCENARIO  {scenario.name}\n  {scenario.summary}")
     print(f"  budget {scenario.max_attempts} turns")
     for turn in outcome.turns:
-        print(f"\n  TURN {turn.index + 1}  {turn.label}")
+        print(f"\n  TURN {turn.index + 1}  {turn.label}  (gate {turn.gate})")
         if not turn.passed:
             print(_indent(turn.feedback))
     print(f"\n  -> {outcome.outcome} after {outcome.turns_used} turn(s)")
@@ -273,6 +298,7 @@ def _as_dict(scenario: Scenario, outcome: LoopOutcome, problems: list[str]) -> d
         "turns": [
             {
                 "label": t.label,
+                "gate": t.gate,
                 "verdict": t.report.verdict.value,
                 "failed": sorted(c.id for c in t.report.failed_checks()),
                 "warned": sorted(c.id for c in t.report.warnings()),
