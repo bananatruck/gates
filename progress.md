@@ -174,6 +174,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `68986bc` | Gate 1 budget inside `review_loop`: raises if nothing ran clean, else ends `proceeded` with the last review declared. 459 tests. |
 | 09-16 | `5eeffbe` | `review_loop(first=)`: the Gate 1 pass a host already holds is reviewed without re-running; a rejected `first` raises `GateError`. 461 tests. |
 | 09-16 | `890f42f` | `ReviewOutcome.registry`: the last reviewed run's registry, the one the writer cites and Gate 3 checks. 463 tests. |
-| 09-16 | *this* | Tier comparison: `rig/gate2_tier_comparison.py`, `tests/test_gate2_tiers.py` (8). A vs A+B: 27/27 both, divergences 0 vs 12/12, unverifiable 0 vs 6/6, 0/35 false rejections both. A+B vs A+B+C over 6 scenarios: fixed 0 vs 3/4, declared 4 vs 1. 471 tests. |
+| 09-16 | `444dc4d` | Tier comparison: `rig/gate2_tier_comparison.py`, `tests/test_gate2_tiers.py` (8). A vs A+B: 27/27 both, divergences 0 vs 12/12, unverifiable 0 vs 6/6, 0/35 false rejections both. A+B vs A+B+C over 6 scenarios: fixed 0 vs 3/4, declared 4 vs 1. 471 tests. |
+| 09-16 | *this* | Docs: README (Gate 2 row, porting step 5, test counts, Gate 2 rig), PLAN.md (as-built note, step 6), CLAUDE.md count 471. 471 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.

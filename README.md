@@ -18,7 +18,7 @@ tendency, and closes the channel at three points.
 | Gate | Question | Status |
 |---|---|---|
 | **1 — execution validity** | Did this code actually run, and were the reported numbers produced by *this* run? | **complete and measured** |
-| **2 — source ↔ result coherence** | Are the measured results consistent with what the cited literature reports? | implemented and unit-tested |
+| **2 — source ↔ result coherence** | Are the measured results within their bounds, consistent with each other, and produced the way the plan declared? | implemented, loop closed and tested |
 | **3 — report validity** | Does every number and citation in the manuscript trace to something that exists? | implemented and unit-tested |
 
 Gate 1 is finished for the scope it declares. It has been run against a complete
@@ -274,7 +274,12 @@ against Agent Laboratory's MLE solver. An adapter is responsible for:
 2. calling `gated_execute` where the scaffold used to call its `exec` helper,
 3. charging one rewrite per *agent turn* (not per execution — automated repair
    loops must not eat the agent's budget),
-4. handing `render_feedback(report)` back to the agent on rejection.
+4. handing `render_feedback(report)` back to the agent on rejection,
+5. after the experiment phase, calling `review_loop` with a `revise` callback
+   that returns the engineer's next version of the code. Every version runs
+   under Gate 1 before Gate 2 reviews the registry it wrote, so a fix cannot
+   reach Gate 2 without running. The outcome carries the registry the writer
+   cites and the limitations it must declare.
 
 ## Artifacts
 
@@ -302,9 +307,9 @@ debugging aid.
 pip install -e ".[dev]" && pytest
 ```
 
-396 tests here — 53 for Gate 1, 56 for Gate 2, 19 for Gate 3, and the rest
-covering the value registry, the log scanner, and the loop — plus 76 in the
-host scaffold's integration suite. Every check in the tables above is tied to
+471 tests here: 98 for Gate 1, 126 for Gate 2 (checks, loop, and the tier
+comparison), 19 for Gate 3, and the rest covering the value registry, the log
+scanner, and Gate 1's loop. The host scaffold's integration suite is separate. Every check in the tables above is tied to
 the test that holds it in place in
 [`docs/GATE1_REQUIREMENTS.md`](docs/GATE1_REQUIREMENTS.md).
 
@@ -338,6 +343,19 @@ search over a 1,000-character slice, so it reproduces exactly — and reports wh
 attempts Gate 1 rejected that upstream would have accepted. It does **not**
 reconstruct `get_score`; that is an LLM at temperature 0.6, so the ledger's
 reward column stays `null` unless a real model is passed to `run_loop`.
+
+Gate 2's loop has its own rig. Every submission there is code, run under Gate 1
+first, so a fix typed into a `record_result` call is rejected before Gate 2 sees
+it. A spent Gate 2 budget proceeds with the discrepancy declared instead of
+raising.
+
+```bash
+python -m rig.gate2_loop              # six scenarios, full transcript
+python -m rig.gate2_tier_comparison   # what tiers A, B and C each add
+```
+
+The comparison is in
+[`docs/research/gate2-tier-comparison.md`](docs/research/gate2-tier-comparison.md).
 
 What was outstanding for Gate 1 and how each item closed:
 [`docs/GATE1_COMPLETION.md`](docs/GATE1_COMPLETION.md). Nothing there blocks

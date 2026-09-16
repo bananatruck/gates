@@ -441,6 +441,13 @@ declared limitation that Gate 3 will require the report to state.
 
 Gate 2 is where the layer stops being purely deterministic, and the design says so openly.
 
+> **As built (09-16).** The semantic tier below was removed (D4), and Gate 2 is model-free (D19).
+> Gate 2 has three tiers. Tier A checks boundaries: ranges, declared relations, and plausibility.
+> Tier B checks the run against the plan fields declared at wiring time (D13, D17).
+> `reference_interval` compares against declared sources bound to `lit_review` (D23).
+> Tier C is `review_loop` in the adapter, and every revision runs under Gate 1 first (F12).
+> `progress.md` holds the decision log. The text below is the original design.
+
 ### 4.1 Inputs
 
 - Gate 1's verified registry (values only, with provenance)
@@ -620,7 +627,7 @@ An adapter is responsible for exactly four things:
 | 3a | `rig/` — the loop rig: the gate driven engineer-turn by engineer-turn, no model | **done** |
 | 4 | Fix `run_experiments.py --yaml-location`; re-run the archive for a real n | **CLI fixed**; runs pending |
 | 5 | The channel-fidelity experiment: fabrication rate vs. `MAX_LEN` | detector arm instrumented; writer arm pending |
-| 6 | Gate 2 | pending |
+| 6 | Gate 2 | **built**: tiers A and B, loop (tier C) through Gate 1; campaign (E1) pending |
 | 7 | Gate 3 | pending |
 | 8 | Evaluate on a CORE-Bench subset and PaperBench Code-Dev | pending |
 
