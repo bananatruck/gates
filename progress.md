@@ -17,7 +17,7 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 branch: feature/gate2-feedback-loop
 head: 2a3a9a4
 head_date: 2026-09-14
-tests_total: 463
+tests_total: 471
 tests_gate1: 98
 tests_gate2: 92
 tests_gate3: 19
@@ -173,6 +173,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `c2e4551` | STATE total corrected to 457. |
 | 09-16 | `68986bc` | Gate 1 budget inside `review_loop`: raises if nothing ran clean, else ends `proceeded` with the last review declared. 459 tests. |
 | 09-16 | `5eeffbe` | `review_loop(first=)`: the Gate 1 pass a host already holds is reviewed without re-running; a rejected `first` raises `GateError`. 461 tests. |
-| 09-16 | *this* | `ReviewOutcome.registry`: the last reviewed run's registry, the one the writer cites and Gate 3 checks. 463 tests. |
+| 09-16 | `890f42f` | `ReviewOutcome.registry`: the last reviewed run's registry, the one the writer cites and Gate 3 checks. 463 tests. |
+| 09-16 | *this* | Tier comparison: `rig/gate2_tier_comparison.py`, `tests/test_gate2_tiers.py` (8). A vs A+B: 27/27 both, divergences 0 vs 12/12, unverifiable 0 vs 6/6, 0/35 false rejections both. A+B vs A+B+C over 6 scenarios: fixed 0 vs 3/4, declared 4 vs 1. 471 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.
