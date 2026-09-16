@@ -6,13 +6,14 @@ that run wrote, the same path a host takes (F12). A scenario once handed Gate 2 
 registry directly, and that was the hole: a hand-edited registry was reviewed as
 if it had run.
 
-The five scenarios are `GATE2_implementation_spec.md` §3 C4, with scenario 4
+The first five scenarios are `GATE2_implementation_spec.md` §3 C4, with scenario 4
 restated for D17. The spec wrote it as a divergence the engineer justifies and
 Gate 2 only warns on. Divergence is FAIL since D17, so a justification changes
 nothing and that story is scenario 5. Gate 2's one WARN-and-proceed path is a
 declared field nobody can check, which is what scenario 4 now plays. Its
 unverifiable learning rate is a decoy (B8), not a call-site literal: a literal
-is Gate 1's to reject, so it never reaches Gate 2.
+is Gate 1's to reject, so it never reaches Gate 2. The sixth plays exactly that
+(F12): a fix typed into the call is rejected by Gate 1 and costs no Gate 2 turn.
 """
 
 from __future__ import annotations
@@ -173,7 +174,35 @@ DIVERGENCE_EXHAUSTS = Scenario(
     expect_declared=("the plan declared 0.001 and the run recorded 0.01",),
 )
 
+HAND_TYPED_FIX = Scenario(
+    name="hand-typed-fix",
+    summary="A speedup fixed by typing the number is Gate 1's to reject; the recomputed run passes.",
+    turns=(
+        Turn(
+            "speedup recorded as 42x against 0.245 s / 0.018 s",
+            {**CLEAN, "exp2.speedup": (42.0, "speedup", "computed")},
+            expect_fail=("coherence.internal_consistency",),
+        ),
+        Turn(
+            "engineer types 13.611 into the record_result call",
+            {**CLEAN, "exp2.speedup": (13.611, "speedup", "literal")},
+            expect_fail=("results.values_computed",),
+            expect_gate1_reject=True,
+        ),
+        Turn("speedup recomputed from the wallclocks", CLEAN, expect_pass=True),
+    ),
+    expect_outcome="pass",
+    expect_turns=3,
+)
+
 SCENARIOS: dict[str, Scenario] = {
     s.name: s
-    for s in (DIVERGENCE_EXHAUSTS, CLEAN_RUN, OUT_OF_RANGE, BROKEN_RELATION, UNVERIFIABLE_PLAN)
+    for s in (
+        DIVERGENCE_EXHAUSTS,
+        CLEAN_RUN,
+        OUT_OF_RANGE,
+        BROKEN_RELATION,
+        UNVERIFIABLE_PLAN,
+        HAND_TYPED_FIX,
+    )
 }

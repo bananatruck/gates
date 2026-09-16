@@ -17,7 +17,7 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 branch: feature/gate2-feedback-loop
 head: 2a3a9a4
 head_date: 2026-09-14
-tests_total: 455
+tests_total: 456
 tests_gate1: 98
 tests_gate2: 92
 tests_gate3: 19
@@ -67,7 +67,7 @@ forever, but an unverifiable manuscript must not ship.
 | Gate 1 — execution validity | complete, evidence frozen | `gated_execute()` | 92 |
 | Gate 2 tier A — boundaries | **complete** — ranges, relations, non-finite guard, plausibility ceiling | `run_gate2()` | part of 86 |
 | Gate 2 tier B — methodology conformance | **complete** — `method_conformance` FAIL, `method_traceable` WARN; host path via `make_review_context(plan_fields=...)` | `run_gate2()` | part of 86 |
-| Gate 2 tier C — loop | **loop closes model-free**, 5 scenarios, exhaustion proceeds declared. Host entry point exists; no host calls it yet | `gates/adapters/agentlab.py` `review_loop()`, driven by `rig/gate2_loop.py` | 15 |
+| Gate 2 tier C — loop | **loop closes model-free**, 6 scenarios, exhaustion proceeds declared. Host entry point exists; no host calls it yet | `gates/adapters/agentlab.py` `review_loop()`, driven by `rig/gate2_loop.py` | 15 |
 | Gate 3 — `report.*` regex checks | numeric + figure binding done | `run_gate3()` | 19 |
 | Gate 3 — `source.*` | **not written** | — | 0 |
 | Gate 3 — `style.*` | **not written** | — | 0 |
@@ -168,6 +168,7 @@ Append-only. One line each: date, decision, where it is enforced.
 
 | 09-16 | `fe4568d` | F12 recorded: Gate 2 to Gate 1 path open. `head` corrected. 453 tests. |
 | 09-16 | `77efbac` | F12 closed: `review_loop(context, revise, gate1=)` runs each revision under Gate 1; `revise` returns code; scenarios emit code; scenario 4 is now the B8 decoy. 454 tests. |
-| 09-16 | *this* | Gate 1 runs inside `review_loop` reach the ledger as `review_turn` rows; `loop_summary` unchanged. 455 tests. |
+| 09-16 | `9bc5923` | Gate 1 runs inside `review_loop` reach the ledger as `review_turn` rows; `loop_summary` unchanged. 455 tests. |
+| 09-16 | *this* | Scenario 6 `hand-typed-fix`: a typed number is Gate 1's to reject and costs no Gate 2 turn. M5 now 6 runs, 3/4 resolved. 456 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.

@@ -177,10 +177,10 @@ def test_loop_metrics_come_from_the_ledger_alone(tmp_path):
 
     summary = Ledger(outcome.ledger_path).loop_summary()
     assert summary == {
-        "runs_reviewed": 5,
-        "runs_entering_loop": 3,
-        "resolved_within_budget": 2,
-        "resolution_rate": 2 / 3,
+        "runs_reviewed": 6,
+        "runs_entering_loop": 4,
+        "resolved_within_budget": 3,
+        "resolution_rate": 3 / 4,
         "mean_attempts": 2.0,
         "unresolved_declared": 1,
         "abandoned": 0,
@@ -209,3 +209,17 @@ def test_a_revision_runs_under_gate_1_before_gate_2_sees_it(tmp_path):
     assert outcome.outcome == "no_pass"
     assert [e.passed for e in outcome.executions] == [False]
     assert "results.values_computed" in sent[1]
+
+
+def test_a_hand_typed_fix_is_gate_1s_to_reject_and_costs_no_review(played):
+    """F12 as a scenario. After a speedup rejection, the engineer types the
+    right number into the ``record_result`` call. Gate 1 rejects it, Gate 2
+    never reviews it, and Gate 2's budget still has the turn the recomputed run
+    then passes on."""
+    outcome = played["hand-typed-fix"]
+
+    assert [t.gate for t in outcome.turns] == [2, 1, 2]
+    assert "results.values_computed" in {c.id for c in outcome.turns[1].report.failed_checks()}
+    assert [t.rejections_after for t in outcome.turns] == [1, 1, 0]
+    assert outcome.outcome == "pass"
+    assert outcome.reviews_used == SCENARIOS["hand-typed-fix"].max_attempts
