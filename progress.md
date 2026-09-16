@@ -15,7 +15,7 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: feature/gate2-feedback-loop
-head: 4508891
+head: 343c9fe
 head_date: 2026-09-16
 tests_total: 480
 tests_gate1: 98
@@ -112,7 +112,7 @@ Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adap
 1. Gate 3, in this order (revised 09-16 from `GATE3_implementation_plan.md` §6). Red test first each step, full suite, commit, push.
    1. ~~B4~~ done.
    2. ~~Adapter entry point~~ done. Was: `make_report_context()` + `gated_report()` in the adapter, shaped like `review_loop`: `revise` returns the next manuscript; a spent budget raises `GateFailure`. Inputs from Gate 2: `ReviewOutcome.registry` (values to bind) and `ReviewOutcome.declared` (D28). `rig/loop.py` is Gate 1-wired (`run_loop`, `rig/loop.py:198`) and stays unchanged.
-   3. `rig/gate3_loop.py` + scenarios 1, 2, 3, 6 (existing checks only).
+   3. `rig/gate3_loop.py` + scenarios 1, 2, 3, 6 (existing checks only). Plan approved 09-16: `clean`, `typed-literal-fixed`, `unknown-token`, `budget-exhausts`; the registry comes from a real `run_gate2_loop` of Gate 2's `clean` scenario, not a hand-built dict.
    4. `style.claim_sections_bound` + scenario 5. Fix the "tiers" wording in the `gates/gate3.py` docstring.
    5. Declared-limitations check (D28), with renderer and fix directive (D14).
    6. `PaperRecord`, registry (D25, D26), `source.cited_papers_in_registry` + scenario 4.
@@ -196,6 +196,6 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `12bf4a0` | Docs: README (Gate 2 row, porting step 5, test counts, Gate 2 rig), PLAN.md (as-built note, step 6), CLAUDE.md count 471. 471 tests. |
 | 09-16 | `5ab0bf3` | Gate 2 marked complete in this repo; components, D24, next steps (Gate 3 planning). 471 tests. |
 | 09-16 | `4508891` | Gate 3 step 1: B4 closed, `ARCHIVED` asserts 29 literals over abstract, results, discussion (red on the old 8 first). D25-D28 recorded, Gate 3 order revised. 471 tests. |
-| 09-16 | *this* | Gate 3 step 2: `make_report_context`, `gated_report`, `report_loop`, `ReportOutcome`; `gate3.RENDERED_FILENAME`; `loop_summary` filtered to Gate 2 (red first: a Gate 3 turn counted as a Gate 2 run). D29. 480 tests. |
+| 09-16 | `343c9fe` | Gate 3 step 2: `make_report_context`, `gated_report`, `report_loop`, `ReportOutcome`; `gate3.RENDERED_FILENAME`; `loop_summary` filtered to Gate 2 (red first: a Gate 3 turn counted as a Gate 2 run). D29. 480 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.
