@@ -15,7 +15,7 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: feature/gate2-feedback-loop
-head: d1fad72
+head: 9b3aaa8
 head_date: 2026-09-16
 tests_total: 491
 tests_gate1: 98
@@ -34,8 +34,10 @@ Known environment-dependent result: `test_experiment_child_cannot_read_parent_pr
 
 ## architecture
 
-Decided 2026-09-10/11. **Tiers are a Gate 2 mechanism only.** Gate 3 mirrors Gate 1: a flat list of
-checks with severities, no tier structure, and Gate 1's feedback loop reused as-is.
+Decided 2026-09-10/11, amended 09-16 (D29-D31). **Tiers are a Gate 2 mechanism only.** Gate 3 mirrors Gate 1 (D30):
+a flat list of checks with severities, no tier structure, a reject-and-retry loop back to the agent that
+wrote the manuscript, a raise on a spent budget, and Gate 1's model layer rebuilt for manuscripts (D31).
+The loop code is `report_loop` in the adapter, shaped like `review_loop` (D29).
 
 **Gate 2 — three tiers**
 
@@ -119,6 +121,7 @@ Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adap
    7. Remaining `style.*`, host-declared inputs only (D27).
    8. G3-M4: measure scanner misses (`\begin{abstract}` unscanned, `\cite` lines skipped, readout §6), report, do not silently fix.
    9. `source.identifiers_resolve` via injected `lookup` (B2). `citations_parse` and `metadata_agrees` have no input on Agent Laboratory: inline `(arXiv id)` citations, no bibliography.
+   Pending approval (09-16), order set once approved: the D31 model layer and a `REPORT_GATE_INSTRUCTIONS` prompt for the writer; the `recorded:` evidence list cut at 5 keys (`gates/report.py:163`); the step 4 scope (Q4) and step 5 specifics (Q5).
    Also: `PLAN.md` §5.1/§5.2 name `report.citations_*` and claim citations are "eliminated by construction"; reconcile with what is built.
 2. `env.parent_proc_guard` INFO check (B3).
 3. F9 + F8 with model spend; F11 last. F2 and F5 wait on a host call site (out of scope 09-14).
@@ -157,6 +160,10 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | D27 | **`style.sections_present` checks sections the host declares at wiring time** (D13 pattern). No default list in `gates/`. Agent Laboratory's adapter declares its writer's list (`papersolver.py:352`). Decided by Kesh. | pending - `style.sections_present` |
 | 09-16 | D28 | **Declared limitations are rendered, not authored.** The renderer inserts Gate 2's `declared` block verbatim and Gate 3 checks it is present. Rejected: matching a writer's paraphrase, which no deterministic check can do. Decided by Kesh. | pending - Gate 3 limitations check |
 | 09-16 | D29 | **Gate 3's loop is `report_loop` in the adapter, not `rig/loop.py`.** Amends D5. `run_loop` is Gate 1-wired (`rig/loop.py:198`); Gate 3 follows Gate 2's as-built shape. `report_loop` takes a registry, not a `ReviewOutcome`, so a host without Gate 2 can use it. `Ledger.loop_summary` counts Gate 2 rows only, since both phases share `divergence.jsonl`. | `test_a_spent_budget_raises_and_emits_nothing`, `test_gate_3_turns_are_not_counted_as_gate_2_reviews` |
+| 09-16 | D30 | **Gate 3 is described as mirroring Gate 1**: a flat check list, a reject-and-retry loop back to the agent that wrote the artifact, and a raise on a spent budget. It verifies the manuscript's words and cited sources instead of code. D29 still holds for the code. Replaces "Gate 2's sibling" at `gates/gate3.py:5`. Decided by Kesh. | pending - `gates/gate3.py` docstring, step 4 |
+| 09-16 | D31 | **Gate 3 gets Gate 1's model layer, rebuilt for manuscripts.** Same structure as Gate 1: an injected `ModelFn` on `Gate3Config`, model findings only through `model_warning` (WARN), REQUIRED FIXES written after the verdict and dropped if ungrounded, spend through `ModelBudget`. The feedback goes to the host's paper writer (`PaperSolver`, `ai_lab_repo.py:294`) the way Gate 1's goes to `MLESolver`. Decided by Kesh; design awaiting approval. | pending |
+| 09-16 | D32 | **Gate 3 reads the retrieved-paper set through `retrieved: Callable[[], set[str]] | None` on `report_loop`**, called after each `write`, because the host fills `section_related_work` during its first write (`papersolver.py:357-367`). `None`: the source checks emit nothing. Rejected: `write` returning papers too, which widens the contract for hosts with no source checks. Decided by Kesh. | pending - step 6 |
+| 09-16 | D33 | **Remaining `style.*`**: `style.no_orphan_references` FAIL, only when the manuscript uses `\ref` or `\label`; `style.floats_referenced` WARN; `style.acronyms_defined` dropped, since which acronyms need expanding is a preference D27 refuses without a host-declared list. Decided by Kesh. | pending - step 7 |
 | 09-13 | D21 | **Gate 3's retrieval registry is Agent Laboratory's `lit_review`, `ADD_PAPER` entries only.** A paper read with `FULL_TEXT` but never added does not count as retrieved. Identifier is the host's `arxiv_id`. Decided by Kesh. | pending - Gate 3 `source.cited_papers_in_registry` |
 
 ## session log
@@ -197,6 +204,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `5ab0bf3` | Gate 2 marked complete in this repo; components, D24, next steps (Gate 3 planning). 471 tests. |
 | 09-16 | `4508891` | Gate 3 step 1: B4 closed, `ARCHIVED` asserts 29 literals over abstract, results, discussion (red on the old 8 first). D25-D28 recorded, Gate 3 order revised. 471 tests. |
 | 09-16 | `343c9fe` | Gate 3 step 2: `make_report_context`, `gated_report`, `report_loop`, `ReportOutcome`; `gate3.RENDERED_FILENAME`; `loop_summary` filtered to Gate 2 (red first: a Gate 3 turn counted as a Gate 2 run). D29. 480 tests. |
-| 09-16 | *this* | Gate 3 step 3: `rig/gate3_loop.py`, `rig/gate3_scenarios.py` (`clean`, `typed-literal-fixed`, `unknown-token`, `budget-exhausts`), `tests/test_gate3_loop.py` (11, red first on the spent budget). Registry from a real Gate 2 `clean` run; the provenance test fails on a hand-built registry. README rig line. 491 tests. |
+| 09-16 | `9b3aaa8` | Gate 3 step 3: `rig/gate3_loop.py`, `rig/gate3_scenarios.py` (`clean`, `typed-literal-fixed`, `unknown-token`, `budget-exhausts`), `tests/test_gate3_loop.py` (11, red first on the spent budget). Registry from a real Gate 2 `clean` run; the provenance test fails on a hand-built registry. README rig line. 491 tests. |
+| 09-16 | *this* | Docs: README and CLAUDE.md counts to 491 (Gate 3: 39). D30-D33 recorded, architecture restated for D30/D31. 491 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.
