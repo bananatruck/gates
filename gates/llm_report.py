@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
 from .llm import ModelLayer
+from .prose import CITATION
 from .schema import CheckResult, GateReport, Severity
 
 #: Identifiers the model may always use: they are not claims about this code.
@@ -293,14 +294,20 @@ def check_grounding(
 
 
 def check_manuscript_grounding(
-    text: str, report: GateReport, source: str, citable: Iterable[str]
+    text: str,
+    report: GateReport,
+    source: str,
+    citable: Iterable[str],
+    *,
+    papers: Iterable[str] = (),
 ) -> list[str]:
     """Gate 3's grounding: the generic rules, plus every proposed token's key.
 
     A fix telling the writer to cite ``\\result{exp1.f1}`` when nothing
     recorded ``exp1.f1`` rebuilds the defect Gate 3 exists to catch, so any
     proposed key outside the registry rejects the whole draft. ``<key>`` is the
-    placeholder the rules themselves use.
+    placeholder the rules themselves use. The same holds for arXiv ids: each
+    one the fix names must be in ``papers``, compared without its version.
     """
     citable = set(citable)
     parts = {part for key in citable for part in _IDENTIFIER.findall(key)}
@@ -309,6 +316,10 @@ def check_manuscript_grounding(
         key = key.strip()
         if key not in citable and key != "<key>":
             offenders.append(f"\\result{{{key}}}")
+    papers = set(papers)
+    for match in CITATION.finditer(text):
+        if match.group(1) not in papers:
+            offenders.append(match.group(0))
     return offenders
 
 

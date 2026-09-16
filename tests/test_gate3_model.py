@@ -264,3 +264,23 @@ def test_the_writer_prompt_names_the_tokens_the_gate_reads():
     assert RESULT_TOKEN.search(REPORT_GATE_INSTRUCTIONS)
     assert LIMITATIONS_TOKEN.search(REPORT_GATE_INSTRUCTIONS)
     assert "rejected" in REPORT_GATE_INSTRUCTIONS
+
+
+def test_a_fix_citing_a_paper_nobody_retrieved_is_dropped_whole(tmp_path):
+    """The same rule for papers: a fix may name a retrieved paper, or the bad
+    citation it tells the writer to remove, and nothing else."""
+    paper = TYPED + "As in (arXiv 2501.00001v1).\n"
+    fake = model(fixes="1. Replace (arXiv 2501.00001v1) with (arXiv 2402.99999).")
+    report = run_gate3(paper, REGISTRY, config(tmp_path, consult_model=fake),
+                       retrieved={"1902.07153v2"})
+    assert report.generated_fixes is None
+    grounded = check(report, "report.fixes_grounded")
+    assert grounded.evidence["ungrounded"] == ["arXiv 2402.99999"]
+
+
+def test_the_fix_writer_is_shown_the_retrieved_papers(tmp_path):
+    fake = model()
+    run_gate3(TYPED, REGISTRY, config(tmp_path, consult_model=fake),
+              retrieved={"1902.07153v2", "2410.21676v4"})
+    fix_prompt = next(p for p, s in fake.prompts if s != llm_claims.SYSTEM)
+    assert "RETRIEVED PAPERS: 1902.07153v2, 2410.21676v4" in fix_prompt

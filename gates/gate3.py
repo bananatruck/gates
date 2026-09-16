@@ -18,6 +18,9 @@ each check runs when its input exists:
                                                    references a figure
     report.limitations_declared             FAIL   iff Gate 2 declared
                                                    limitations
+    source.cited_papers_in_registry         FAIL   iff the host says what it
+                                                   retrieved and the paper
+                                                   cites something
     style.claim_sections_bound              FAIL   iff the manuscript has a
                                                    results section
     report.model_unbound_claims             WARN   iff a model is set and
@@ -45,7 +48,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from . import llm_claims, llm_report
 from .errors import GateError
@@ -55,7 +58,7 @@ from .llm import (
     ModelFn,
     ModelLayer,
 )
-from .prose import claim_sections, extract_claims, sections
+from .prose import CITATION, claim_sections, extract_claims, sections
 from .registry import citable_values
 from .schema import CheckResult, GateReport, Severity, decide
 
@@ -67,6 +70,13 @@ RESULT_TOKEN = re.compile(r"\\result\{([^}]+)\}")
 #: Where the writer places Gate 2's declared limitations (D28). Empty braces,
 #: like ``\result{key}``, and so TeX does not swallow the space after it.
 LIMITATIONS_TOKEN = re.compile(r"\\limitations\{\}")
+
+#: A DOI in the text. D26: the reference host never sees one, so a cited DOI
+#: cannot have been retrieved.
+_DOI = re.compile(r"\b10\.\d{4,9}/[^\s,;()\[\]{}]+")
+
+#: A retrieved identifier as the host records it, prefix optional.
+_ARXIV_ID = re.compile(r"(?:arxiv:?\s*)?(\d{4}\.\d{4,5})(v\d+)?", re.IGNORECASE)
 
 #: What the reader will see, written beside the report on every attempt.
 RENDERED_FILENAME = "manuscript.rendered"
@@ -398,6 +408,83 @@ def _check_limitations_declared(
     )
 
 
+def arxiv_versions(ids: Iterable[str]) -> dict[str, set[str]]:
+    """Retrieved arXiv ids as ``{id: {versions}}``; ``""`` is an unversioned one.
+
+    Anything that is not an arXiv id is dropped: D26 makes the arXiv id the
+    only identifier a citation is compared by.
+    """
+    versions: dict[str, set[str]] = {}
+    for raw in ids:
+        match = _ARXIV_ID.fullmatch(str(raw).strip())
+        if match:
+            versions.setdefault(match.group(1), set()).add(match.group(2) or "")
+    return versions
+
+
+def _check_cited_papers_in_registry(
+    source: str, retrieved: Iterable[str] | None
+) -> CheckResult | None:
+    """Every cited paper is one the run retrieved (D21, D25, D26).
+
+    A citation nobody's search or review returned is MLR-Bench's incorrect
+    citation, and this is a membership test, so it needs no network. Ids are
+    compared without their version: citing v4 of a paper the run read as v2
+    passes, and the difference is kept as evidence. A cited DOI fails, because
+    the reference host never sees one.
+
+    Returns ``None`` when the host gave no retrieval record, or when the
+    manuscript cites nothing.
+    """
+    if retrieved is None:
+        return None
+    cited = sorted({m.group(1) + (m.group(2) or "") for m in CITATION.finditer(source)})
+    dois = sorted({m.group(0).rstrip(".") for m in _DOI.finditer(source)})
+    if not cited and not dois:
+        return None
+
+    versions = arxiv_versions(retrieved)
+    not_retrieved: list[str] = []
+    mismatches: list[dict[str, Any]] = []
+    for citation in cited:
+        base, _, version = citation.partition("v")
+        version = f"v{version}" if version else ""
+        if base not in versions:
+            not_retrieved.append(citation)
+        elif version and version not in versions[base] and versions[base] - {""}:
+            mismatches.append({
+                "cited": citation,
+                "retrieved": sorted(base + v for v in versions[base] if v),
+            })
+    not_retrieved += dois
+
+    if not_retrieved:
+        message = (
+            f"{len(not_retrieved)} of {len(cited) + len(dois)} cited paper(s) were "
+            f"never retrieved during the run, e.g. {not_retrieved[0]}"
+        )
+    else:
+        message = f"{len(cited)} cited paper(s), all retrieved during the run"
+        if mismatches:
+            message += f"; {len(mismatches)} cite a different version than the one read"
+    return CheckResult(
+        id="source.cited_papers_in_registry",
+        passed=not not_retrieved,
+        severity=Severity.FAIL,
+        message=message,
+        evidence={
+            "cited": cited + dois,
+            "not_retrieved": not_retrieved,
+            "version_mismatches": mismatches,
+            "retrieved": sorted(base + v for base, vs in versions.items() for v in vs),
+            "discrepancies": [
+                f"{paper} is cited but no search or review during the run returned it"
+                for paper in not_retrieved
+            ],
+        },
+    )
+
+
 def _check_claim_sections_bound(
     source: str, values: dict[str, Any]
 ) -> CheckResult | None:
@@ -458,6 +545,7 @@ def run_gate3(
     attempt: int = 1,
     *,
     declared: str = "",
+    retrieved: Iterable[str] | None = None,
 ) -> GateReport:
     """Judge one manuscript against the registry Gate 1 wrote.
 
@@ -465,7 +553,10 @@ def run_gate3(
     renders it unless the host supplied its own render, then checks that what
     the reader will see is what was measured. ``declared`` is Gate 2's
     ``ReviewOutcome.declared``, the limitations the manuscript must state.
+    ``retrieved`` is every paper id the host's searches and review returned;
+    ``None`` means the host does not say, and citations go unchecked.
     """
+    retrieved = None if retrieved is None else set(retrieved)
     if not registry.get("citable"):
         raise GateError(
             "Gate 1 did not pass, so no value in this registry is citable and "
@@ -490,6 +581,7 @@ def run_gate3(
     for optional in (
         _check_figures_exist(source, config.figure_root),
         _check_limitations_declared(source, rendered, declared, origin),
+        _check_cited_papers_in_registry(source, retrieved),
         _check_claim_sections_bound(source, values),
         # WARN or INFO by construction, so decide() below is blind to it.
         llm_claims.build_check(llm_claims.scan_claims(model, _mask_tokens(source))),
@@ -512,6 +604,12 @@ def run_gate3(
     # the writer will read, as in Gate 1.
     if not report.passed and model.available:
         keys = sorted(values)
+        papers = sorted(retrieved or ())
+        facts = "CITABLE KEYS: " + ", ".join(keys)
+        if retrieved is not None:
+            facts += "\nRETRIEVED PAPERS: " + ", ".join(papers)
+        # A fix may name a retrieved paper, or a cited one it says to remove.
+        known = set(arxiv_versions(papers)) | {m.group(1) for m in CITATION.finditer(source)}
         llm_report.attach_fixes(
             report,
             llm_report.generate_fixes(
@@ -519,9 +617,9 @@ def run_gate3(
                 report,
                 source,
                 system=llm_report.REPORT_SYSTEM,
-                facts="CITABLE KEYS: " + ", ".join(keys),
+                facts=facts,
                 grounding=lambda text: llm_report.check_manuscript_grounding(
-                    text, report, source, keys
+                    text, report, source, keys, papers=known
                 ),
             ),
             subject="this manuscript and its registry",

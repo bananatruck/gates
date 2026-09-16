@@ -434,6 +434,124 @@ def test_the_writer_is_told_to_place_the_limitations(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# source.cited_papers_in_registry
+# --------------------------------------------------------------------------- #
+
+#: What the host's search tool and literature review returned (D25).
+RETRIEVED = {"2410.21676v2", "1902.07153v2", "2412.07942v1"}
+
+
+def cites(*ids: str) -> str:
+    return TOKENISED + "\\section{Related Work}\n" + " ".join(f"(arXiv {i})" for i in ids) + "\n"
+
+
+def test_a_paper_nobody_retrieved_fails(tmp_path):
+    """MLR-Bench's incorrect citation: an id no search or review returned."""
+    report = run_gate3(cites("1902.07153v2", "2501.00001v1"), registry(RECORDED),
+                       config(tmp_path), retrieved=RETRIEVED)
+    papers = check(report, "source.cited_papers_in_registry")
+    assert report.verdict is Verdict.FAIL
+    assert papers.evidence["not_retrieved"] == ["2501.00001v1"]
+
+
+def test_versions_are_compared_stripped_and_a_mismatch_is_evidence(tmp_path):
+    """D26. v4 of a paper the run read as v2 is the same paper."""
+    report = run_gate3(cites("2410.21676v4"), registry(RECORDED), config(tmp_path),
+                       retrieved=RETRIEVED)
+    papers = check(report, "source.cited_papers_in_registry")
+    assert papers.passed
+    assert papers.evidence["version_mismatches"] == [
+        {"cited": "2410.21676v4", "retrieved": ["2410.21676v2"]}
+    ]
+    assert papers.evidence["discrepancies"] == []
+
+
+def test_an_unversioned_citation_matches_any_version(tmp_path):
+    report = run_gate3(cites("1902.07153"), registry(RECORDED), config(tmp_path),
+                       retrieved=RETRIEVED)
+    papers = check(report, "source.cited_papers_in_registry")
+    assert papers.passed
+    assert papers.evidence["version_mismatches"] == []
+
+
+def test_the_colon_form_is_read_too(tmp_path):
+    paper = TOKENISED + "As shown in arXiv:2501.00001, it works.\n"
+    report = run_gate3(paper, registry(RECORDED), config(tmp_path), retrieved=RETRIEVED)
+    assert check(report, "source.cited_papers_in_registry").evidence["not_retrieved"] == [
+        "2501.00001"
+    ]
+
+
+def test_a_cited_doi_fails_as_not_retrieved(tmp_path):
+    """D26: the reference host never sees a DOI, so nothing could have retrieved one."""
+    paper = TOKENISED + "See doi:10.1145/3292500.3330925 for details.\n"
+    report = run_gate3(paper, registry(RECORDED), config(tmp_path), retrieved=RETRIEVED)
+    assert check(report, "source.cited_papers_in_registry").evidence["not_retrieved"] == [
+        "10.1145/3292500.3330925"
+    ]
+
+
+def test_no_retrieval_record_emits_no_citation_check(tmp_path):
+    """Absent, not green: a host that does not say what it retrieved gets no row."""
+    report = run_gate3(cites("2501.00001v1"), registry(RECORDED), config(tmp_path))
+    assert check(report, "source.cited_papers_in_registry") is None
+
+
+def test_a_manuscript_citing_nothing_emits_no_citation_check(tmp_path):
+    report = run_gate3(TOKENISED, registry(RECORDED), config(tmp_path), retrieved=RETRIEVED)
+    assert check(report, "source.cited_papers_in_registry") is None
+
+
+def test_the_writer_is_told_which_citation_and_what_it_may_cite(tmp_path):
+    text = render_feedback(run_gate3(cites("2501.00001v1"), registry(RECORDED),
+                                     config(tmp_path), retrieved=RETRIEVED))
+    assert "[source.cited_papers_in_registry]" in text
+    assert "not retrieved: 2501.00001v1" in text
+    assert "retrieved: 1902.07153v2, 2410.21676v2, 2412.07942v1" in text
+    assert "treated as fabricated" in text
+
+
+def test_the_host_retrieval_record_is_read_from_its_own_formats():
+    """``lit_review`` entries carry ``arxiv_id`` (D21). The writer's search
+    results are text with an ``arXiv paper ID:`` line per paper (D25)."""
+    from gates.adapters.agentlab import retrieved_arxiv_ids
+
+    lit_review = [{"arxiv_id": "2412.07942v1", "summary": "..."}, {"summary": "no id"}]
+    related = {
+        "introduction": "Title: A\nSummary: ...\narXiv paper ID: 2410.21676v4\n\n"
+                        "Title: B\narXiv paper ID: 1902.07153v2\n",
+        "discussion": None,
+    }
+    assert retrieved_arxiv_ids(lit_review, related) == {
+        "2412.07942v1", "2410.21676v4", "1902.07153v2"
+    }
+
+
+ARCHIVED_LOG = (
+    REPO / "reports/finalized-report-and-results/verification/logs/gated_workflow.log"
+)
+
+
+@pytest.mark.skipif(not ARCHIVED_LOG.exists(), reason="archived log not present")
+def test_the_archived_run_can_only_be_measured_against_its_literature_review(tmp_path):
+    """The measurement, with its limit stated. The archived run logged its
+    ADD_PAPER commands but not the writer's per-section search results, so only
+    D21's registry can be rebuilt from it. Under that registry 7 of the 8 cited
+    papers flag, and D25 exists because most of those came from the writer's
+    own searches. The D25 number needs a new run."""
+    lines = ARCHIVED_LOG.read_text(encoding="utf-8").splitlines()
+    added = {lines[i + 1].strip() for i, line in enumerate(lines) if line.strip() == "```ADD_PAPER"}
+    assert added == {"2412.07942v1", "2201.12150v2"}
+    assert "arXiv paper ID" not in ARCHIVED_LOG.read_text(encoding="utf-8")
+
+    paper = ARCHIVED.read_text(encoding="utf-8")
+    report = run_gate3(paper, registry(RECORDED), config(tmp_path), retrieved=added)
+    papers = check(report, "source.cited_papers_in_registry")
+    assert len(papers.evidence["cited"]) == 8
+    assert len(papers.evidence["not_retrieved"]) == 7
+
+
+# --------------------------------------------------------------------------- #
 # the feedback report
 # --------------------------------------------------------------------------- #
 
@@ -485,6 +603,7 @@ def test_every_check_gate3_emits_can_be_rendered_and_has_a_fix(tmp_path):
         "\\section{Results}\nAccuracy was 0.97, or \\result{exp1.acc_at_400} "
         "against \\result{exp1.invented}.\n\\includegraphics{absent.png}\n"
         "\\section{Further Results}\nSGC is fast.\n"
+        "\\section{Related Work}\nAs in (arXiv 2501.00001v1).\n"
     )
     self_rendered, _ = render_result_tokens(paper, citable_values(reg))
     tampered = self_rendered.replace("0.97", "0.98")
@@ -493,6 +612,7 @@ def test_every_check_gate3_emits_can_be_rendered_and_has_a_fix(tmp_path):
         reg,
         config(tmp_path, figure_root=str(tmp_path), rendered=tampered, consult_model=model),
         declared="DECLARED LIMITATIONS\n\n  - a.b: unresolved\n",
+        retrieved={"1902.07153v2"},
     )
     emitted = {c.id for c in report.checks if c.severity is not Severity.INFO}
     failed = {c.id for c in report.failed_checks()}
@@ -559,6 +679,20 @@ def test_the_loop_holds_the_writer_to_gate_2s_limitations(tmp_path):
     assert [w.passed for w in outcome.reports] == [False, True]
     assert "\\limitations{}" in write.sent[1]
     assert "the run recorded 0.01" in outcome.manuscript
+
+
+def test_the_retrieval_record_is_read_after_each_write(tmp_path):
+    """D32. The host fills its search results while writing, so a record read
+    before the first write would miss every paper the writer just found."""
+    found: set[str] = set()
+
+    def write(feedback):
+        found.add("2501.00001v1")
+        return cites("2501.00001v1")
+
+    outcome = report_loop(report_context(tmp_path), write, registry=registry(RECORDED),
+                          retrieved=lambda: found)
+    assert outcome.outcome == "pass"
 
 
 def test_a_spent_budget_raises_and_emits_nothing(tmp_path):

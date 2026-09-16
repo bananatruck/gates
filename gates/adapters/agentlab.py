@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Callable
+import re
+from typing import Any, Callable, Iterable
 
 from pathlib import Path
 
@@ -633,18 +634,26 @@ def gated_report(
     context: GateContext,
     *,
     declared: str = "",
+    retrieved: Iterable[str] | None = None,
 ) -> GatedExecution:
     """Judge one manuscript under Gate 3 and return the verdict.
 
     The mirror of :func:`gated_execute` one phase later (D30). ``source`` is the
     writer's output with its ``\\result{}`` and ``\\limitations{}`` tokens
-    intact. ``declared`` is ``ReviewOutcome.declared``. The evidence bundle is
+    intact. ``declared`` is ``ReviewOutcome.declared``, and ``retrieved`` the
+    paper ids the host's searches returned (:func:`retrieved_arxiv_ids`). The
+    evidence bundle is
     the render Gate 3 wrote to disk, so what a host publishes is byte for byte
     what the gate judged.
     """
     context.attempt += 1
     report = run_gate3(
-        source, registry, context.config, attempt=context.attempt, declared=declared
+        source,
+        registry,
+        context.config,
+        attempt=context.attempt,
+        declared=declared,
+        retrieved=retrieved,
     )
     report.rewrite = context.consecutive_rejections + 1
     context.note(report)
@@ -679,6 +688,7 @@ def report_loop(
     *,
     registry: dict[str, Any],
     declared: str = "",
+    retrieved: Callable[[], Iterable[str]] | None = None,
     extra: dict[str, Any] | None = None,
 ) -> ReportOutcome:
     """Gate 3's feedback loop: the one call site a host's writing phase needs.
@@ -687,7 +697,10 @@ def report_loop(
     tokens intact, or ``None`` to stop, and is first called with ``None``.
     ``registry`` is the one the writer cites: ``ReviewOutcome.registry`` when
     Gate 2 ran, Gate 1's otherwise. ``declared`` is ``ReviewOutcome.declared``,
-    the limitations the manuscript must state; empty means none. Taking both
+    the limitations the manuscript must state; empty means none. ``retrieved``
+    returns the paper ids the host has retrieved so far and is called after each
+    ``write``, because the reference host searches while it writes (D32);
+    ``None`` leaves citations unchecked. Taking both
     rather than a ``ReviewOutcome`` keeps Gate 3 usable by a host that does not
     run Gate 2.
 
@@ -700,7 +713,13 @@ def report_loop(
     result = ReportOutcome()
     feedback: str | None = None
     while (source := write(feedback)) is not None:
-        written = gated_report(source, registry, context, declared=declared)
+        written = gated_report(
+            source,
+            registry,
+            context,
+            declared=declared,
+            retrieved=None if retrieved is None else retrieved(),
+        )
         record_divergence(
             context,
             written.report,
@@ -722,6 +741,29 @@ def report_loop(
         context.check_can_continue()
         feedback = written.feedback
     return result
+
+
+#: One line per paper in the text the host's arXiv search returns
+#: (``tools.py`` ``ArxivSearch.find_papers_by_str``).
+_SEARCH_RESULT_ID = re.compile(r"arXiv paper ID:\s*(\S+)")
+
+
+def retrieved_arxiv_ids(
+    lit_review: list[dict[str, Any]] | None,
+    section_related_work: dict[str, str | None] | None,
+) -> set[str]:
+    """Every arXiv id the host retrieved, in its own formats (D21, D25).
+
+    ``lit_review`` is the PhD student's, entries keyed ``arxiv_id``.
+    ``section_related_work`` is the paper writer's per-section search results
+    (``papersolver.py:357-367``). A host passes
+    ``lambda: retrieved_arxiv_ids(phd.lit_review, solver.section_related_work)``
+    to :func:`report_loop`.
+    """
+    ids = {str(e["arxiv_id"]).strip() for e in lit_review or [] if e.get("arxiv_id")}
+    for text in (section_related_work or {}).values():
+        ids.update(_SEARCH_RESULT_ID.findall(text or ""))
+    return ids
 
 
 def build_evidence_bundle(report: GateReport, budget: int = STDOUT_BUDGET_CHARS) -> str:

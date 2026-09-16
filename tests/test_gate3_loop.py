@@ -162,3 +162,17 @@ def test_a_limitation_gate_2_declared_must_reach_the_paper(played):
         "report.limitations_declared"
     }
     assert "the plan declared 0.001 and the run recorded 0.01" in outcome.manuscript
+
+
+def test_a_citation_nobody_retrieved_is_sent_back(played):
+    """Scenario 4, MLR-Bench's incorrect citation. The writer cites a paper no
+    search returned, is told which one and what it may cite, and the revision
+    cites a paper the run did retrieve."""
+    outcome = played["fabricated-citation"]
+    first = outcome.turns[0]
+
+    assert outcome.outcome == "pass"
+    assert [turn.passed for turn in outcome.turns] == [False, True]
+    assert {c.id for c in first.report.failed_checks()} == {"source.cited_papers_in_registry"}
+    assert "not retrieved: 2501.00001v1" in first.feedback
+    assert "retrieved: 1902.07153v2, 2410.21676v4" in first.feedback

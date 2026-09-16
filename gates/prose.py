@@ -53,7 +53,10 @@ SKIP_LINE = re.compile(
 #: "arXiv 2410.21676v4" contains "2410.21", which the number pattern happily
 #: reported as an unsourced empirical claim. An arXiv id is a citation, not a
 #: measurement, so it never enters the claim set.
-CITATION = re.compile(r"arxiv[:\s]*\d{4}\.\d{4,5}(v\d+)?", re.IGNORECASE)
+#:
+#: Group 1 is the id and group 2 its version, for Gate 3's citation check.
+#: Old-style ids (``hep-th/9901001``) are not matched.
+CITATION = re.compile(r"arxiv[:\s]*(\d{4}\.\d{4,5})(v\d+)?", re.IGNORECASE)
 
 _LATEX_HEADING = re.compile(r"\\section\{([^}]*)\}")
 #: Markdown headings, top two levels only. Kept separate from the LaTeX pattern

@@ -362,6 +362,19 @@ def _evidence_claim_findings(check: CheckResult) -> list[str]:
     ]
 
 
+def _evidence_citations(check: CheckResult) -> list[str]:
+    # The retrieved line is uncapped: it is the list the writer cites from.
+    ev = check.evidence
+    out = []
+    if ev.get("not_retrieved"):
+        out.append("  not retrieved: " + ", ".join(ev["not_retrieved"]))
+    for row in ev.get("version_mismatches", [])[:_MAX_EVIDENCE_ROWS]:
+        out.append(f"  version: cites {row['cited']}, read {', '.join(row['retrieved'])}")
+    if ev.get("retrieved"):
+        out.append("  retrieved: " + ", ".join(ev["retrieved"]))
+    return out
+
+
 def _evidence_unbound_sections(check: CheckResult) -> list[str]:
     out = [f"  {name}: no \\result{{}} token" for name in check.evidence.get("unbound", [])]
     if check.evidence.get("recorded"):
@@ -416,6 +429,7 @@ _EVIDENCE_RENDERERS = {
     "report.figures_referenced_exist": _evidence_figures,
     "report.limitations_declared": _evidence_limitations,
     "report.model_unbound_claims": _evidence_claim_findings,
+    "source.cited_papers_in_registry": _evidence_citations,
     "style.claim_sections_bound": _evidence_unbound_sections,
 }
 
@@ -530,6 +544,12 @@ _FIXES = {
         "must state them. Put \\limitations{} where the paper discusses its "
         "limitations and the renderer inserts them word for word. Do not "
         "paraphrase them or leave them out."
+    ),
+    "source.cited_papers_in_registry": (
+        "A citation names a paper no search or review in this run returned, so "
+        "it is treated as fabricated. Cite only papers listed as retrieved "
+        "above, by their arXiv id, or remove the citation. A DOI cannot have "
+        "been retrieved here; cite the arXiv id instead."
     ),
     "style.claim_sections_bound": (
         "A results section cites no measured value. State its findings with "

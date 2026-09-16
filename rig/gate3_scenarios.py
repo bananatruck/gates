@@ -7,8 +7,9 @@ against comes from playing a Gate 2 scenario, ``clean`` unless a scenario says
 otherwise, not from a hand-built dict (F12). That scenario's declared
 limitations come along with its registry.
 
-Numbered as in `GATE3_implementation_plan.md` §4 L3. Scenario 4 (citations)
-lands with ``source.cited_papers_in_registry``.
+Numbered as in `GATE3_implementation_plan.md` §4 L3, all six now played.
+``retrieved`` stands in for the host's search results and literature review,
+which no gate produces, so a scripted list is the honest stand-in for them.
 """
 
 from __future__ import annotations
@@ -51,6 +52,11 @@ NUMBERLESS = _manuscript("SGC is much faster than GCN and reaches strong accurac
 #: The clean manuscript, with a place for Gate 2's declared limitations.
 WITH_LIMITATIONS = CLEAN + "\n\\section{Discussion}\n\\limitations{}\n"
 
+#: A related-work line citing a paper no search returned, and one citing a
+#: paper the run did retrieve.
+FABRICATED = CLEAN + "\n\\section{Related Work}\nWe follow (arXiv 2501.00001v1).\n"
+RETRIEVED_CITED = CLEAN + "\n\\section{Related Work}\nWe follow (arXiv 1902.07153v2).\n"
+
 
 @dataclass(frozen=True)
 class Turn:
@@ -78,6 +84,9 @@ class Scenario:
     #: The Gate 2 scenario whose registry and declared limitations this one
     #: writes from.
     gate2: str = "clean"
+    #: The paper ids the host retrieved. ``None``: the host does not say, and
+    #: citations go unchecked.
+    retrieved: tuple[str, ...] | None = None
 
 
 CLEAN_RUN = Scenario(
@@ -136,6 +145,23 @@ NO_NUMBERS_IN_RESULTS = Scenario(
     expect_turns=2,
 )
 
+FABRICATED_CITATION = Scenario(
+    name="fabricated-citation",
+    summary="A citation no search returned is rejected; the revision cites a retrieved paper.",
+    turns=(
+        Turn(
+            "cites arXiv 2501.00001v1, which nothing retrieved",
+            FABRICATED,
+            expect_fail=("source.cited_papers_in_registry",),
+            expect_feedback=("not retrieved: 2501.00001v1",),
+        ),
+        Turn("cites arXiv 1902.07153v2 from the search results", RETRIEVED_CITED, expect_pass=True),
+    ),
+    expect_outcome="pass",
+    expect_turns=2,
+    retrieved=("2410.21676v4", "1902.07153v2"),
+)
+
 UNDECLARED_LIMITATION = Scenario(
     name="undeclared-limitation",
     summary="Gate 2 proceeded on a divergence; a paper that omits it is rejected until it states it.",
@@ -178,5 +204,6 @@ SCENARIOS: dict[str, Scenario] = {
         UNKNOWN_TOKEN,
         NO_NUMBERS_IN_RESULTS,
         UNDECLARED_LIMITATION,
+        FABRICATED_CITATION,
     )
 }

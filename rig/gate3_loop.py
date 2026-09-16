@@ -128,6 +128,7 @@ def run_gate3_loop(
             write,
             registry=reviewed.registry,
             declared=reviewed.declared,
+            retrieved=None if scenario.retrieved is None else lambda: scenario.retrieved,
             extra={"scenario": scenario.name},
         )
         outcome.outcome = written.outcome
