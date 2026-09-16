@@ -131,3 +131,16 @@ def test_json_cli_output_is_machine_parseable(capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["scenarios"][0]["outcome"] == "raised"
     assert payload["scenarios"][0]["problems"] == []
+
+
+def test_a_results_section_that_cites_nothing_is_sent_back(played):
+    """Scenario 5, the degenerate evasion. A writer that stops typing numbers
+    and stops citing them too passes every binding check; this one catches it
+    and hands back the keys it could have cited."""
+    outcome = played["no-numbers-in-results"]
+    first = outcome.turns[0]
+
+    assert outcome.outcome == "pass"
+    assert [turn.passed for turn in outcome.turns] == [False, True]
+    assert {c.id for c in first.report.failed_checks()} == {"style.claim_sections_bound"}
+    assert "recorded: config.epochs, config.lr, exp1.acc" in first.feedback

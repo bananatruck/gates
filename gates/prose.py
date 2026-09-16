@@ -121,6 +121,22 @@ def claim_sections(paper_text: str) -> list[str]:
     return found
 
 
+def sections(paper_text: str) -> list[tuple[str, str]]:
+    """Each top-level section as ``(heading, body)``, in order.
+
+    Text before the first heading is ``"preamble"``. Subsections stay in their
+    section's body, for the same reason :func:`_heading` ignores them.
+    """
+    out: list[tuple[str, list[str]]] = [("preamble", [])]
+    for line in paper_text.splitlines():
+        heading = _heading(line)
+        if heading is None:
+            out[-1][1].append(line)
+        else:
+            out.append((heading, []))
+    return [(heading, "\n".join(body)) for heading, body in out]
+
+
 def extract_claims(paper_text: str) -> list[Claim]:
     """Numeric claims in the sections where a paper states its findings."""
     claims: list[Claim] = []

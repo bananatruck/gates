@@ -260,6 +260,81 @@ def test_a_figure_reached_by_escaping_the_run_fails(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# style.claim_sections_bound
+# --------------------------------------------------------------------------- #
+
+NUMBERLESS = r"""
+\section{Results}
+SGC is much faster than GCN and reaches strong accuracy.
+
+\section{Discussion}
+The results suggest SGC is a good default.
+"""
+
+
+def test_a_results_section_that_cites_nothing_fails(tmp_path):
+    """The degenerate evasion. Nothing was typed and nothing was cited, so every
+    binding check passed while the paper reported no result at all."""
+    report = run_gate3(NUMBERLESS, registry(RECORDED), config(tmp_path))
+    assert report.verdict is Verdict.FAIL
+    bound = check(report, "style.claim_sections_bound")
+    assert not bound.passed
+    assert bound.evidence["unbound"] == ["results"]
+
+
+def test_only_a_results_section_must_cite_a_measurement(tmp_path):
+    """A discussion with no number in it is honest writing."""
+    paper = TOKENISED + "\n\\section{Discussion}\nThe label budget matters less than expected.\n"
+    report = run_gate3(paper, registry(RECORDED), config(tmp_path))
+    assert report.verdict is Verdict.PASS
+    assert check(report, "style.claim_sections_bound").passed
+
+
+def test_a_subsection_counts_toward_its_results_section(tmp_path):
+    paper = (
+        "\\section{Results}\nOverview first.\n"
+        "\\subsection{Accuracy}\nWe reach \\result{exp1.acc_at_400}.\n"
+    )
+    report = run_gate3(paper, registry(RECORDED), config(tmp_path))
+    assert check(report, "style.claim_sections_bound").passed
+
+
+def test_a_markdown_results_section_is_held_to_the_same_rule(tmp_path):
+    paper = "## Key Results\nAccuracy improves once every label is used.\n"
+    report = run_gate3(paper, registry(RECORDED), config(tmp_path))
+    assert check(report, "style.claim_sections_bound").evidence["unbound"] == ["key results"]
+
+
+def test_no_results_section_emits_no_binding_check(tmp_path):
+    """Absent, not green. A missing Results heading is style.sections_present's
+    to catch, when the host declares its sections (D27)."""
+    paper = "\\section{Discussion}\nThe label budget matters less than expected.\n"
+    report = run_gate3(paper, registry(RECORDED), config(tmp_path))
+    assert check(report, "style.claim_sections_bound") is None
+
+
+def test_a_manuscript_with_no_numbers_is_not_called_fully_cited(tmp_path):
+    """The literal scanner passed NUMBERLESS saying every number came from a
+    token. There were no numbers, and a report that says more than was checked
+    is the defect this gate exists to catch."""
+    literals = check(
+        run_gate3(NUMBERLESS, registry(RECORDED), config(tmp_path)),
+        "report.no_numeric_literals_in_results",
+    )
+    assert literals.passed
+    assert "every number came from a result token" not in literals.message
+    assert "no result token" in literals.message
+
+
+def test_the_writer_is_told_which_section_and_which_keys(tmp_path):
+    text = render_feedback(run_gate3(NUMBERLESS, registry(RECORDED), config(tmp_path)))
+    assert "[style.claim_sections_bound]" in text
+    assert "results: no \\result{} token" in text
+    assert "recorded: exp1.acc_at_100, exp1.acc_at_400, exp1.efficiency" in text
+    assert "REQUIRED FIXES" in text
+
+
+# --------------------------------------------------------------------------- #
 # the feedback report
 # --------------------------------------------------------------------------- #
 
@@ -285,6 +360,32 @@ def test_feedback_lists_every_key_the_writer_may_cite(tmp_path):
     paper = "\\section{Results}\nAccuracy was \\result{exp9.acc}.\n"
     text = render_feedback(run_gate3(paper, registry(six), config(tmp_path)))
     assert "  recorded: " + ", ".join(sorted(six)) + "\n" in text
+
+
+def test_every_check_gate3_emits_can_be_rendered_and_has_a_fix(tmp_path):
+    """D14 for Gate 3, the same guard Gate 2 has. A keyed lookup that misses
+    renders nothing, and the writer gets a rejection it cannot act on.
+
+    Every check the fixture emits must also fail, so a check added later that
+    this fixture does not trip shows up here instead of passing unguarded."""
+    from gates.gate3 import render_result_tokens
+    from gates.registry import citable_values
+    from gates.report import _EVIDENCE_RENDERERS, _FIXES
+
+    reg = registry(RECORDED)
+    paper = (
+        "\\section{Results}\nAccuracy was 0.97, or \\result{exp1.acc_at_400} "
+        "against \\result{exp1.invented}.\n\\includegraphics{absent.png}\n"
+        "\\section{Further Results}\nSGC is fast.\n"
+    )
+    self_rendered, _ = render_result_tokens(paper, citable_values(reg))
+    tampered = self_rendered.replace("0.97", "0.98")
+    report = run_gate3(paper, reg, config(tmp_path, figure_root=str(tmp_path), rendered=tampered))
+    emitted = {c.id for c in report.checks}
+
+    assert emitted == {c.id for c in report.failed_checks()}
+    assert sorted(i for i in emitted if i not in _EVIDENCE_RENDERERS) == []
+    assert sorted(i for i in emitted if i not in _FIXES) == []
 
 
 # --------------------------------------------------------------------------- #

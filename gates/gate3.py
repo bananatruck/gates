@@ -2,17 +2,22 @@
 
 > Does every number in the manuscript trace to something that was measured?
 
-Structurally this is Gate 2's sibling, not Gate 1's: it takes an artifact that
-already exists, runs nothing, and issues a deterministic verdict. Nothing in
-``runner.py`` or ``harness.py`` has an analogue here.
+Structurally this mirrors Gate 1 (D30): a flat list of checks, a
+reject-and-retry loop back to the agent that wrote the artifact, and a raise
+when the budget is spent. Gate 1 verifies code by running it. Gate 3 verifies a
+manuscript's words and sources against the registry Gate 1 wrote, and runs
+nothing. The loop is ``report_loop`` in the adapter (D29).
 
-The tiers, each activated by what the caller supplies:
+There are no tiers (D7). Families group the checks for discussion only, and
+each check runs when its input exists:
 
-    A  report.no_numeric_literals_in_results   FAIL   always
-       report.all_tokens_resolve               FAIL   always
-       report.rendered_values_match_registry   FAIL   always
-       report.figures_referenced_exist         FAIL   iff the manuscript
-                                                      references a figure
+    report.no_numeric_literals_in_results   FAIL   always
+    report.all_tokens_resolve               FAIL   always
+    report.rendered_values_match_registry   FAIL   always
+    report.figures_referenced_exist         FAIL   iff the manuscript
+                                                   references a figure
+    style.claim_sections_bound              FAIL   iff the manuscript has a
+                                                   results section
 
 **What "eliminated by construction" actually means.** The claim in `PLAN.md`
 §5.2 is a property of the *pipeline*, not of a scanner: the writer emits
@@ -35,7 +40,7 @@ from pathlib import Path
 from typing import Any
 
 from .errors import GateError
-from .prose import claim_sections, extract_claims
+from .prose import claim_sections, extract_claims, sections
 from .registry import citable_values
 from .schema import CheckResult, GateReport, Severity, decide
 
@@ -163,10 +168,17 @@ def _check_no_numeric_literals(source: str) -> CheckResult:
             f"{len(literals)} bare numeral(s) in a results context, e.g. "
             f"{literals[0]['value']!r} in \"{literals[0]['context']}\""
         )
-    else:
+    elif RESULT_TOKEN.search(source):
         message = (
             f"no bare numeral in {len(sections)} findings section(s); every "
             f"number came from a result token"
+        )
+    else:
+        # Saying "every number came from a token" here would describe numbers
+        # that do not exist. style.claim_sections_bound judges the absence.
+        message = (
+            f"no bare numeral in {len(sections)} findings section(s), and no "
+            f"result token either: the manuscript states no number at all"
         )
 
     return CheckResult(
@@ -307,6 +319,54 @@ def _check_figures_exist(source: str, figure_root: str | None) -> CheckResult | 
     )
 
 
+def _check_claim_sections_bound(
+    source: str, values: dict[str, Any]
+) -> CheckResult | None:
+    """Every results section cites at least one measured value.
+
+    The degenerate evasion: a writer rejected for typed numbers stops writing
+    numbers, and every binding check above passes a paper that reports nothing
+    measured. Only sections whose heading contains "results" are held to it. A
+    discussion with no number in it is honest writing, and failing it would
+    cost the writer a turn, or on the last turn the paper.
+
+    Returns ``None`` when there is no results section. A missing Results heading
+    is ``style.sections_present``'s to catch, when the host declares its
+    sections (D27). Tokens count whether or not they resolve, since
+    ``report.all_tokens_resolve`` already fails an unknown key.
+    """
+    counted = [
+        {"section": heading, "tokens": len(RESULT_TOKEN.findall(body))}
+        for heading, body in sections(source)
+        if "results" in heading
+    ]
+    if not counted:
+        return None
+    unbound = [row["section"] for row in counted if not row["tokens"]]
+    return CheckResult(
+        id="style.claim_sections_bound",
+        passed=not unbound,
+        severity=Severity.FAIL,
+        message=(
+            f"{len(unbound)} results section(s) cite no measured value: "
+            f"{', '.join(unbound)}"
+            if unbound
+            else f"{len(counted)} results section(s) each cite a measured value"
+        ),
+        evidence={
+            "sections": counted,
+            "unbound": unbound,
+            # The keys the writer can cite, so the fix is actionable.
+            "recorded": sorted(values),
+            "discrepancies": [
+                f"the {name!r} section states its results without citing a "
+                f"single measured value"
+                for name in unbound
+            ],
+        },
+    )
+
+
 # --------------------------------------------------------------------------- #
 # the gate
 # --------------------------------------------------------------------------- #
@@ -340,9 +400,12 @@ def run_gate3(
         _check_tokens_resolve(source, values),
         _check_rendered_matches(rendered, subs, values, origin),
     ]
-    figures = _check_figures_exist(source, config.figure_root)
-    if figures is not None:
-        checks.append(figures)
+    for optional in (
+        _check_figures_exist(source, config.figure_root),
+        _check_claim_sections_bound(source, values),
+    ):
+        if optional is not None:
+            checks.append(optional)
 
     artifact_dir = config.attempt_dir(attempt)
     artifact_dir.mkdir(parents=True, exist_ok=True)

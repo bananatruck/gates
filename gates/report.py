@@ -347,6 +347,13 @@ def _evidence_figures(check: CheckResult) -> list[str]:
     return out
 
 
+def _evidence_unbound_sections(check: CheckResult) -> list[str]:
+    out = [f"  {name}: no \\result{{}} token" for name in check.evidence.get("unbound", [])]
+    if check.evidence.get("recorded"):
+        out.append("  recorded: " + ", ".join(check.evidence["recorded"]))
+    return out
+
+
 def _carry_forward(report: GateReport) -> list[str]:
     """Declared discrepancies belonging to checks that passed.
 
@@ -392,6 +399,7 @@ _EVIDENCE_RENDERERS = {
     "report.all_tokens_resolve": _evidence_missing_keys,
     "report.rendered_values_match_registry": _evidence_mismatches,
     "report.figures_referenced_exist": _evidence_figures,
+    "style.claim_sections_bound": _evidence_unbound_sections,
 }
 
 
@@ -499,6 +507,12 @@ _FIXES = {
         "A referenced figure is missing or was not produced by this run. "
         "Generate the figure inside the run's artifact directory, or remove "
         "the reference."
+    ),
+    "style.claim_sections_bound": (
+        "A results section cites no measured value. State its findings with "
+        "\\result{<key>}, using the recorded keys listed above. Describing "
+        "results without numbers does not pass: a paper with no measured "
+        "result is not a report of one."
     ),
     "env.code_identity": (
         "The source that ran does not hash to the source submitted. Report this "

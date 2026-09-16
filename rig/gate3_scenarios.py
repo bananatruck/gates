@@ -7,8 +7,7 @@ against comes from playing Gate 2's ``clean`` scenario, not from a hand-built
 dict (F12).
 
 Numbered as in `GATE3_implementation_plan.md` §4 L3. Scenario 4 (citations)
-lands with ``source.cited_papers_in_registry`` and scenario 5 (a findings
-section with nothing bound) with ``style.claim_sections_bound``.
+lands with ``source.cited_papers_in_registry``.
 """
 
 from __future__ import annotations
@@ -44,6 +43,9 @@ UNKNOWN = _manuscript(
     "SGC reaches a test accuracy of \\result{exp1.acc} and an F1 of "
     "\\result{exp1.f1}."
 )
+
+#: Neither typed nor cited: the Results section states nothing measured.
+NUMBERLESS = _manuscript("SGC is much faster than GCN and reaches strong accuracy.")
 
 
 @dataclass(frozen=True)
@@ -111,6 +113,22 @@ UNKNOWN_TOKEN = Scenario(
     expect_turns=2,
 )
 
+NO_NUMBERS_IN_RESULTS = Scenario(
+    name="no-numbers-in-results",
+    summary="A Results section that cites nothing measured is rejected; the revision cites tokens.",
+    turns=(
+        Turn(
+            "results described without a number",
+            NUMBERLESS,
+            expect_fail=("style.claim_sections_bound",),
+            expect_feedback=("results: no \\result{} token",),
+        ),
+        Turn("results cited with tokens", CLEAN, expect_pass=True),
+    ),
+    expect_outcome="pass",
+    expect_turns=2,
+)
+
 BUDGET_EXHAUSTS = Scenario(
     name="budget-exhausts",
     summary="The writer types the accuracy on every turn. Raises; no manuscript.",
@@ -129,5 +147,11 @@ BUDGET_EXHAUSTS = Scenario(
 
 SCENARIOS: dict[str, Scenario] = {
     s.name: s
-    for s in (BUDGET_EXHAUSTS, CLEAN_RUN, TYPED_LITERAL_FIXED, UNKNOWN_TOKEN)
+    for s in (
+        BUDGET_EXHAUSTS,
+        CLEAN_RUN,
+        TYPED_LITERAL_FIXED,
+        UNKNOWN_TOKEN,
+        NO_NUMBERS_IN_RESULTS,
+    )
 }
