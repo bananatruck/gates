@@ -15,9 +15,9 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: feature/gate2-feedback-loop
-head: 343c9fe
+head: d1fad72
 head_date: 2026-09-16
-tests_total: 480
+tests_total: 491
 tests_gate1: 98
 tests_gate2: 92
 tests_gate3: 28
@@ -72,7 +72,7 @@ forever, but an unverifiable manuscript must not ship.
 | Gate 3 — `report.*` regex checks | numeric + figure binding done | `run_gate3()` | 19 of 28 |
 | Gate 3 — `source.*` | **not written** | — | 0 |
 | Gate 3 — `style.*` | **not written** | — | 0 |
-| Gate 3 loop | **adapter half done** (step 2): `make_report_context()`, `gated_report()`, `report_loop()`, `ReportOutcome`. A spent budget raises; a Gate 1-rejected registry is refused before `write` runs. Rig half (step 3) not written. | `gates/adapters/agentlab.py` `report_loop()` | 9, in `tests/test_gate3.py` |
+| Gate 3 loop | **complete for the existing checks, model-free.** Adapter half (step 2): `make_report_context()`, `gated_report()`, `report_loop()`, `ReportOutcome`; a spent budget raises; a Gate 1-rejected registry is refused before `write` runs. Rig half (step 3): 4 scenarios; the registry comes from Gate 2's `clean` run; a raised loop is rebuilt from `context.history`. Scenarios 4 and 5 wait on their checks. | `gates/adapters/agentlab.py` `report_loop()`, driven by `rig/gate3_loop.py` | 9 in `tests/test_gate3.py`, 11 in `tests/test_gate3_loop.py` |
 | LLM scan layer | complete, Gate 1 only | `gates/llm_scan.py` | 21 |
 | LLM plumbing (`ModelFn`, budget) | complete, Gate 1 only | `gates/llm.py` | 14 |
 | `gates/gate2_semantic.py` | **deleted** 09-13 (D4). Gate 2 is model-free (D19) | - | 15 removed |
@@ -112,7 +112,7 @@ Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adap
 1. Gate 3, in this order (revised 09-16 from `GATE3_implementation_plan.md` §6). Red test first each step, full suite, commit, push.
    1. ~~B4~~ done.
    2. ~~Adapter entry point~~ done. Was: `make_report_context()` + `gated_report()` in the adapter, shaped like `review_loop`: `revise` returns the next manuscript; a spent budget raises `GateFailure`. Inputs from Gate 2: `ReviewOutcome.registry` (values to bind) and `ReviewOutcome.declared` (D28). `rig/loop.py` is Gate 1-wired (`run_loop`, `rig/loop.py:198`) and stays unchanged.
-   3. `rig/gate3_loop.py` + scenarios 1, 2, 3, 6 (existing checks only). Plan approved 09-16: `clean`, `typed-literal-fixed`, `unknown-token`, `budget-exhausts`; the registry comes from a real `run_gate2_loop` of Gate 2's `clean` scenario, not a hand-built dict.
+   3. ~~`rig/gate3_loop.py` + scenarios 1, 2, 3, 6~~ done. Was (existing checks only), plan approved 09-16: `clean`, `typed-literal-fixed`, `unknown-token`, `budget-exhausts`; the registry comes from a real `run_gate2_loop` of Gate 2's `clean` scenario, not a hand-built dict.
    4. `style.claim_sections_bound` + scenario 5. Fix the "tiers" wording in the `gates/gate3.py` docstring.
    5. Declared-limitations check (D28), with renderer and fix directive (D14).
    6. `PaperRecord`, registry (D25, D26), `source.cited_papers_in_registry` + scenario 4.
@@ -197,5 +197,6 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `5ab0bf3` | Gate 2 marked complete in this repo; components, D24, next steps (Gate 3 planning). 471 tests. |
 | 09-16 | `4508891` | Gate 3 step 1: B4 closed, `ARCHIVED` asserts 29 literals over abstract, results, discussion (red on the old 8 first). D25-D28 recorded, Gate 3 order revised. 471 tests. |
 | 09-16 | `343c9fe` | Gate 3 step 2: `make_report_context`, `gated_report`, `report_loop`, `ReportOutcome`; `gate3.RENDERED_FILENAME`; `loop_summary` filtered to Gate 2 (red first: a Gate 3 turn counted as a Gate 2 run). D29. 480 tests. |
+| 09-16 | *this* | Gate 3 step 3: `rig/gate3_loop.py`, `rig/gate3_scenarios.py` (`clean`, `typed-literal-fixed`, `unknown-token`, `budget-exhausts`), `tests/test_gate3_loop.py` (11, red first on the spent budget). Registry from a real Gate 2 `clean` run; the provenance test fails on a hand-built registry. README rig line. 491 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.

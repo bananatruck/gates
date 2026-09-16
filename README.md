@@ -351,6 +351,7 @@ raising.
 
 ```bash
 python -m rig.gate2_loop              # six scenarios, full transcript
+python -m rig.gate3_loop              # four scenarios; a spent budget raises
 python -m rig.gate2_tier_comparison   # what tiers A, B and C each add
 ```
 
