@@ -279,7 +279,7 @@ def test_feedback_lists_the_keys_that_were_available(tmp_path):
 ARCHIVED = (
     REPO
     / "reports/finalized-report-and-results/verification/papers/gated"
-    / "generated_readme.md"
+    / "generated_report.txt"
 )
 
 
@@ -290,9 +290,15 @@ def test_the_archived_manuscript_types_its_own_numbers(tmp_path):
     Gate 1 gated the *execution* of that run. Nothing gated the writing, so the
     model typed the digits directly. Gate 3 rejects it, which is the correct
     outcome and the reason the writing phase needs a gate of its own.
+
+    The subject is the manuscript itself, LaTeX despite the ``.txt`` suffix.
+    This test once read ``generated_readme.md``, a summary the scanner sees as
+    one section holding 8 literals, which understated the result (B4).
     """
     report = run_gate3(ARCHIVED.read_text(), registry(RECORDED), config(tmp_path))
     literals = check(report, "report.no_numeric_literals_in_results")
     assert report.verdict is Verdict.FAIL
-    assert literals.evidence["sections_scanned"] == ["key results"]
-    assert len(literals.evidence["literals"]) == 8
+    assert literals.evidence["sections_scanned"] == [
+        "abstract", "results", "discussion"
+    ]
+    assert len(literals.evidence["literals"]) == 29

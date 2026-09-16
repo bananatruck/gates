@@ -15,7 +15,7 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: feature/gate2-feedback-loop
-head: 12bf4a0
+head: 5ab0bf3
 head_date: 2026-09-16
 tests_total: 471
 tests_gate1: 98
@@ -102,15 +102,24 @@ Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adap
 
 | ID | Blocker | Blocks | Opened |
 |---|---|---|---|
-| B2 | Gate 3 `source.*` needs network, rate limits, caching, and an offline fallback so the suite stays hermetic. Only non-offline component in the plan. Build order puts it last deliberately. | Gate 3 step 5 | 09-10 |
+| B2 | Gate 3 `source.*` needs network, rate limits, caching, and an offline fallback so the suite stays hermetic. Only non-offline component in the plan. Build order puts it last deliberately. Since D25/D26 only `source.identifiers_resolve` needs it. | Gate 3 step 9 | 09-10 |
 | B3 | `PR_SET_DUMPABLE` guard is inert under uid 0; not detected, not reported. Skips on macOS. CI runs non-root so CI is green. | portability claim | 09-07 |
-| B4 | Gate 3 `ARCHIVED` fixture points at `generated_readme.md` (8 literals) not `generated_report.txt` (29). | Gate 3 headline number | 09-07 |
 
-**Closed:** B8 (decoy hole) - 09-14: Gate 1 records `provenance.used_by_run` from `static_checks.find_unused_record_values`; tier B reports a recorded-but-unread plan value as unverifiable `unused` (WARN, D17). Ceiling: names only, see the `ponytail:` comment. B1 (benchmark selection) — MLR-Bench chosen, see D8. B7 (Gate 2 host entry point) — `make_review_context()` added 09-11; `test_the_host_wiring_path_actually_reaches_gate_2` keeps it reachable. B5 (unpushed WIP loop) - restated 09-13: that loop targets the retired `sources`/`consult_model` API, so tier C is rebuilt from `main`; the old code survives only on the local branch `backup/local-main-f1b9fe2`. B6 (host retrieval registry) - yes: Agent Laboratory keeps `self.lit_review`, entries keyed by `arxiv_id` (`AgentLaboratory/agents.py:574,682`); see D21.
+**Closed:** B4 (Gate 3 headline) - 09-16: `ARCHIVED` reads `generated_report.txt`, 29 literals in abstract, results, discussion; was `generated_readme.md`, 8. B8 (decoy hole) - 09-14: Gate 1 records `provenance.used_by_run` from `static_checks.find_unused_record_values`; tier B reports a recorded-but-unread plan value as unverifiable `unused` (WARN, D17). Ceiling: names only, see the `ponytail:` comment. B1 (benchmark selection) — MLR-Bench chosen, see D8. B7 (Gate 2 host entry point) — `make_review_context()` added 09-11; `test_the_host_wiring_path_actually_reaches_gate_2` keeps it reachable. B5 (unpushed WIP loop) - restated 09-13: that loop targets the retired `sources`/`consult_model` API, so tier C is rebuilt from `main`; the old code survives only on the local branch `backup/local-main-f1b9fe2`. B6 (host retrieval registry) - yes: Agent Laboratory keeps `self.lit_review`, entries keyed by `arxiv_id` (`AgentLaboratory/agents.py:574,682`); see D21.
 
 ## next steps
 
-1. Gate 3 planning, then build per `GATE3_implementation_plan.md`, steps 1-9 in order, network work last. Gate 2 hands Gate 3 `ReviewOutcome.registry`, the values to bind, and `ReviewOutcome.declared`, the limitations the manuscript must state (F3 gate side). `gated_report()` in the adapter mirrors `review_loop` and raises on exhaustion (`CLAUDE.md` §4).
+1. Gate 3, in this order (revised 09-16 from `GATE3_implementation_plan.md` §6). Red test first each step, full suite, commit, push.
+   1. ~~B4~~ done.
+   2. `make_report_context()` + `gated_report()` in the adapter, shaped like `review_loop`: `revise` returns the next manuscript; a spent budget raises `GateFailure`. Inputs from Gate 2: `ReviewOutcome.registry` (values to bind) and `ReviewOutcome.declared` (D28). `rig/loop.py` is Gate 1-wired (`run_loop`, `rig/loop.py:198`) and stays unchanged.
+   3. `rig/gate3_loop.py` + scenarios 1, 2, 3, 6 (existing checks only).
+   4. `style.claim_sections_bound` + scenario 5. Fix the "tiers" wording in the `gates/gate3.py` docstring.
+   5. Declared-limitations check (D28), with renderer and fix directive (D14).
+   6. `PaperRecord`, registry (D25, D26), `source.cited_papers_in_registry` + scenario 4.
+   7. Remaining `style.*`, host-declared inputs only (D27).
+   8. G3-M4: measure scanner misses (`\begin{abstract}` unscanned, `\cite` lines skipped, readout §6), report, do not silently fix.
+   9. `source.identifiers_resolve` via injected `lookup` (B2). `citations_parse` and `metadata_agrees` have no input on Agent Laboratory: inline `(arXiv id)` citations, no bibliography.
+   Also: `PLAN.md` §5.1/§5.2 name `report.citations_*` and claim citations are "eliminated by construction"; reconcile with what is built.
 2. `env.parent_proc_guard` INFO check (B3).
 3. F9 + F8 with model spend; F11 last. F2 and F5 wait on a host call site (out of scope 09-14).
 
@@ -143,6 +152,10 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-14 | D23 | **Reference sources are declared, and bound to `lit_review`.** Partly reopens D9: `reference_interval` gets a host path. `SourceClaim`s arrive at wiring time like plan fields (D13); a `source_id` not in the host's `lit_review` raises `GateError`. Rejected: a model extracting claims from `full_text`, which would put a model upstream of a Gate 2 check (D19). Decided by Kesh. | `test_a_source_nobody_fetched_is_refused_at_wiring_time` |
 | 09-13 | D22 | **Scenario 4 is an unverifiable field, not a justified divergence.** D17 made divergence FAIL, so a justification changes nothing and that story is scenario 5. Gate 2's only WARN-and-proceed path is a declared field nobody can check. | `test_an_unverifiable_plan_warns_proceeds_and_reaches_the_writer` |
 | 09-16 | D24 | **Gate 2's loop takes code, not registries.** `review_loop` runs every revision under Gate 1 and reviews only the registry that run wrote. Gate 1 rejections cost Gate 1 turns and write `review_turn` ledger rows. Rejected: signing registries, which proves a table was not edited but not that a run produced it. | `test_a_revision_runs_under_gate_1_before_gate_2_sees_it` |
+| 09-16 | D25 | **Gate 3's retrieval registry is `lit_review` plus the writer's per-section arXiv search results.** Amends D21. The writer searches arXiv per section and is told to cite from those results (`papersolver.py:349-381`); the archived gated run cites 8 arXiv ids and `lit_review` holds 1 of them, so D21 alone flags 7 real papers. The fabrication targeted is an id nothing retrieved. Decided by Kesh. | pending - `source.cited_papers_in_registry` |
+| 09-16 | D26 | **Canonical identifier is the arXiv id, compared version-stripped**; a version mismatch is evidence, not a failure. No DOI fallback: the reference host never sees a DOI, so a cited DOI fails as not retrieved. Decided by Kesh. | pending - `source.cited_papers_in_registry` |
+| 09-16 | D27 | **`style.sections_present` checks sections the host declares at wiring time** (D13 pattern). No default list in `gates/`. Agent Laboratory's adapter declares its writer's list (`papersolver.py:352`). Decided by Kesh. | pending - `style.sections_present` |
+| 09-16 | D28 | **Declared limitations are rendered, not authored.** The renderer inserts Gate 2's `declared` block verbatim and Gate 3 checks it is present. Rejected: matching a writer's paraphrase, which no deterministic check can do. Decided by Kesh. | pending - Gate 3 limitations check |
 | 09-13 | D21 | **Gate 3's retrieval registry is Agent Laboratory's `lit_review`, `ADD_PAPER` entries only.** A paper read with `FULL_TEXT` but never added does not count as retrieved. Identifier is the host's `arxiv_id`. Decided by Kesh. | pending - Gate 3 `source.cited_papers_in_registry` |
 
 ## session log
@@ -180,6 +193,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `890f42f` | `ReviewOutcome.registry`: the last reviewed run's registry, the one the writer cites and Gate 3 checks. 463 tests. |
 | 09-16 | `444dc4d` | Tier comparison: `rig/gate2_tier_comparison.py`, `tests/test_gate2_tiers.py` (8). A vs A+B: 27/27 both, divergences 0 vs 12/12, unverifiable 0 vs 6/6, 0/35 false rejections both. A+B vs A+B+C over 6 scenarios: fixed 0 vs 3/4, declared 4 vs 1. 471 tests. |
 | 09-16 | `12bf4a0` | Docs: README (Gate 2 row, porting step 5, test counts, Gate 2 rig), PLAN.md (as-built note, step 6), CLAUDE.md count 471. 471 tests. |
-| 09-16 | *this* | Gate 2 marked complete in this repo; components, D24, next steps (Gate 3 planning). 471 tests. |
+| 09-16 | `5ab0bf3` | Gate 2 marked complete in this repo; components, D24, next steps (Gate 3 planning). 471 tests. |
+| 09-16 | *this* | Gate 3 step 1: B4 closed, `ARCHIVED` asserts 29 literals over abstract, results, discussion (red on the old 8 first). D25-D28 recorded, Gate 3 order revised. 471 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.
