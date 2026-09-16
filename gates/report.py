@@ -347,6 +347,14 @@ def _evidence_figures(check: CheckResult) -> list[str]:
     return out
 
 
+def _evidence_limitations(check: CheckResult) -> list[str]:
+    # Uncapped: the writer is told to state each of these, so each is shown.
+    out = [f"  not stated: {line}" for line in check.evidence.get("missing", [])]
+    if not check.evidence.get("token_found", True):
+        out.append("  no \\limitations{} token in the manuscript")
+    return out
+
+
 def _evidence_unbound_sections(check: CheckResult) -> list[str]:
     out = [f"  {name}: no \\result{{}} token" for name in check.evidence.get("unbound", [])]
     if check.evidence.get("recorded"):
@@ -399,6 +407,7 @@ _EVIDENCE_RENDERERS = {
     "report.all_tokens_resolve": _evidence_missing_keys,
     "report.rendered_values_match_registry": _evidence_mismatches,
     "report.figures_referenced_exist": _evidence_figures,
+    "report.limitations_declared": _evidence_limitations,
     "style.claim_sections_bound": _evidence_unbound_sections,
 }
 
@@ -507,6 +516,12 @@ _FIXES = {
         "A referenced figure is missing or was not produced by this run. "
         "Generate the figure inside the run's artifact directory, or remove "
         "the reference."
+    ),
+    "report.limitations_declared": (
+        "Gate 2 could not resolve the limitations listed above, so the paper "
+        "must state them. Put \\limitations{} where the paper discusses its "
+        "limitations and the renderer inserts them word for word. Do not "
+        "paraphrase them or leave them out."
     ),
     "style.claim_sections_bound": (
         "A results section cites no measured value. State its findings with "

@@ -3,8 +3,9 @@
 Each turn is the manuscript the writer submitted after reading the previous
 feedback, with its ``\\result{}`` tokens intact. Every token names a key from
 Gate 2's ``CLEAN`` table, because the registry these manuscripts are judged
-against comes from playing Gate 2's ``clean`` scenario, not from a hand-built
-dict (F12).
+against comes from playing a Gate 2 scenario, ``clean`` unless a scenario says
+otherwise, not from a hand-built dict (F12). That scenario's declared
+limitations come along with its registry.
 
 Numbered as in `GATE3_implementation_plan.md` §4 L3. Scenario 4 (citations)
 lands with ``source.cited_papers_in_registry``.
@@ -47,6 +48,9 @@ UNKNOWN = _manuscript(
 #: Neither typed nor cited: the Results section states nothing measured.
 NUMBERLESS = _manuscript("SGC is much faster than GCN and reaches strong accuracy.")
 
+#: The clean manuscript, with a place for Gate 2's declared limitations.
+WITH_LIMITATIONS = CLEAN + "\n\\section{Discussion}\n\\limitations{}\n"
+
 
 @dataclass(frozen=True)
 class Turn:
@@ -71,6 +75,9 @@ class Scenario:
     expect_outcome: str
     expect_turns: int
     max_attempts: int = 3
+    #: The Gate 2 scenario whose registry and declared limitations this one
+    #: writes from.
+    gate2: str = "clean"
 
 
 CLEAN_RUN = Scenario(
@@ -129,6 +136,23 @@ NO_NUMBERS_IN_RESULTS = Scenario(
     expect_turns=2,
 )
 
+UNDECLARED_LIMITATION = Scenario(
+    name="undeclared-limitation",
+    summary="Gate 2 proceeded on a divergence; a paper that omits it is rejected until it states it.",
+    turns=(
+        Turn(
+            "limitations left out",
+            CLEAN,
+            expect_fail=("report.limitations_declared",),
+            expect_feedback=("no \\limitations{} token",),
+        ),
+        Turn("\\limitations{} placed in the discussion", WITH_LIMITATIONS, expect_pass=True),
+    ),
+    expect_outcome="pass",
+    expect_turns=2,
+    gate2="divergence-exhausts",
+)
+
 BUDGET_EXHAUSTS = Scenario(
     name="budget-exhausts",
     summary="The writer types the accuracy on every turn. Raises; no manuscript.",
@@ -153,5 +177,6 @@ SCENARIOS: dict[str, Scenario] = {
         TYPED_LITERAL_FIXED,
         UNKNOWN_TOKEN,
         NO_NUMBERS_IN_RESULTS,
+        UNDECLARED_LIMITATION,
     )
 }

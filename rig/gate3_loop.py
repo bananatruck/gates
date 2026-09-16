@@ -10,9 +10,10 @@ Gate 3's loop is ``report_loop`` in the adapter, the same shape as Gate 2's
 verdict, a rejection renders a feedback report and costs one agent turn, and the
 budget lives in the adapter's ``GateContext``, never in the gate.
 
-The registry every manuscript is judged against comes from playing Gate 2's
-``clean`` scenario, so it was written by a run Gate 1 executed and Gate 2
-admitted. A hand-built registry would check a table no run wrote (F12).
+The registry every manuscript is judged against comes from playing a Gate 2
+scenario, ``clean`` unless the scenario names another, so it was written by a
+run Gate 1 executed and Gate 2 reviewed. A hand-built registry would check a
+table no run wrote (F12). Gate 2's declared limitations come with it.
 
 One deliberate difference from Gate 2, `CLAUDE.md` §4. A spent budget raises
 ``GateFailure`` and no manuscript is emitted.
@@ -81,8 +82,10 @@ class LoopOutcome:
     outcome: str = "no_pass"
     #: The admitted manuscript, rendered. ``None`` unless Gate 3 passed it.
     manuscript: str | None = None
-    #: What the manuscripts were judged against, from Gate 2's ``clean`` run.
+    #: What the manuscripts were judged against, from the scenario's Gate 2 run.
     registry: dict[str, Any] | None = None
+    #: What that Gate 2 run declared, which the manuscript must state.
+    declared: str = ""
     ledger_path: str | None = None
 
     @property
@@ -101,11 +104,12 @@ def run_gate3_loop(
     workdir.mkdir(parents=True, exist_ok=True)
     writer = writer or ScriptedWriter(scenario)
 
-    registry = run_gate2_loop(GATE2_SCENARIOS["clean"], workdir=workdir).registry
+    reviewed = run_gate2_loop(GATE2_SCENARIOS[scenario.gate2], workdir=workdir)
     context = make_report_context(research_dir=str(workdir), max_attempts=scenario.max_attempts)
     outcome = LoopOutcome(
         scenario=scenario.name,
-        registry=registry,
+        registry=reviewed.registry,
+        declared=reviewed.declared,
         ledger_path=str(context.ledger.path) if context.ledger else None,
     )
 
@@ -119,7 +123,13 @@ def run_gate3_loop(
         return turn.manuscript
 
     try:
-        written = report_loop(context, write, registry=registry, extra={"scenario": scenario.name})
+        written = report_loop(
+            context,
+            write,
+            registry=reviewed.registry,
+            declared=reviewed.declared,
+            extra={"scenario": scenario.name},
+        )
         outcome.outcome = written.outcome
         outcome.manuscript = written.manuscript
     except GateFailure:

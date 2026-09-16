@@ -335,6 +335,105 @@ def test_the_writer_is_told_which_section_and_which_keys(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# report.limitations_declared
+# --------------------------------------------------------------------------- #
+
+#: What Gate 2's review_loop hands over after a spent budget, verbatim.
+DECLARED = (
+    "DECLARED LIMITATIONS\n\n"
+    "  - config.lr: the plan declared 0.001 and the run recorded 0.01 "
+    "(plan L4: learning rate 0.001)\n"
+)
+
+WITH_LIMITATIONS = TOKENISED + "\n\\section{Discussion}\n\\limitations{}\n"
+
+
+def test_declared_limitations_are_rendered_word_for_word(tmp_path):
+    """D28. Rendered, not authored: the writer places the token and the renderer
+    inserts Gate 2's text, so no paraphrase can soften it."""
+    report = run_gate3(WITH_LIMITATIONS, registry(RECORDED), config(tmp_path),
+                       declared=DECLARED)
+    rendered = (pathlib.Path(report.artifact_dir) / "manuscript.rendered").read_text()
+    assert report.verdict is Verdict.PASS
+    assert check(report, "report.limitations_declared").passed
+    assert "\\begin{verbatim}\n" + DECLARED + "\\end{verbatim}" in rendered
+    assert "\\limitations{}" not in rendered
+
+
+def test_a_manuscript_without_the_limitations_token_fails(tmp_path):
+    report = run_gate3(TOKENISED, registry(RECORDED), config(tmp_path),
+                       declared=DECLARED)
+    declared = check(report, "report.limitations_declared")
+    assert report.verdict is Verdict.FAIL
+    assert declared.evidence["token_found"] is False
+    assert declared.evidence["missing"] == [
+        "DECLARED LIMITATIONS",
+        "- config.lr: the plan declared 0.001 and the run recorded 0.01 "
+        "(plan L4: learning rate 0.001)",
+    ]
+
+
+def test_nothing_to_declare_emits_no_limitations_check(tmp_path):
+    """Absent, not green. The token is still allowed and renders as nothing."""
+    report = run_gate3(WITH_LIMITATIONS, registry(RECORDED), config(tmp_path))
+    rendered = (pathlib.Path(report.artifact_dir) / "manuscript.rendered").read_text()
+    assert check(report, "report.limitations_declared") is None
+    assert "\\limitations{}" not in rendered
+    assert report.verdict is Verdict.PASS
+
+
+def test_a_host_render_that_drops_a_limitation_fails(tmp_path):
+    """When the host renders, its text is the one checked."""
+    from gates.gate3 import render_result_tokens
+    from gates.registry import citable_values
+
+    own, _ = render_result_tokens(WITH_LIMITATIONS, citable_values(registry(RECORDED)),
+                                  declared=DECLARED)
+    dropped = own.replace("the run recorded 0.01", "the run differed")
+    report = run_gate3(WITH_LIMITATIONS, registry(RECORDED),
+                       config(tmp_path, rendered=dropped), declared=DECLARED)
+    declared = check(report, "report.limitations_declared")
+    assert declared.evidence["token_found"] is True
+    assert declared.evidence["origin"] == "supplied"
+    assert len(declared.evidence["missing"]) == 1
+    assert report.verdict is Verdict.FAIL
+
+
+def test_numbers_inside_a_limitation_are_not_typed_literals(tmp_path):
+    """0.001 and 0.01 arrive with Gate 2's text, not from the writer's hand."""
+    paper = "\\section{Results}\nWe reach \\result{exp1.acc_at_400}.\n\\limitations{}\n"
+    report = run_gate3(paper, registry(RECORDED), config(tmp_path), declared=DECLARED)
+    assert check(report, "report.no_numeric_literals_in_results").passed
+    assert report.verdict is Verdict.PASS
+
+
+def test_result_values_placed_after_the_limitations_still_match(tmp_path):
+    """The block is inserted before result tokens, so their offsets stay true."""
+    paper = "\\section{Results}\n\\limitations{}\nWe reach \\result{exp1.acc_at_400}.\n"
+    report = run_gate3(paper, registry(RECORDED), config(tmp_path), declared=DECLARED)
+    assert check(report, "report.rendered_values_match_registry").passed
+
+
+def test_latex_specials_in_a_limitation_cannot_break_or_hide_it(tmp_path):
+    """A bare ``_`` stops LaTeX compiling, and a ``%`` comments out the rest of
+    its line, so the limitation would sit in the source and never print."""
+    from gates.gate3 import render_result_tokens
+
+    special = "DECLARED LIMITATIONS\n\n  - exp2.gcn.wallclock_s: 12% slower than declared\n"
+    rendered, _ = render_result_tokens("\\limitations{}", {}, declared=special)
+    assert rendered == "\\begin{verbatim}\n" + special + "\\end{verbatim}"
+
+
+def test_the_writer_is_told_to_place_the_limitations(tmp_path):
+    text = render_feedback(run_gate3(TOKENISED, registry(RECORDED), config(tmp_path),
+                                     declared=DECLARED))
+    assert "[report.limitations_declared]" in text
+    assert "no \\limitations{} token in the manuscript" in text
+    assert "the run recorded 0.01" in text
+    assert "Do not paraphrase" in text
+
+
+# --------------------------------------------------------------------------- #
 # the feedback report
 # --------------------------------------------------------------------------- #
 
@@ -380,7 +479,8 @@ def test_every_check_gate3_emits_can_be_rendered_and_has_a_fix(tmp_path):
     )
     self_rendered, _ = render_result_tokens(paper, citable_values(reg))
     tampered = self_rendered.replace("0.97", "0.98")
-    report = run_gate3(paper, reg, config(tmp_path, figure_root=str(tmp_path), rendered=tampered))
+    report = run_gate3(paper, reg, config(tmp_path, figure_root=str(tmp_path), rendered=tampered),
+                       declared="DECLARED LIMITATIONS\n\n  - a.b: unresolved\n")
     emitted = {c.id for c in report.checks}
 
     assert emitted == {c.id for c in report.failed_checks()}
@@ -434,6 +534,16 @@ def test_a_rejected_manuscript_goes_back_to_the_writer(tmp_path):
     assert write.sent[0] is None
     assert "\\result{<key>}" in write.sent[1]
     assert outcome.outcome == "pass"
+
+
+def test_the_loop_holds_the_writer_to_gate_2s_limitations(tmp_path):
+    """The declared block travels with the registry, both out of Gate 2's run."""
+    write = writer(TOKENISED, WITH_LIMITATIONS)
+    outcome = report_loop(report_context(tmp_path), write, registry=registry(RECORDED),
+                          declared=DECLARED)
+    assert [w.passed for w in outcome.reports] == [False, True]
+    assert "\\limitations{}" in write.sent[1]
+    assert "the run recorded 0.01" in outcome.manuscript
 
 
 def test_a_spent_budget_raises_and_emits_nothing(tmp_path):

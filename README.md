@@ -307,8 +307,8 @@ debugging aid.
 pip install -e ".[dev]" && pytest
 ```
 
-502 tests here: 98 for Gate 1, 126 for Gate 2 (checks, loop, and the tier
-comparison), 50 for Gate 3 (checks and loop), and the rest covering the value registry, the log
+513 tests here: 98 for Gate 1, 126 for Gate 2 (checks, loop, and the tier
+comparison), 61 for Gate 3 (checks and loop), and the rest covering the value registry, the log
 scanner, and Gate 1's loop. The host scaffold's integration suite is separate. Every check in the tables above is tied to
 the test that holds it in place in
 [`docs/GATE1_REQUIREMENTS.md`](docs/GATE1_REQUIREMENTS.md).
@@ -351,7 +351,7 @@ raising.
 
 ```bash
 python -m rig.gate2_loop              # six scenarios, full transcript
-python -m rig.gate3_loop              # five scenarios; a spent budget raises
+python -m rig.gate3_loop              # six scenarios; a spent budget raises
 python -m rig.gate2_tier_comparison   # what tiers A, B and C each add
 ```
 

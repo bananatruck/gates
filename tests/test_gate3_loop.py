@@ -113,17 +113,20 @@ def test_every_turn_lands_in_the_ledger_as_report_writing(played):
         ]
 
 
-def test_the_registry_came_from_a_run_gates_1_and_2_admitted(played):
+def test_the_registry_came_from_runs_gate_1_passed_and_gate_2_reviewed(played):
     """F12, one gate later. Gate 3 checks a table a run wrote, so the same
-    ledger holds the Gate 1 run that wrote it and the Gate 2 review that
-    admitted it, both passing."""
+    ledger holds every Gate 1 run behind it, all passing, and one Gate 2 review
+    per run. Gate 2 admitted the clean one and proceeded on the other."""
     for name, outcome in played.items():
         assert outcome.registry["citable"] is True, name
         verdicts = {
             gate: [r["verdict"] for r in Ledger(outcome.ledger_path).rows() if r["gate"] == gate]
             for gate in (GATE1, GATE2)
         }
-        assert verdicts == {GATE1: ["PASS"], GATE2: ["PASS"]}, name
+        assert verdicts[GATE1] and set(verdicts[GATE1]) == {"PASS"}, name
+        assert len(verdicts[GATE2]) == len(verdicts[GATE1]), name
+        if SCENARIOS[name].gate2 == "clean":
+            assert verdicts[GATE2] == ["PASS"], name
 
 
 def test_json_cli_output_is_machine_parseable(capsys):
@@ -144,3 +147,18 @@ def test_a_results_section_that_cites_nothing_is_sent_back(played):
     assert [turn.passed for turn in outcome.turns] == [False, True]
     assert {c.id for c in first.report.failed_checks()} == {"style.claim_sections_bound"}
     assert "recorded: config.epochs, config.lr, exp1.acc" in first.feedback
+
+
+def test_a_limitation_gate_2_declared_must_reach_the_paper(played):
+    """Gate 2 proceeded on a learning rate the run never fixed. The writer
+    leaves the limitation out and is sent back; the admitted paper states it
+    word for word, because the renderer wrote it, not the writer."""
+    outcome = played["undeclared-limitation"]
+
+    assert "the plan declared 0.001 and the run recorded 0.01" in outcome.declared
+    assert outcome.outcome == "pass"
+    assert [turn.passed for turn in outcome.turns] == [False, True]
+    assert {c.id for c in outcome.turns[0].report.failed_checks()} == {
+        "report.limitations_declared"
+    }
+    assert "the plan declared 0.001 and the run recorded 0.01" in outcome.manuscript

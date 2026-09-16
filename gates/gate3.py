@@ -16,6 +16,8 @@ each check runs when its input exists:
     report.rendered_values_match_registry   FAIL   always
     report.figures_referenced_exist         FAIL   iff the manuscript
                                                    references a figure
+    report.limitations_declared             FAIL   iff Gate 2 declared
+                                                   limitations
     style.claim_sections_bound              FAIL   iff the manuscript has a
                                                    results section
 
@@ -48,6 +50,10 @@ GATE_NAME = "GATE 3 — REPORT VALIDITY"
 
 #: The one thing a writing agent is allowed to emit where a number belongs.
 RESULT_TOKEN = re.compile(r"\\result\{([^}]+)\}")
+
+#: Where the writer places Gate 2's declared limitations (D28). Empty braces,
+#: like ``\result{key}``, and so TeX does not swallow the space after it.
+LIMITATIONS_TOKEN = re.compile(r"\\limitations\{\}")
 
 #: What the reader will see, written beside the report on every attempt.
 RENDERED_FILENAME = "manuscript.rendered"
@@ -96,7 +102,7 @@ class Gate3Config:
 
 
 def render_result_tokens(
-    source: str, values: dict[str, Any]
+    source: str, values: dict[str, Any], *, declared: str = ""
 ) -> tuple[str, list[Substitution]]:
     """Substitute every resolvable ``\\result{key}`` and log what was written.
 
@@ -109,7 +115,21 @@ def render_result_tokens(
     * **An unknown key renders as itself.** Leaving the token verbatim means
       ``report.all_tokens_resolve`` catches it. Substituting an empty string
       would turn a missing measurement into a silently malformed sentence.
+
+    ``declared`` replaces every ``\\limitations{}`` first, so the offsets
+    recorded below are offsets in the final text. It goes in a LaTeX
+    ``verbatim`` block: a bare ``_`` in a key name stops LaTeX compiling, and a
+    ``%`` would comment out the rest of its line, so the limitation would sit in
+    the source and never print. LaTeX only, since the reference host writes
+    LaTeX; a Markdown host would need a fenced block.
     """
+    # ponytail: a declared text containing \end{verbatim} would close the block
+    # early; Gate 2's messages never do, escape it if a host's can.
+    if declared and not declared.endswith("\n"):
+        declared += "\n"
+    block = f"\\begin{{verbatim}}\n{declared}\\end{{verbatim}}" if declared else ""
+    # A function, not a string, so re.sub reads no escapes in the block.
+    source = LIMITATIONS_TOKEN.sub(lambda _: block, source)
     subs: list[Substitution] = []
     out: list[str] = []
     cursor = 0
@@ -319,6 +339,45 @@ def _check_figures_exist(source: str, figure_root: str | None) -> CheckResult | 
     )
 
 
+def _check_limitations_declared(
+    source: str, rendered: str, declared: str, origin: str
+) -> CheckResult | None:
+    """Every line Gate 2 declared appears, word for word, in what the reader sees.
+
+    D28: rendered, not authored. The writer places ``\\limitations{}`` and the
+    renderer inserts the text, because no deterministic check can tell a
+    faithful paraphrase from a softened one. Lines are compared stripped, so a
+    host renderer that re-indents still passes and one that drops or edits a
+    line does not. Returns ``None`` when there is nothing to declare.
+    """
+    lines = [line.strip() for line in declared.splitlines() if line.strip()]
+    if not lines:
+        return None
+    missing = [line for line in lines if line not in rendered]
+    token_found = bool(LIMITATIONS_TOKEN.search(source))
+    if missing:
+        message = f"{len(missing)} of {len(lines)} declared limitation line(s) are not in the manuscript"
+        if not token_found:
+            message += ", which has no \\limitations{} token"
+    else:
+        message = f"{len(lines)} declared limitation line(s) stated word for word ({origin})"
+    return CheckResult(
+        id="report.limitations_declared",
+        passed=not missing,
+        severity=Severity.FAIL,
+        message=message,
+        evidence={
+            "missing": missing,
+            "token_found": token_found,
+            "origin": origin,
+            "discrepancies": [
+                f"Gate 2 declared a limitation the manuscript does not state: {line}"
+                for line in missing
+            ],
+        },
+    )
+
+
 def _check_claim_sections_bound(
     source: str, values: dict[str, Any]
 ) -> CheckResult | None:
@@ -377,12 +436,15 @@ def run_gate3(
     registry: dict[str, Any],
     config: Gate3Config,
     attempt: int = 1,
+    *,
+    declared: str = "",
 ) -> GateReport:
     """Judge one manuscript against the registry Gate 1 wrote.
 
     ``source`` is the writer's output with its result tokens intact. The gate
     renders it unless the host supplied its own render, then checks that what
-    the reader will see is what was measured.
+    the reader will see is what was measured. ``declared`` is Gate 2's
+    ``ReviewOutcome.declared``, the limitations the manuscript must state.
     """
     if not registry.get("citable"):
         raise GateError(
@@ -391,7 +453,7 @@ def run_gate3(
         )
     values = citable_values(registry)
 
-    self_rendered, subs = render_result_tokens(source, values)
+    self_rendered, subs = render_result_tokens(source, values, declared=declared)
     rendered = config.rendered if config.rendered is not None else self_rendered
     origin = "supplied" if config.rendered is not None else "self_rendered"
 
@@ -402,6 +464,7 @@ def run_gate3(
     ]
     for optional in (
         _check_figures_exist(source, config.figure_root),
+        _check_limitations_declared(source, rendered, declared, origin),
         _check_claim_sections_bound(source, values),
     ):
         if optional is not None:

@@ -596,16 +596,25 @@ def review_loop(
     return result
 
 
-def gated_report(source: str, registry: dict[str, Any], context: GateContext) -> GatedExecution:
+def gated_report(
+    source: str,
+    registry: dict[str, Any],
+    context: GateContext,
+    *,
+    declared: str = "",
+) -> GatedExecution:
     """Judge one manuscript under Gate 3 and return the verdict.
 
-    The mirror of :func:`gated_review` one phase later. ``source`` is the
-    writer's output with its ``\\result{}`` tokens intact. The evidence bundle
-    is the render Gate 3 wrote to disk, so what a host publishes is byte for
-    byte what the gate judged.
+    The mirror of :func:`gated_execute` one phase later (D30). ``source`` is the
+    writer's output with its ``\\result{}`` and ``\\limitations{}`` tokens
+    intact. ``declared`` is ``ReviewOutcome.declared``. The evidence bundle is
+    the render Gate 3 wrote to disk, so what a host publishes is byte for byte
+    what the gate judged.
     """
     context.attempt += 1
-    report = run_gate3(source, registry, context.config, attempt=context.attempt)
+    report = run_gate3(
+        source, registry, context.config, attempt=context.attempt, declared=declared
+    )
     report.rewrite = context.consecutive_rejections + 1
     context.note(report)
 
@@ -638,6 +647,7 @@ def report_loop(
     write: Callable[[str | None], str | None],
     *,
     registry: dict[str, Any],
+    declared: str = "",
     extra: dict[str, Any] | None = None,
 ) -> ReportOutcome:
     """Gate 3's feedback loop: the one call site a host's writing phase needs.
@@ -645,8 +655,10 @@ def report_loop(
     ``write(feedback)`` returns the next manuscript with its ``\\result{}``
     tokens intact, or ``None`` to stop, and is first called with ``None``.
     ``registry`` is the one the writer cites: ``ReviewOutcome.registry`` when
-    Gate 2 ran, Gate 1's otherwise. Taking the registry rather than a
-    ``ReviewOutcome`` keeps Gate 3 usable by a host that does not run Gate 2.
+    Gate 2 ran, Gate 1's otherwise. ``declared`` is ``ReviewOutcome.declared``,
+    the limitations the manuscript must state; empty means none. Taking both
+    rather than a ``ReviewOutcome`` keeps Gate 3 usable by a host that does not
+    run Gate 2.
 
     A spent budget raises ``GateFailure`` (`CLAUDE.md` §4): an unverifiable
     manuscript is not emitted.
@@ -657,7 +669,7 @@ def report_loop(
     result = ReportOutcome()
     feedback: str | None = None
     while (source := write(feedback)) is not None:
-        written = gated_report(source, registry, context)
+        written = gated_report(source, registry, context, declared=declared)
         record_divergence(
             context,
             written.report,

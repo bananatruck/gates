@@ -15,12 +15,12 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: feature/gate2-feedback-loop
-head: ff2382b
+head: edc5f77
 head_date: 2026-09-16
-tests_total: 502
+tests_total: 513
 tests_gate1: 98
 tests_gate2: 92
-tests_gate3: 37
+tests_gate3: 46
 tests_llm_scan: 21
 tests_llm_layer: 14
 <!-- STATE:END -->
@@ -71,10 +71,10 @@ forever, but an unverifiable manuscript must not ship.
 | Gate 2 tier B — methodology conformance | **complete** — `method_conformance` FAIL, `method_traceable` WARN; host path via `make_review_context(plan_fields=, sources=, lit_review=)` | `run_gate2()` | part of 92 |
 | Gate 2 tier C — loop | **complete, model-free**. 6 scenarios. Every revision runs under Gate 1 first (F12). A spent Gate 2 budget proceeds with the discrepancies declared. A spent Gate 1 budget raises if nothing ran clean. `first=` reviews a pass the host already holds. The outcome carries `registry` and `declared`. No host calls it yet. | `gates/adapters/agentlab.py` `review_loop()`, driven by `rig/gate2_loop.py` | 26 |
 | Gate 2 tier comparison | complete. A vs A+B vs A+B+C | `rig/gate2_tier_comparison.py` | 8 |
-| Gate 3 — `report.*` regex checks | numeric + figure binding done; D14 guard | `run_gate3()` | 21 of 37 |
+| Gate 3 — `report.*` checks | numeric + figure binding; `limitations_declared` (step 5, D35); D14 guard | `run_gate3()` | 30 of 46 |
 | Gate 3 — `source.*` | **not written** | — | 0 |
-| Gate 3 — `style.*` | `claim_sections_bound` done (step 4, D34); the rest is step 7 | `run_gate3()` | 7 of 37 |
-| Gate 3 loop | **complete for the existing checks, model-free.** Adapter half (step 2): `make_report_context()`, `gated_report()`, `report_loop()`, `ReportOutcome`; a spent budget raises; a Gate 1-rejected registry is refused before `write` runs. Rig half (step 3): 5 scenarios; the registry comes from Gate 2's `clean` run; a raised loop is rebuilt from `context.history`. Scenario 4 waits on its check. | `gates/adapters/agentlab.py` `report_loop()`, driven by `rig/gate3_loop.py` | 9 of 37 in `tests/test_gate3.py`, 13 in `tests/test_gate3_loop.py` |
+| Gate 3 — `style.*` | `claim_sections_bound` done (step 4, D34); the rest is step 7 | `run_gate3()` | 7 of 46 |
+| Gate 3 loop | **complete for the existing checks, model-free.** Adapter half (step 2): `make_report_context()`, `gated_report()`, `report_loop()`, `ReportOutcome`; a spent budget raises; a Gate 1-rejected registry is refused before `write` runs. Rig half (step 3): 6 scenarios; the registry and declared limitations come from a real Gate 2 run (`clean` unless a scenario names another); a raised loop is rebuilt from `context.history`. Scenario 4 waits on its check. | `gates/adapters/agentlab.py` `report_loop()`, driven by `rig/gate3_loop.py` | 9 of 46 in `tests/test_gate3.py`, 15 in `tests/test_gate3_loop.py` |
 | LLM scan layer | complete, Gate 1 only | `gates/llm_scan.py` | 21 |
 | LLM plumbing (`ModelFn`, budget) | complete, Gate 1 only | `gates/llm.py` | 14 |
 | `gates/gate2_semantic.py` | **deleted** 09-13 (D4). Gate 2 is model-free (D19) | - | 15 removed |
@@ -116,12 +116,12 @@ Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adap
    2. ~~Adapter entry point~~ done. Was: `make_report_context()` + `gated_report()` in the adapter, shaped like `review_loop`: `revise` returns the next manuscript; a spent budget raises `GateFailure`. Inputs from Gate 2: `ReviewOutcome.registry` (values to bind) and `ReviewOutcome.declared` (D28). `rig/loop.py` is Gate 1-wired (`run_loop`, `rig/loop.py:198`) and stays unchanged.
    3. ~~`rig/gate3_loop.py` + scenarios 1, 2, 3, 6~~ done. Was (existing checks only), plan approved 09-16: `clean`, `typed-literal-fixed`, `unknown-token`, `budget-exhausts`; the registry comes from a real `run_gate2_loop` of Gate 2's `clean` scenario, not a hand-built dict.
    4. ~~`style.claim_sections_bound` + scenario 5~~ done. Was: plus the "tiers" wording in the `gates/gate3.py` docstring.
-   5. Declared-limitations check (D28), with renderer and fix directive (D14).
+   5. ~~Declared-limitations check (D28)~~ done (D35).
    6. `PaperRecord`, registry (D25, D26), `source.cited_papers_in_registry` + scenario 4.
    7. Remaining `style.*`, host-declared inputs only (D27).
    8. G3-M4: measure scanner misses (`\begin{abstract}` unscanned, `\cite` lines skipped, readout §6), report, do not silently fix.
    9. `source.identifiers_resolve` via injected `lookup` (B2). `citations_parse` and `metadata_agrees` have no input on Agent Laboratory: inline `(arXiv id)` citations, no bibliography.
-   Approved 09-16 (Q8-Q14): after step 5 comes the D31 model layer with a `REPORT_GATE_INSTRUCTIONS` writer prompt, then a key-leak test across all three gates, then steps 6-9.
+   Approved 09-16 (Q8-Q14): next is the D31 model layer with a `REPORT_GATE_INSTRUCTIONS` writer prompt, then a key-leak test across all three gates, then steps 6-9.
    Also: `PLAN.md` §5.1/§5.2 name `report.citations_*` and claim citations are "eliminated by construction"; reconcile with what is built.
 2. `env.parent_proc_guard` INFO check (B3).
 3. F9 + F8 with model spend; F11 last. F2 and F5 wait on a host call site (out of scope 09-14).
@@ -158,13 +158,14 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | D25 | **Gate 3's retrieval registry is `lit_review` plus the writer's per-section arXiv search results.** Amends D21. The writer searches arXiv per section and is told to cite from those results (`papersolver.py:349-381`); the archived gated run cites 8 arXiv ids and `lit_review` holds 1 of them, so D21 alone flags 7 real papers. The fabrication targeted is an id nothing retrieved. Decided by Kesh. | pending - `source.cited_papers_in_registry` |
 | 09-16 | D26 | **Canonical identifier is the arXiv id, compared version-stripped**; a version mismatch is evidence, not a failure. No DOI fallback: the reference host never sees a DOI, so a cited DOI fails as not retrieved. Decided by Kesh. | pending - `source.cited_papers_in_registry` |
 | 09-16 | D27 | **`style.sections_present` checks sections the host declares at wiring time** (D13 pattern). No default list in `gates/`. Agent Laboratory's adapter declares its writer's list (`papersolver.py:352`). Decided by Kesh. | pending - `style.sections_present` |
-| 09-16 | D28 | **Declared limitations are rendered, not authored.** The renderer inserts Gate 2's `declared` block verbatim and Gate 3 checks it is present. Rejected: matching a writer's paraphrase, which no deterministic check can do. Decided by Kesh. | pending - Gate 3 limitations check |
+| 09-16 | D28 | **Declared limitations are rendered, not authored.** The renderer inserts Gate 2's `declared` block verbatim and Gate 3 checks it is present. Rejected: matching a writer's paraphrase, which no deterministic check can do. Decided by Kesh. | `report.limitations_declared`, see D35 |
 | 09-16 | D29 | **Gate 3's loop is `report_loop` in the adapter, not `rig/loop.py`.** Amends D5. `run_loop` is Gate 1-wired (`rig/loop.py:198`); Gate 3 follows Gate 2's as-built shape. `report_loop` takes a registry, not a `ReviewOutcome`, so a host without Gate 2 can use it. `Ledger.loop_summary` counts Gate 2 rows only, since both phases share `divergence.jsonl`. | `test_a_spent_budget_raises_and_emits_nothing`, `test_gate_3_turns_are_not_counted_as_gate_2_reviews` |
 | 09-16 | D30 | **Gate 3 is described as mirroring Gate 1**: a flat check list, a reject-and-retry loop back to the agent that wrote the artifact, and a raise on a spent budget. It verifies the manuscript's words and cited sources instead of code. D29 still holds for the code. Replaces "Gate 2's sibling" at `gates/gate3.py:5`. Decided by Kesh. | `gates/gate3.py` module docstring |
 | 09-16 | D31 | **Gate 3 gets Gate 1's model layer, rebuilt for manuscripts.** Same structure as Gate 1: an injected `ModelFn` on `Gate3Config`, model findings only through `model_warning` (WARN), REQUIRED FIXES written after the verdict and dropped if ungrounded, spend through `ModelBudget`. The feedback goes to the host's paper writer (`PaperSolver`, `ai_lab_repo.py:294`) the way Gate 1's goes to `MLESolver`. Decided by Kesh; design awaiting approval. | pending |
 | 09-16 | D32 | **Gate 3 reads the retrieved-paper set through `retrieved: Callable[[], set[str]] | None` on `report_loop`**, called after each `write`, because the host fills `section_related_work` during its first write (`papersolver.py:357-367`). `None`: the source checks emit nothing. Rejected: `write` returning papers too, which widens the contract for hosts with no source checks. Decided by Kesh. | pending - step 6 |
 | 09-16 | D33 | **Remaining `style.*`**: `style.no_orphan_references` FAIL, only when the manuscript uses `\ref` or `\label`; `style.floats_referenced` WARN; `style.acronyms_defined` dropped, since which acronyms need expanding is a preference D27 refuses without a host-declared list. Decided by Kesh. | pending - step 7 |
 | 09-16 | D34 | **`style.claim_sections_bound` holds only sections whose heading contains "results"** to at least one `\result{}` token, counted whether or not it resolves. A qualitative discussion is honest writing; a numberless Results section is the evasion. No results heading: the check emits nothing, and `style.sections_present` catches the absence when the host declares it. Rejected: every findings section (fails honest discussions, and an abstract is only seen as `\section{Abstract}`); one token anywhere (lets an empty Results through). Decided by Kesh (Q8). | `test_a_results_section_that_cites_nothing_fails`, `test_only_a_results_section_must_cite_a_measurement` |
+| 09-16 | D35 | **How D28 is built.** `declared` is a keyword on `run_gate3`, `gated_report` and `report_loop`, beside `registry`, since both come out of Gate 2's run; not on `Gate3Config`, which is built before Gate 2 runs. The writer places `\limitations{}`; `render_result_tokens(declared=)` replaces it first, inside a LaTeX `verbatim` block, because `_` breaks the build and `%` hides the rest of a line. `report.limitations_declared` FAIL checks every stripped line of the block against the rendered text (the host's when supplied), and emits nothing when `declared` is empty. LaTeX only. Decided by Kesh (Q9). | `test_a_manuscript_without_the_limitations_token_fails`, `test_latex_specials_in_a_limitation_cannot_break_or_hide_it` |
 | 09-13 | D21 | **Gate 3's retrieval registry is Agent Laboratory's `lit_review`, `ADD_PAPER` entries only.** A paper read with `FULL_TEXT` but never added does not count as retrieved. Identifier is the host's `arxiv_id`. Decided by Kesh. | pending - Gate 3 `source.cited_papers_in_registry` |
 
 ## session log
@@ -208,6 +209,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `9b3aaa8` | Gate 3 step 3: `rig/gate3_loop.py`, `rig/gate3_scenarios.py` (`clean`, `typed-literal-fixed`, `unknown-token`, `budget-exhausts`), `tests/test_gate3_loop.py` (11, red first on the spent budget). Registry from a real Gate 2 `clean` run; the provenance test fails on a hand-built registry. README rig line. 491 tests. |
 | 09-16 | `8280f7d` | Docs: README and CLAUDE.md counts to 491 (Gate 3: 39). D30-D33 recorded, architecture restated for D30/D31. 491 tests. |
 | 09-16 | `ff2382b` | Q12 fix: `_evidence_missing_keys` listed 5 keys and hid the rest; now lists all (red first, 6 keys). Also changes Gate 1 feedback; no frozen log carries the line. 492 tests. |
-| 09-16 | *this* | Gate 3 step 4: `style.claim_sections_bound` (D34), renderer and fix; `prose.sections()`; D14 guard for Gate 3 (fails with a renderer removed); the literal check no longer calls a numberless paper fully cited; docstring per D30/D7; scenario 5 `no-numbers-in-results`. 502 tests. |
+| 09-16 | `edc5f77` | Gate 3 step 4: `style.claim_sections_bound` (D34), renderer and fix; `prose.sections()`; D14 guard for Gate 3 (fails with a renderer removed); the literal check no longer calls a numberless paper fully cited; docstring per D30/D7; scenario 5 `no-numbers-in-results`. 502 tests. |
+| 09-16 | *this* | Gate 3 step 5: `\limitations{}` token and `report.limitations_declared` (D35), renderer and fix; `declared=` through the adapter; rig `Scenario.gate2`, scenario `undeclared-limitation` from Gate 2's `divergence-exhausts`. 513 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.
