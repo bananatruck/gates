@@ -21,6 +21,8 @@ each check runs when its input exists:
     source.cited_papers_in_registry         FAIL   iff the host says what it
                                                    retrieved and the paper
                                                    cites something
+    style.sections_present                  FAIL   iff the host declares the
+                                                   sections it requires
     style.claim_sections_bound              FAIL   iff the manuscript has a
                                                    results section
     report.model_unbound_claims             WARN   iff a model is set and
@@ -110,6 +112,11 @@ class Gate3Config:
     #: Directory figure paths resolve against. ``None`` resolves relative to the
     #: process's working directory and skips the containment test.
     figure_root: str | None = None
+    #: Sections the manuscript must contain, declared by the host at wiring time
+    #: (D27). Empty means ``style.sections_present`` emits nothing: which
+    #: sections a paper needs is the host's standard, and a default here would be
+    #: a preference wearing a check's clothes.
+    sections: tuple[str, ...] = ()
     #: The host's own render, when the host renders. ``None`` means Gate 3
     #: renders, and says so: a self-rendered comparison is a weaker statement
     #: than an independent one, so its origin travels with it.
@@ -485,6 +492,52 @@ def _check_cited_papers_in_registry(
     )
 
 
+#: LaTeX's abstract environment. ``prose._heading`` deliberately does not see it
+#: (D40): presence is a different question from claim scanning, and teaching the
+#: scanner to read inside it would restate the published Gate 1 number. The
+#: unscanned abstract is G3-M4's to report, not this check's to close.
+_ABSTRACT_ENV = re.compile(r"\\begin\{abstract\}")
+
+
+def _check_sections_present(source: str, declared: tuple[str, ...]) -> CheckResult | None:
+    """Every section the host declared at wiring time is in the manuscript.
+
+    D27: the list is the host's, because which sections a paper needs is its
+    standard and not a fact ``gates/`` knows. A declared name is present when
+    some heading contains it, so a host declaring ``"results"`` accepts
+    "Experimental Results". The check asks whether the section is there, not
+    whether the writer named it our way.
+
+    Returns ``None`` when the host declared nothing.
+    """
+    if not declared:
+        return None
+    headings = [heading for heading, _ in sections(source)]
+    if _ABSTRACT_ENV.search(source):
+        headings.append("abstract")
+    missing = [name for name in declared if not any(name in h for h in headings)]
+    return CheckResult(
+        id="style.sections_present",
+        passed=not missing,
+        severity=Severity.FAIL,
+        message=(
+            f"{len(missing)} of {len(declared)} declared section(s) are not in "
+            f"the manuscript: {', '.join(missing)}"
+            if missing
+            else f"all {len(declared)} declared section(s) present"
+        ),
+        evidence={
+            "missing": missing,
+            "declared": list(declared),
+            "headings": [h for h in headings if h != "preamble"],
+            "discrepancies": [
+                f"the host requires a {name!r} section and the manuscript has none"
+                for name in missing
+            ],
+        },
+    )
+
+
 def _check_claim_sections_bound(
     source: str, values: dict[str, Any]
 ) -> CheckResult | None:
@@ -582,6 +635,7 @@ def run_gate3(
         _check_figures_exist(source, config.figure_root),
         _check_limitations_declared(source, rendered, declared, origin),
         _check_cited_papers_in_registry(source, retrieved),
+        _check_sections_present(source, config.sections),
         _check_claim_sections_bound(source, values),
         # WARN or INFO by construction, so decide() below is blind to it.
         llm_claims.build_check(llm_claims.scan_claims(model, _mask_tokens(source))),

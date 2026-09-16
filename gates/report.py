@@ -375,6 +375,15 @@ def _evidence_citations(check: CheckResult) -> list[str]:
     return out
 
 
+def _evidence_sections(check: CheckResult) -> list[str]:
+    # Both lines uncapped: the writer adds one section per missing name, and
+    # needs the headings it did write to see which name it used instead.
+    out = [f"  missing:  {name}" for name in check.evidence.get("missing", [])]
+    if check.evidence.get("headings"):
+        out.append("  written:  " + ", ".join(check.evidence["headings"]))
+    return out
+
+
 def _evidence_unbound_sections(check: CheckResult) -> list[str]:
     out = [f"  {name}: no \\result{{}} token" for name in check.evidence.get("unbound", [])]
     if check.evidence.get("recorded"):
@@ -430,6 +439,7 @@ _EVIDENCE_RENDERERS = {
     "report.limitations_declared": _evidence_limitations,
     "report.model_unbound_claims": _evidence_claim_findings,
     "source.cited_papers_in_registry": _evidence_citations,
+    "style.sections_present": _evidence_sections,
     "style.claim_sections_bound": _evidence_unbound_sections,
 }
 
@@ -550,6 +560,11 @@ _FIXES = {
         "it is treated as fabricated. Cite only papers listed as retrieved "
         "above, by their arXiv id, or remove the citation. A DOI cannot have "
         "been retrieved here; cite the arXiv id instead."
+    ),
+    "style.sections_present": (
+        "A section this venue requires is missing. Write it, using the name "
+        "listed above as its heading. If the material is already there under "
+        "another heading, rename that heading rather than repeating the text."
     ),
     "style.claim_sections_bound": (
         "A results section cites no measured value. State its findings with "

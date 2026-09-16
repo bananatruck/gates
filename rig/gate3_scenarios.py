@@ -7,7 +7,8 @@ against comes from playing a Gate 2 scenario, ``clean`` unless a scenario says
 otherwise, not from a hand-built dict (F12). That scenario's declared
 limitations come along with its registry.
 
-Numbered as in `GATE3_implementation_plan.md` §4 L3, all six now played.
+Numbered as in `GATE3_implementation_plan.md` §4 L3, all six now played, plus
+one each for the checks added after the plan was written.
 ``retrieved`` stands in for the host's search results and literature review,
 which no gate produces, so a scripted list is the honest stand-in for them.
 """
@@ -52,6 +53,9 @@ NUMBERLESS = _manuscript("SGC is much faster than GCN and reaches strong accurac
 #: The clean manuscript, with a place for Gate 2's declared limitations.
 WITH_LIMITATIONS = CLEAN + "\n\\section{Discussion}\n\\limitations{}\n"
 
+#: The clean manuscript plus the Discussion a host declaring one requires.
+WITH_DISCUSSION = CLEAN + "\n\\section{Discussion}\nThe label budget matters less than expected.\n"
+
 #: A related-work line citing a paper no search returned, and one citing a
 #: paper the run did retrieve.
 FABRICATED = CLEAN + "\n\\section{Related Work}\nWe follow (arXiv 2501.00001v1).\n"
@@ -87,6 +91,11 @@ class Scenario:
     #: The paper ids the host retrieved. ``None``: the host does not say, and
     #: citations go unchecked.
     retrieved: tuple[str, ...] | None = None
+    #: Sections the host declares (D27). Empty by default: these manuscripts are
+    #: two sections long because each one exercises a numeric or citation check,
+    #: and holding them to the reference host's eight would fail every scenario
+    #: for a reason none of them is about. ``missing-section`` declares its own.
+    sections: tuple[str, ...] = ()
 
 
 CLEAN_RUN = Scenario(
@@ -179,6 +188,23 @@ UNDECLARED_LIMITATION = Scenario(
     gate2="divergence-exhausts",
 )
 
+MISSING_SECTION = Scenario(
+    name="missing-section",
+    summary="A paper omitting a section the host declared is rejected until it writes one.",
+    turns=(
+        Turn(
+            "no discussion section",
+            CLEAN,
+            expect_fail=("style.sections_present",),
+            expect_feedback=("missing:  discussion",),
+        ),
+        Turn("discussion written", WITH_DISCUSSION, expect_pass=True),
+    ),
+    expect_outcome="pass",
+    expect_turns=2,
+    sections=("introduction", "results", "discussion"),
+)
+
 BUDGET_EXHAUSTS = Scenario(
     name="budget-exhausts",
     summary="The writer types the accuracy on every turn. Raises; no manuscript.",
@@ -205,5 +231,6 @@ SCENARIOS: dict[str, Scenario] = {
         NO_NUMBERS_IN_RESULTS,
         UNDECLARED_LIMITATION,
         FABRICATED_CITATION,
+        MISSING_SECTION,
     )
 }

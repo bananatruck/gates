@@ -69,7 +69,12 @@ def test_no_gate_writes_or_sends_the_key(tmp_path, monkeypatch):
     drafts = iter([TYPED, CITED])
     written = report_loop(
         make_report_context(
-            research_dir=research, consult_model=make_gate_model("gpt-test", SENTINEL)
+            research_dir=research,
+            consult_model=make_gate_model("gpt-test", SENTINEL),
+            # This is about where the key goes, not about the manuscript. CITED
+            # is two sections, so the host's declared list would reject it and
+            # the run would never reach a pass.
+            sections=(),
         ),
         lambda feedback: next(drafts, None),
         registry=reviewed.registry,

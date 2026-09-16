@@ -17,6 +17,7 @@ import pathlib
 import pytest
 
 from gates.adapters.agentlab import (
+    WRITER_SECTIONS,
     gated_report,
     make_report_context,
     make_review_context,
@@ -29,6 +30,7 @@ from gates.gate3 import (
     render_result_tokens,
     run_gate3,
 )
+from gates.prose import claim_sections
 from gates.report import render_feedback
 from gates.schema import Severity, Verdict
 from gates.setup import defaults
@@ -335,6 +337,76 @@ def test_the_writer_is_told_which_section_and_which_keys(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# style.sections_present
+# --------------------------------------------------------------------------- #
+
+RESULTS_ONLY = "\\section{Results}\nAccuracy reaches \\result{exp1.acc_at_400}.\n"
+
+
+def test_a_section_the_host_declared_and_the_paper_omits_fails(tmp_path):
+    report = run_gate3(
+        RESULTS_ONLY,
+        registry(RECORDED),
+        config(tmp_path, sections=("abstract", "introduction", "results", "discussion")),
+    )
+    present = check(report, "style.sections_present")
+    assert not present.passed
+    assert present.evidence["missing"] == ["abstract", "introduction", "discussion"]
+    assert report.verdict is Verdict.FAIL
+
+
+def test_a_host_that_declares_no_sections_gets_no_section_check(tmp_path):
+    """D27: `gates/` holds no default list, so nothing is checked and nothing is
+    claimed. A default here would be a preference wearing a check's clothes."""
+    report = run_gate3(TOKENISED, registry(RECORDED), config(tmp_path))
+    assert check(report, "style.sections_present") is None
+
+
+def test_a_latex_abstract_environment_counts_as_a_declared_abstract(tmp_path):
+    """D40. `prose._heading` does not see `\\begin{abstract}` and is not changed:
+    presence is a different question from claim scanning, and altering the
+    scanner would restate the published Gate 1 traceability number."""
+    paper = (
+        "\\begin{abstract}\nWe study SGC.\n\\end{abstract}\n" + RESULTS_ONLY
+    )
+    report = run_gate3(
+        paper, registry(RECORDED), config(tmp_path, sections=("abstract", "results"))
+    )
+    assert check(report, "style.sections_present").passed
+    assert claim_sections(paper) == ["results"]
+
+
+def test_a_declared_section_is_found_inside_a_longer_heading(tmp_path):
+    """A host declaring "results" accepts "Experimental Results". The check asks
+    whether the section is there, not whether the writer named it our way."""
+    paper = "\\section{Experimental Results}\nWe reach \\result{exp1.acc_at_400}.\n"
+    report = run_gate3(paper, registry(RECORDED), config(tmp_path, sections=("results",)))
+    assert check(report, "style.sections_present").passed
+
+
+def test_the_writer_is_told_which_declared_section_is_missing(tmp_path):
+    text = render_feedback(
+        run_gate3(
+            RESULTS_ONLY,
+            registry(RECORDED),
+            config(tmp_path, sections=("results", "discussion")),
+        )
+    )
+    assert "[style.sections_present]" in text
+    assert "missing:  discussion" in text
+    assert "REQUIRED FIXES" in text
+
+
+def test_the_reference_host_declares_its_writers_own_sections(tmp_path):
+    """D27: the list is the host's, read from `papersolver.py:352` minus
+    "scaffold", which is the document skeleton and not a section."""
+    context = make_report_context(research_dir=str(tmp_path))
+    assert context.config.sections == WRITER_SECTIONS
+    assert "scaffold" not in WRITER_SECTIONS
+    assert WRITER_SECTIONS[0] == "abstract"
+
+
+# --------------------------------------------------------------------------- #
 # report.limitations_declared
 # --------------------------------------------------------------------------- #
 
@@ -610,7 +682,14 @@ def test_every_check_gate3_emits_can_be_rendered_and_has_a_fix(tmp_path):
     report = run_gate3(
         paper,
         reg,
-        config(tmp_path, figure_root=str(tmp_path), rendered=tampered, consult_model=model),
+        config(
+            tmp_path,
+            figure_root=str(tmp_path),
+            rendered=tampered,
+            # The fixture paper has no abstract, so this trips sections_present.
+            sections=("abstract", "results"),
+            consult_model=model,
+        ),
         declared="DECLARED LIMITATIONS\n\n  - a.b: unresolved\n",
         retrieved={"1902.07153v2"},
     )
@@ -629,6 +708,14 @@ def test_every_check_gate3_emits_can_be_rendered_and_has_a_fix(tmp_path):
 
 
 def report_context(tmp_path, **kwargs):
+    """The loop's context, with sections unchecked unless a test asks for them.
+
+    These tests write two-line manuscripts to exercise the loop, and the real
+    adapter default holds a paper to all eight of the host's sections
+    (``WRITER_SECTIONS``), which every fixture here would fail. That default is
+    pinned by ``test_the_reference_host_declares_its_writers_own_sections``.
+    """
+    kwargs.setdefault("sections", ())
     return make_report_context(research_dir=str(tmp_path), **kwargs)
 
 

@@ -105,7 +105,11 @@ def run_gate3_loop(
     writer = writer or ScriptedWriter(scenario)
 
     reviewed = run_gate2_loop(GATE2_SCENARIOS[scenario.gate2], workdir=workdir)
-    context = make_report_context(research_dir=str(workdir), max_attempts=scenario.max_attempts)
+    context = make_report_context(
+        research_dir=str(workdir),
+        max_attempts=scenario.max_attempts,
+        sections=scenario.sections,
+    )
     outcome = LoopOutcome(
         scenario=scenario.name,
         registry=reviewed.registry,

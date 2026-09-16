@@ -319,12 +319,29 @@ def make_review_context(
     )
 
 
+#: The sections this host's paper writer is told to produce
+#: (``papersolver.py:352``), which is what ``style.sections_present`` holds it to
+#: (D27). ``"scaffold"`` is dropped: it is the document skeleton the writer
+#: builds first, not a section a reader looks for.
+WRITER_SECTIONS = (
+    "abstract",
+    "introduction",
+    "related work",
+    "background",
+    "methods",
+    "experimental setup",
+    "results",
+    "discussion",
+)
+
+
 def make_report_context(
     *,
     research_dir: str = "./research_dir",
     phase: str = "report writing",
     max_attempts: int = 3,
     figure_root: str | None = None,
+    sections: tuple[str, ...] = WRITER_SECTIONS,
     consult_model: Any = None,
 ) -> GateContext:
     """Build the gate context for the writing phase, the one Gate 3 runs in.
@@ -333,7 +350,9 @@ def make_report_context(
     own budget. ``phase`` is the host's own name for it (``ai_lab_repo.py:294``).
     ``figure_root`` is where the run's figures live; ``None`` resolves them
     against the working directory and skips the check that they stayed inside
-    the run. ``consult_model`` is Gate 3's model layer (D31), built the way
+    the run. ``sections`` is what the manuscript must contain, defaulting to this
+    host's own writer list (D27); ``()`` leaves sections unchecked.
+    ``consult_model`` is Gate 3's model layer (D31), built the way
     Gate 1's is: ``make_gate_model(backend, key)`` returns a new function for
     this gate, so Gate 3's spend is counted apart from Gate 1's.
     """
@@ -342,6 +361,7 @@ def make_report_context(
         max_attempts=max_attempts,
         artifact_root=artifact_root,
         figure_root=figure_root,
+        sections=sections,
         consult_model=consult_model,
     )
     return GateContext(
