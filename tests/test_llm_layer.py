@@ -90,13 +90,16 @@ def test_model_warning_takes_no_severity_argument():
 # --------------------------------------------------------------------------- #
 
 
-def test_absent_model_is_an_ordinary_degraded_path():
+def test_absent_model_is_an_ordinary_path_not_an_outage():
+    """The caller falls back, and the budget records nothing: no call was made,
+    so nothing failed. Counting it made feedback report an outage."""
     layer = ModelLayer(None)
     assert not layer.available
     call = layer.ask("anything")
     assert not call.ok
     assert "no model" in call.error
-    assert layer.budget.degraded
+    assert layer.budget.calls == 0
+    assert not layer.budget.degraded
 
 
 def test_an_exploding_model_does_not_propagate():

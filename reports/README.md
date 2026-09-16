@@ -37,6 +37,13 @@ worth knowing before quoting from it:
   513 listed files verify; that entry is dangling. It is left in place rather
   than edited out, because a checksum file that has been edited after the fact
   is worth less than one with a documented gap.
+- 31 `gate1_report.json` files under `verification/evidence/gate1_loop_repeat_*`
+  come from runs with no model and record
+  `"model": {"calls": 1, "failures": 1, "degraded": true}` with the error
+  `no model was supplied`. That call was never made. Since 2026-09-16 a run
+  with no model records `"model": null`, and its feedback no longer says the
+  model could not be reached. None of the frozen files carries that sentence;
+  the change is to the JSON only.
 
 ## Provenance
 

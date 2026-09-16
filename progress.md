@@ -15,9 +15,9 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: feature/gate2-feedback-loop
-head: edc5f77
+head: 99a7098
 head_date: 2026-09-16
-tests_total: 513
+tests_total: 514
 tests_gate1: 98
 tests_gate2: 92
 tests_gate3: 46
@@ -210,6 +210,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `8280f7d` | Docs: README and CLAUDE.md counts to 491 (Gate 3: 39). D30-D33 recorded, architecture restated for D30/D31. 491 tests. |
 | 09-16 | `ff2382b` | Q12 fix: `_evidence_missing_keys` listed 5 keys and hid the rest; now lists all (red first, 6 keys). Also changes Gate 1 feedback; no frozen log carries the line. 492 tests. |
 | 09-16 | `edc5f77` | Gate 3 step 4: `style.claim_sections_bound` (D34), renderer and fix; `prose.sections()`; D14 guard for Gate 3 (fails with a renderer removed); the literal check no longer calls a numberless paper fully cited; docstring per D30/D7; scenario 5 `no-numbers-in-results`. 502 tests. |
-| 09-16 | *this* | Gate 3 step 5: `\limitations{}` token and `report.limitations_declared` (D35), renderer and fix; `declared=` through the adapter; rig `Scenario.gate2`, scenario `undeclared-limitation` from Gate 2's `divergence-exhausts`. 513 tests. |
+| 09-16 | `99a7098` | Gate 3 step 5: `\limitations{}` token and `report.limitations_declared` (D35), renderer and fix; `declared=` through the adapter; rig `Scenario.gate2`, scenario `undeclared-limitation` from Gate 2's `divergence-exhausts`. 513 tests. |
+| 09-16 | *this* | Gate 1 fix: with no model, `ModelLayer.ask` recorded a failed call, so a run that printed and failed was told the model "could not be reached" (red first). No call is recorded now; `report.model` is `null`. 31 frozen reports carry the old record, noted in `reports/README.md`. 514 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.

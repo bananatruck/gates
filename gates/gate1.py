@@ -245,7 +245,7 @@ def _attach_generated_fixes(report: GateReport, model: ModelLayer, source: str) 
 
 
 def _record_model_budget(report: GateReport, model: ModelLayer) -> None:
-    if model.available or model.budget.calls:
+    if model.available:
         report.model = model.budget.to_dict()
 
 
