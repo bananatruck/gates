@@ -15,12 +15,12 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: feature/gate2-feedback-loop
-head: 9b3aaa8
+head: 8280f7d
 head_date: 2026-09-16
-tests_total: 491
+tests_total: 492
 tests_gate1: 98
 tests_gate2: 92
-tests_gate3: 28
+tests_gate3: 29
 tests_llm_scan: 21
 tests_llm_layer: 14
 <!-- STATE:END -->
@@ -121,7 +121,7 @@ Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adap
    7. Remaining `style.*`, host-declared inputs only (D27).
    8. G3-M4: measure scanner misses (`\begin{abstract}` unscanned, `\cite` lines skipped, readout §6), report, do not silently fix.
    9. `source.identifiers_resolve` via injected `lookup` (B2). `citations_parse` and `metadata_agrees` have no input on Agent Laboratory: inline `(arXiv id)` citations, no bibliography.
-   Pending approval (09-16), order set once approved: the D31 model layer and a `REPORT_GATE_INSTRUCTIONS` prompt for the writer; the `recorded:` evidence list cut at 5 keys (`gates/report.py:163`); the step 4 scope (Q4) and step 5 specifics (Q5).
+   Pending approval (09-16), order set once approved: the D31 model layer and a `REPORT_GATE_INSTRUCTIONS` prompt for the writer; the step 4 scope (Q4) and step 5 specifics (Q5).
    Also: `PLAN.md` §5.1/§5.2 name `report.citations_*` and claim citations are "eliminated by construction"; reconcile with what is built.
 2. `env.parent_proc_guard` INFO check (B3).
 3. F9 + F8 with model spend; F11 last. F2 and F5 wait on a host call site (out of scope 09-14).
@@ -205,6 +205,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `4508891` | Gate 3 step 1: B4 closed, `ARCHIVED` asserts 29 literals over abstract, results, discussion (red on the old 8 first). D25-D28 recorded, Gate 3 order revised. 471 tests. |
 | 09-16 | `343c9fe` | Gate 3 step 2: `make_report_context`, `gated_report`, `report_loop`, `ReportOutcome`; `gate3.RENDERED_FILENAME`; `loop_summary` filtered to Gate 2 (red first: a Gate 3 turn counted as a Gate 2 run). D29. 480 tests. |
 | 09-16 | `9b3aaa8` | Gate 3 step 3: `rig/gate3_loop.py`, `rig/gate3_scenarios.py` (`clean`, `typed-literal-fixed`, `unknown-token`, `budget-exhausts`), `tests/test_gate3_loop.py` (11, red first on the spent budget). Registry from a real Gate 2 `clean` run; the provenance test fails on a hand-built registry. README rig line. 491 tests. |
-| 09-16 | *this* | Docs: README and CLAUDE.md counts to 491 (Gate 3: 39). D30-D33 recorded, architecture restated for D30/D31. 491 tests. |
+| 09-16 | `8280f7d` | Docs: README and CLAUDE.md counts to 491 (Gate 3: 39). D30-D33 recorded, architecture restated for D30/D31. 491 tests. |
+| 09-16 | *this* | Q12 fix: `_evidence_missing_keys` listed 5 keys and hid the rest; now lists all (red first, 6 keys). Also changes Gate 1 feedback; no frozen log carries the line. 492 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.

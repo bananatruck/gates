@@ -278,6 +278,15 @@ def test_feedback_lists_the_keys_that_were_available(tmp_path):
     assert "exp1.acc_at_400" in text
 
 
+def test_feedback_lists_every_key_the_writer_may_cite(tmp_path):
+    """The writer picks its next token from this line. It used to stop at five
+    names without saying so, so a run that recorded six never showed the sixth."""
+    six = {f"exp{i}.acc": (0.5, "ratio") for i in range(1, 7)}
+    paper = "\\section{Results}\nAccuracy was \\result{exp9.acc}.\n"
+    text = render_feedback(run_gate3(paper, registry(six), config(tmp_path)))
+    assert "  recorded: " + ", ".join(sorted(six)) + "\n" in text
+
+
 # --------------------------------------------------------------------------- #
 # the host entry point and the loop
 # --------------------------------------------------------------------------- #

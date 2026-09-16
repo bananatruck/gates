@@ -161,12 +161,14 @@ def _evidence_literals(check: CheckResult) -> list[str]:
 
 
 def _evidence_missing_keys(check: CheckResult) -> list[str]:
+    # Uncapped: each list is one line, so a cap saves no lines, and the recorded
+    # keys are the menu the agent picks its fix from. A cut list hid real keys.
     ev = check.evidence
     out = []
     if ev.get("missing"):
-        out.append("  missing:  " + ", ".join(ev["missing"][:_MAX_EVIDENCE_ROWS]))
+        out.append("  missing:  " + ", ".join(ev["missing"]))
     if ev.get("recorded"):
-        out.append("  recorded: " + ", ".join(ev["recorded"][:_MAX_EVIDENCE_ROWS]))
+        out.append("  recorded: " + ", ".join(ev["recorded"]))
     return out
 
 
