@@ -15,8 +15,8 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: feature/gate2-feedback-loop
-head: 2a3a9a4
-head_date: 2026-09-14
+head: 12bf4a0
+head_date: 2026-09-16
 tests_total: 471
 tests_gate1: 98
 tests_gate2: 92
@@ -64,10 +64,11 @@ forever, but an unverifiable manuscript must not ship.
 
 | Component | State | Entry point | Tests |
 |---|---|---|---|
-| Gate 1 — execution validity | complete, evidence frozen | `gated_execute()` | 92 |
-| Gate 2 tier A — boundaries | **complete** — ranges, relations, non-finite guard, plausibility ceiling | `run_gate2()` | part of 86 |
-| Gate 2 tier B — methodology conformance | **complete** — `method_conformance` FAIL, `method_traceable` WARN; host path via `make_review_context(plan_fields=...)` | `run_gate2()` | part of 86 |
-| Gate 2 tier C — loop | **loop closes model-free**, 6 scenarios, exhaustion proceeds declared. Host entry point exists; no host calls it yet | `gates/adapters/agentlab.py` `review_loop()`, driven by `rig/gate2_loop.py` | 15 |
+| Gate 1 — execution validity | complete, evidence frozen | `gated_execute()` | 98 |
+| Gate 2 tier A — boundaries | **complete** — ranges, relations, non-finite guard, plausibility ceiling | `run_gate2()` | part of 92 |
+| Gate 2 tier B — methodology conformance | **complete** — `method_conformance` FAIL, `method_traceable` WARN; host path via `make_review_context(plan_fields=, sources=, lit_review=)` | `run_gate2()` | part of 92 |
+| Gate 2 tier C — loop | **complete, model-free**. 6 scenarios. Every revision runs under Gate 1 first (F12). A spent Gate 2 budget proceeds with the discrepancies declared. A spent Gate 1 budget raises if nothing ran clean. `first=` reviews a pass the host already holds. The outcome carries `registry` and `declared`. No host calls it yet. | `gates/adapters/agentlab.py` `review_loop()`, driven by `rig/gate2_loop.py` | 26 |
+| Gate 2 tier comparison | complete. A vs A+B vs A+B+C | `rig/gate2_tier_comparison.py` | 8 |
 | Gate 3 — `report.*` regex checks | numeric + figure binding done | `run_gate3()` | 19 |
 | Gate 3 — `source.*` | **not written** | — | 0 |
 | Gate 3 — `style.*` | **not written** | — | 0 |
@@ -75,17 +76,19 @@ forever, but an unverifiable manuscript must not ship.
 | LLM scan layer | complete, Gate 1 only | `gates/llm_scan.py` | 21 |
 | LLM plumbing (`ModelFn`, budget) | complete, Gate 1 only | `gates/llm.py` | 14 |
 | `gates/gate2_semantic.py` | **deleted** 09-13 (D4). Gate 2 is model-free (D19) | - | 15 removed |
-| Agent Laboratory adapter | `gated_execute` + `gated_review` via `make_review_context()`, which takes `relations`, `ranges`, `plan_fields`; **`gated_report` absent** | `gates/adapters/agentlab.py` | — |
+| Agent Laboratory adapter | `gated_execute`; `gated_review` and `review_loop` via `make_review_context()`, which takes `relations`, `ranges`, `plan_fields`, `sources` + `lit_review`; **`gated_report` absent** | `gates/adapters/agentlab.py` | — |
 | Tier A evaluation harness | complete | `rig/gate2_tier_a_eval.py` | 45 labelled registries |
 
 Frozen and checksum-signed — do not edit: `reports/finalized-report-and-results/`.
 
-## gate 2 - missing to complete
+## gate 2 - status
+
+**Complete in this repo as of 09-16.** Tiers A, B and C are built and connected: `review_loop` runs code under Gate 1, then reviews the registry under A+B. Every item that remains needs a host call site (out of scope) or model spend.
 
 Verified 09-14 against `85af14c` and `../AgentLaboratory-Gemini` (`feat/gates-verification-layer`, 7 files uncommitted).
 **Closed 09-14:** F4 (`0baf625`); F1 + F3 at adapter level, `review_loop` + `ReviewOutcome.declared` (`0baf625`); F6, `make_review_context(sources=, lit_review=)` (D23, `12aa1d9`); F10, exact published tallies asserted in `tests/test_gate2.py` (`60af585`); F7, `Ledger.loop_summary()` from `review_loop` rows (M5; a run enters the loop only if its first review failed). F12 (09-16), `review_loop(..., gate1=)` runs every revision under Gate 1, so Gate 2 never reviews a registry no run wrote.
 **Scope 09-14:** gates repo only. AgentLaboratory-Gemini is a test bed for results and data, not edited. Host-facing items are delivered as adapter entry points a host can call, not as host edits.
-Tiers A and B run as one call (`run_gate2`); tier C is `review_loop` in the adapter, which the rig drives. Nothing below exists yet.
+Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adapter, which the rig drives. The open items:
 
 | ID | Missing | Evidence | Needs |
 |---|---|---|---|
@@ -107,7 +110,7 @@ Tiers A and B run as one call (`run_gate2`); tier C is `review_loop` in the adap
 
 ## next steps
 
-1. Gate 3 per `GATE3_implementation_plan.md`, steps 1-9 in order, network work last; `gated_report()` in the adapter; Gate 3 input for `ReviewOutcome.declared` (F3 gate side).
+1. Gate 3 planning, then build per `GATE3_implementation_plan.md`, steps 1-9 in order, network work last. Gate 2 hands Gate 3 `ReviewOutcome.registry`, the values to bind, and `ReviewOutcome.declared`, the limitations the manuscript must state (F3 gate side). `gated_report()` in the adapter mirrors `review_loop` and raises on exhaustion (`CLAUDE.md` §4).
 2. `env.parent_proc_guard` INFO check (B3).
 3. F9 + F8 with model spend; F11 last. F2 and F5 wait on a host call site (out of scope 09-14).
 
@@ -139,6 +142,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-13 | D20 | **No random-baseline plausibility band.** The spec's `suspicious_baseline` fixture (binary baseline at 0.65) is dropped: D12 refuses a range keyed on a metric name, and a fair coin on a small test set can land at 0.65, so the bound depends on sample size and is not a fact about the number. The other six E2 fixtures exist as cases in `rig/gate2_tier_a_eval.py` and `rig/gate2_tier_b_eval.py`. | scope |
 | 09-14 | D23 | **Reference sources are declared, and bound to `lit_review`.** Partly reopens D9: `reference_interval` gets a host path. `SourceClaim`s arrive at wiring time like plan fields (D13); a `source_id` not in the host's `lit_review` raises `GateError`. Rejected: a model extracting claims from `full_text`, which would put a model upstream of a Gate 2 check (D19). Decided by Kesh. | `test_a_source_nobody_fetched_is_refused_at_wiring_time` |
 | 09-13 | D22 | **Scenario 4 is an unverifiable field, not a justified divergence.** D17 made divergence FAIL, so a justification changes nothing and that story is scenario 5. Gate 2's only WARN-and-proceed path is a declared field nobody can check. | `test_an_unverifiable_plan_warns_proceeds_and_reaches_the_writer` |
+| 09-16 | D24 | **Gate 2's loop takes code, not registries.** `review_loop` runs every revision under Gate 1 and reviews only the registry that run wrote. Gate 1 rejections cost Gate 1 turns and write `review_turn` ledger rows. Rejected: signing registries, which proves a table was not edited but not that a run produced it. | `test_a_revision_runs_under_gate_1_before_gate_2_sees_it` |
 | 09-13 | D21 | **Gate 3's retrieval registry is Agent Laboratory's `lit_review`, `ADD_PAPER` entries only.** A paper read with `FULL_TEXT` but never added does not count as retrieved. Identifier is the host's `arxiv_id`. Decided by Kesh. | pending - Gate 3 `source.cited_papers_in_registry` |
 
 ## session log
@@ -175,6 +179,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `5eeffbe` | `review_loop(first=)`: the Gate 1 pass a host already holds is reviewed without re-running; a rejected `first` raises `GateError`. 461 tests. |
 | 09-16 | `890f42f` | `ReviewOutcome.registry`: the last reviewed run's registry, the one the writer cites and Gate 3 checks. 463 tests. |
 | 09-16 | `444dc4d` | Tier comparison: `rig/gate2_tier_comparison.py`, `tests/test_gate2_tiers.py` (8). A vs A+B: 27/27 both, divergences 0 vs 12/12, unverifiable 0 vs 6/6, 0/35 false rejections both. A+B vs A+B+C over 6 scenarios: fixed 0 vs 3/4, declared 4 vs 1. 471 tests. |
-| 09-16 | *this* | Docs: README (Gate 2 row, porting step 5, test counts, Gate 2 rig), PLAN.md (as-built note, step 6), CLAUDE.md count 471. 471 tests. |
+| 09-16 | `12bf4a0` | Docs: README (Gate 2 row, porting step 5, test counts, Gate 2 rig), PLAN.md (as-built note, step 6), CLAUDE.md count 471. 471 tests. |
+| 09-16 | *this* | Gate 2 marked complete in this repo; components, D24, next steps (Gate 3 planning). 471 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.
