@@ -318,3 +318,33 @@ def test_a_first_run_gate_1_rejected_cannot_be_reviewed(tmp_path):
             gate1=gate1,
             first=rejected,
         )
+
+
+def test_the_outcome_names_the_registry_the_writer_cites(tmp_path):
+    """Gate 3 checks the manuscript against one registry. It is the one Gate 2
+    last reviewed: the admitted run on a pass, the declared one on proceed, and
+    none when nothing was reviewed."""
+    from gates.adapters.agentlab import make_context, make_review_context, review_loop
+    from rig.gate2_scenarios import OUT_OF_RANGE, SPEEDUP
+
+    turns = iter(t.code() for t in OUT_OF_RANGE.turns)
+    gate1 = make_context(research_dir=str(tmp_path))
+    outcome = review_loop(
+        make_review_context(research_dir=str(tmp_path), relations=(SPEEDUP,)),
+        lambda feedback: next(turns, None),
+        gate1=gate1,
+    )
+    assert outcome.registry["values"]["exp1.acc"]["value"] == 0.812
+    assert outcome.registry["run"]["run_id"] == gate1.last_report.execution.run_id
+
+    nothing = review_loop(
+        make_review_context(research_dir=str(tmp_path)),
+        lambda feedback: None,
+        gate1=make_context(research_dir=str(tmp_path)),
+    )
+    assert nothing.registry is None
+
+
+def test_a_proceeded_run_cites_the_registry_it_declared(played):
+    registry = played["divergence-exhausts"].registry
+    assert registry["values"]["config.lr"]["value"] == 0.01

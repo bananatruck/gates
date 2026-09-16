@@ -98,6 +98,8 @@ class LoopOutcome:
     #: What the writing phase must disclose, from the review that ended the loop.
     #: Empty means nothing to declare, not that nothing was checked.
     declared: str = ""
+    #: The registry the writer cites, from the run Gate 2 last reviewed.
+    registry: dict[str, Any] | None = None
     ledger_path: str | None = None
 
     @property
@@ -149,6 +151,7 @@ def run_gate2_loop(
     reviewed = review_loop(context, revise, gate1=gate1, extra={"scenario": scenario.name})
     outcome.outcome = reviewed.outcome
     outcome.declared = reviewed.declared
+    outcome.registry = reviewed.registry
     reviews = iter(reviewed.reviews)
     rejections = 0
     for index, (turn, executed) in enumerate(zip(submitted, reviewed.executions)):

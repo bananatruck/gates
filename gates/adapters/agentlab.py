@@ -472,6 +472,9 @@ class ReviewOutcome:
     #: From the last review, on every exit. Empty means nothing to declare, not
     #: that nothing was checked.
     declared: str = ""
+    #: The registry of the run Gate 2 last reviewed: what the writer cites and
+    #: Gate 3 checks against. ``None`` when nothing was reviewed.
+    registry: dict[str, Any] | None = None
     reviews: list[GatedExecution] = field(default_factory=list)
     #: Every Gate 1 run this loop made, in order, passed or not. ``first`` is
     #: not among them: the loop reviewed it but did not run it.
@@ -548,6 +551,7 @@ def review_loop(
         )
         context.close_turn(reviewed.passed)
         result.reviews.append(reviewed)
+        result.registry = registry
         # Set on every turn, so a revise that gives up still hands the writer
         # the discrepancies it was sent (F4).
         result.declared = reviewed.evidence_bundle

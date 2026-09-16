@@ -17,7 +17,7 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 branch: feature/gate2-feedback-loop
 head: 2a3a9a4
 head_date: 2026-09-14
-tests_total: 461
+tests_total: 463
 tests_gate1: 98
 tests_gate2: 92
 tests_gate3: 19
@@ -172,6 +172,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `02425bd` | Scenario 6 `hand-typed-fix`: a typed number is Gate 1's to reject and costs no Gate 2 turn. M5 now 6 runs, 3/4 resolved. 457 tests (recorded as 456 in `02425bd`, corrected in the next commit). |
 | 09-16 | `c2e4551` | STATE total corrected to 457. |
 | 09-16 | `68986bc` | Gate 1 budget inside `review_loop`: raises if nothing ran clean, else ends `proceeded` with the last review declared. 459 tests. |
-| 09-16 | *this* | `review_loop(first=)`: the Gate 1 pass a host already holds is reviewed without re-running; a rejected `first` raises `GateError`. 461 tests. |
+| 09-16 | `5eeffbe` | `review_loop(first=)`: the Gate 1 pass a host already holds is reviewed without re-running; a rejected `first` raises `GateError`. 461 tests. |
+| 09-16 | *this* | `ReviewOutcome.registry`: the last reviewed run's registry, the one the writer cites and Gate 3 checks. 463 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.
