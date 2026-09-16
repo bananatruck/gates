@@ -307,8 +307,8 @@ debugging aid.
 pip install -e ".[dev]" && pytest
 ```
 
-514 tests here: 98 for Gate 1, 126 for Gate 2 (checks, loop, and the tier
-comparison), 61 for Gate 3 (checks and loop), and the rest covering the value registry, the log
+535 tests here: 98 for Gate 1, 126 for Gate 2 (checks, loop, and the tier
+comparison), 82 for Gate 3 (checks, model layer and loop), and the rest covering the value registry, the log
 scanner, and Gate 1's loop. The host scaffold's integration suite is separate. Every check in the tables above is tied to
 the test that holds it in place in
 [`docs/GATE1_REQUIREMENTS.md`](docs/GATE1_REQUIREMENTS.md).

@@ -465,11 +465,20 @@ def test_every_check_gate3_emits_can_be_rendered_and_has_a_fix(tmp_path):
     """D14 for Gate 3, the same guard Gate 2 has. A keyed lookup that misses
     renders nothing, and the writer gets a rejection it cannot act on.
 
-    Every check the fixture emits must also fail, so a check added later that
-    this fixture does not trip shows up here instead of passing unguarded."""
+    Every check the fixture emits, INFO rows aside, must also fail or warn, so a
+    check added later that this fixture does not trip shows up here instead of
+    passing unguarded. A scripted model makes the claim scan warn."""
+    import json as _json
+
+    from gates import llm_claims
     from gates.gate3 import render_result_tokens
     from gates.registry import citable_values
     from gates.report import _EVIDENCE_RENDERERS, _FIXES
+
+    def model(prompt, system):
+        if system != llm_claims.SYSTEM:
+            return "1. Cite `exp1.acc_at_400`."
+        return _json.dumps([{"line": 2, "quote": "fast", "why": "a speed claim"}])
 
     reg = registry(RECORDED)
     paper = (
@@ -479,13 +488,19 @@ def test_every_check_gate3_emits_can_be_rendered_and_has_a_fix(tmp_path):
     )
     self_rendered, _ = render_result_tokens(paper, citable_values(reg))
     tampered = self_rendered.replace("0.97", "0.98")
-    report = run_gate3(paper, reg, config(tmp_path, figure_root=str(tmp_path), rendered=tampered),
-                       declared="DECLARED LIMITATIONS\n\n  - a.b: unresolved\n")
-    emitted = {c.id for c in report.checks}
+    report = run_gate3(
+        paper,
+        reg,
+        config(tmp_path, figure_root=str(tmp_path), rendered=tampered, consult_model=model),
+        declared="DECLARED LIMITATIONS\n\n  - a.b: unresolved\n",
+    )
+    emitted = {c.id for c in report.checks if c.severity is not Severity.INFO}
+    failed = {c.id for c in report.failed_checks()}
 
-    assert emitted == {c.id for c in report.failed_checks()}
+    assert emitted == failed | {c.id for c in report.warnings()}
+    assert "report.model_unbound_claims" in emitted
     assert sorted(i for i in emitted if i not in _EVIDENCE_RENDERERS) == []
-    assert sorted(i for i in emitted if i not in _FIXES) == []
+    assert sorted(i for i in failed if i not in _FIXES) == []
 
 
 # --------------------------------------------------------------------------- #

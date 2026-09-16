@@ -15,9 +15,9 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: feature/gate2-feedback-loop
-head: 99a7098
+head: 9a37134
 head_date: 2026-09-16
-tests_total: 514
+tests_total: 535
 tests_gate1: 98
 tests_gate2: 92
 tests_gate3: 46
@@ -76,7 +76,8 @@ forever, but an unverifiable manuscript must not ship.
 | Gate 3 — `style.*` | `claim_sections_bound` done (step 4, D34); the rest is step 7 | `run_gate3()` | 7 of 46 |
 | Gate 3 loop | **complete for the existing checks, model-free.** Adapter half (step 2): `make_report_context()`, `gated_report()`, `report_loop()`, `ReportOutcome`; a spent budget raises; a Gate 1-rejected registry is refused before `write` runs. Rig half (step 3): 6 scenarios; the registry and declared limitations come from a real Gate 2 run (`clean` unless a scenario names another); a raised loop is rebuilt from `context.history`. Scenario 4 waits on its check. | `gates/adapters/agentlab.py` `report_loop()`, driven by `rig/gate3_loop.py` | 9 of 46 in `tests/test_gate3.py`, 15 in `tests/test_gate3_loop.py` |
 | LLM scan layer | complete, Gate 1 only | `gates/llm_scan.py` | 21 |
-| LLM plumbing (`ModelFn`, budget) | complete, Gate 1 only | `gates/llm.py` | 14 |
+| Gate 3 model layer (D31) | complete, model-free by default. Claim scan (`report.model_unbound_claims`, WARN, quote-grounded, INFO when it cannot run); REQUIRED FIXES via `generate_fixes(system=, facts=, grounding=)` with `check_manuscript_grounding`; `llm_report.attach_fixes` shared with Gate 1; `make_report_context(consult_model=)`; `REPORT_GATE_INSTRUCTIONS` | `gates/llm_claims.py`, `gates/gate3.py` | 21, in `tests/test_gate3_model.py` |
+| LLM plumbing (`ModelFn`, budget) | complete, Gates 1 and 3 | `gates/llm.py` | 14 |
 | `gates/gate2_semantic.py` | **deleted** 09-13 (D4). Gate 2 is model-free (D19) | - | 15 removed |
 | Agent Laboratory adapter | `gated_execute`; `gated_review` and `review_loop` via `make_review_context()`, which takes `relations`, `ranges`, `plan_fields`, `sources` + `lit_review`; `gated_report` and `report_loop` via `make_report_context()` | `gates/adapters/agentlab.py` | — |
 | Tier A evaluation harness | complete | `rig/gate2_tier_a_eval.py` | 45 labelled registries |
@@ -121,7 +122,7 @@ Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adap
    7. Remaining `style.*`, host-declared inputs only (D27).
    8. G3-M4: measure scanner misses (`\begin{abstract}` unscanned, `\cite` lines skipped, readout §6), report, do not silently fix.
    9. `source.identifiers_resolve` via injected `lookup` (B2). `citations_parse` and `metadata_agrees` have no input on Agent Laboratory: inline `(arXiv id)` citations, no bibliography.
-   Approved 09-16 (Q8-Q14): next is the D31 model layer with a `REPORT_GATE_INSTRUCTIONS` writer prompt, then a key-leak test across all three gates, then steps 6-9.
+   Approved 09-16 (Q8-Q14): D31 model layer done; next a key-leak test across all three gates (Q14), then steps 6-9.
    Also: `PLAN.md` §5.1/§5.2 name `report.citations_*` and claim citations are "eliminated by construction"; reconcile with what is built.
 2. `env.parent_proc_guard` INFO check (B3).
 3. F9 + F8 with model spend; F11 last. F2 and F5 wait on a host call site (out of scope 09-14).
@@ -161,7 +162,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | D28 | **Declared limitations are rendered, not authored.** The renderer inserts Gate 2's `declared` block verbatim and Gate 3 checks it is present. Rejected: matching a writer's paraphrase, which no deterministic check can do. Decided by Kesh. | `report.limitations_declared`, see D35 |
 | 09-16 | D29 | **Gate 3's loop is `report_loop` in the adapter, not `rig/loop.py`.** Amends D5. `run_loop` is Gate 1-wired (`rig/loop.py:198`); Gate 3 follows Gate 2's as-built shape. `report_loop` takes a registry, not a `ReviewOutcome`, so a host without Gate 2 can use it. `Ledger.loop_summary` counts Gate 2 rows only, since both phases share `divergence.jsonl`. | `test_a_spent_budget_raises_and_emits_nothing`, `test_gate_3_turns_are_not_counted_as_gate_2_reviews` |
 | 09-16 | D30 | **Gate 3 is described as mirroring Gate 1**: a flat check list, a reject-and-retry loop back to the agent that wrote the artifact, and a raise on a spent budget. It verifies the manuscript's words and cited sources instead of code. D29 still holds for the code. Replaces "Gate 2's sibling" at `gates/gate3.py:5`. Decided by Kesh. | `gates/gate3.py` module docstring |
-| 09-16 | D31 | **Gate 3 gets Gate 1's model layer, rebuilt for manuscripts.** Same structure as Gate 1: an injected `ModelFn` on `Gate3Config`, model findings only through `model_warning` (WARN), REQUIRED FIXES written after the verdict and dropped if ungrounded, spend through `ModelBudget`. The feedback goes to the host's paper writer (`PaperSolver`, `ai_lab_repo.py:294`) the way Gate 1's goes to `MLESolver`. Decided by Kesh; design awaiting approval. | pending |
+| 09-16 | D31 | **Gate 3 gets Gate 1's model layer, rebuilt for manuscripts.** Same structure as Gate 1: an injected `ModelFn` on `Gate3Config`, model findings only through `model_warning` (WARN), REQUIRED FIXES written after the verdict and dropped if ungrounded, spend through `ModelBudget`. The feedback goes to the host's paper writer (`PaperSolver`, `ai_lab_repo.py:294`) the way Gate 1's goes to `MLESolver`. Design approved 09-16 (Q10, Q11, Q13): claim scan WARN only, fixes grounded against the registry's keys, feedback to `PaperSolver`. Decided by Kesh. | `test_a_hostile_model_cannot_move_a_verdict`, `test_the_claim_scan_module_never_names_severity_fail`, `test_a_fix_proposing_an_unrecorded_key_is_dropped_whole` |
 | 09-16 | D32 | **Gate 3 reads the retrieved-paper set through `retrieved: Callable[[], set[str]] | None` on `report_loop`**, called after each `write`, because the host fills `section_related_work` during its first write (`papersolver.py:357-367`). `None`: the source checks emit nothing. Rejected: `write` returning papers too, which widens the contract for hosts with no source checks. Decided by Kesh. | pending - step 6 |
 | 09-16 | D33 | **Remaining `style.*`**: `style.no_orphan_references` FAIL, only when the manuscript uses `\ref` or `\label`; `style.floats_referenced` WARN; `style.acronyms_defined` dropped, since which acronyms need expanding is a preference D27 refuses without a host-declared list. Decided by Kesh. | pending - step 7 |
 | 09-16 | D34 | **`style.claim_sections_bound` holds only sections whose heading contains "results"** to at least one `\result{}` token, counted whether or not it resolves. A qualitative discussion is honest writing; a numberless Results section is the evasion. No results heading: the check emits nothing, and `style.sections_present` catches the absence when the host declares it. Rejected: every findings section (fails honest discussions, and an abstract is only seen as `\section{Abstract}`); one token anywhere (lets an empty Results through). Decided by Kesh (Q8). | `test_a_results_section_that_cites_nothing_fails`, `test_only_a_results_section_must_cite_a_measurement` |
@@ -211,6 +212,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `ff2382b` | Q12 fix: `_evidence_missing_keys` listed 5 keys and hid the rest; now lists all (red first, 6 keys). Also changes Gate 1 feedback; no frozen log carries the line. 492 tests. |
 | 09-16 | `edc5f77` | Gate 3 step 4: `style.claim_sections_bound` (D34), renderer and fix; `prose.sections()`; D14 guard for Gate 3 (fails with a renderer removed); the literal check no longer calls a numberless paper fully cited; docstring per D30/D7; scenario 5 `no-numbers-in-results`. 502 tests. |
 | 09-16 | `99a7098` | Gate 3 step 5: `\limitations{}` token and `report.limitations_declared` (D35), renderer and fix; `declared=` through the adapter; rig `Scenario.gate2`, scenario `undeclared-limitation` from Gate 2's `divergence-exhausts`. 513 tests. |
-| 09-16 | *this* | Gate 1 fix: with no model, `ModelLayer.ask` recorded a failed call, so a run that printed and failed was told the model "could not be reached" (red first). No call is recorded now; `report.model` is `null`. 31 frozen reports carry the old record, noted in `reports/README.md`. 514 tests. |
+| 09-16 | `9a37134` | Gate 1 fix: with no model, `ModelLayer.ask` recorded a failed call, so a run that printed and failed was told the model "could not be reached" (red first). No call is recorded now; `report.model` is `null`. 31 frozen reports carry the old record, noted in `reports/README.md`. 514 tests. |
+| 09-16 | *this* | D31: Gate 3 model layer. `gates/llm_claims.py` (claim scan over findings rows the scanner passed, `\begin{abstract}` included, tokens masked); `Gate3Config.consult_model`; fixes after the verdict with `REPORT_SYSTEM` and `CITABLE KEYS`, dropped whole on an unrecorded `\result{}`; `attach_fixes` moved out of `gate1.py`; `REPORT_GATE_INSTRUCTIONS`; D14 guard covers warnings. 535 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.

@@ -81,6 +81,33 @@ still useful, but printed values are not citable - only recorded ones are.
 """
 
 
+#: Gate 3's counterpart to MLE_GATE_INSTRUCTIONS, for the paper writer (D31).
+#: A test checks every token shown here is one the gate's own patterns read.
+REPORT_GATE_INSTRUCTIONS = r"""
+============= RESULT CITATION (REQUIRED) =============
+Every number that reports a result of this study must be written as a token:
+
+    \result{<key>}
+
+using a key from the verified results, for example \result{exp1.K2.test_acc}.
+The renderer replaces each token with the value exactly as it was measured.
+
+Do not type a result number yourself, and do not round one. A number typed
+into a findings section (abstract, results, discussion, conclusion) is
+rejected, because a number with no key was never measured.
+
+Every Results section must cite at least one recorded value. Describing
+results without numbers is rejected too.
+
+If the verification layer declared limitations, write \limitations{} where the
+paper discusses its limitations. The renderer inserts them word for word. Do
+not paraphrase them or leave them out.
+
+Your manuscript is checked before it is accepted. A rejected manuscript comes
+back to you with a report naming what to change.
+"""
+
+
 @dataclass
 class GateContext:
     """Per-phase gate state: budget, ledger, and what has passed so far."""
@@ -297,6 +324,7 @@ def make_report_context(
     phase: str = "report writing",
     max_attempts: int = 3,
     figure_root: str | None = None,
+    consult_model: Any = None,
 ) -> GateContext:
     """Build the gate context for the writing phase, the one Gate 3 runs in.
 
@@ -304,13 +332,16 @@ def make_report_context(
     own budget. ``phase`` is the host's own name for it (``ai_lab_repo.py:294``).
     ``figure_root`` is where the run's figures live; ``None`` resolves them
     against the working directory and skips the check that they stayed inside
-    the run.
+    the run. ``consult_model`` is Gate 3's model layer (D31), built the way
+    Gate 1's is: ``make_gate_model(backend, key)`` returns a new function for
+    this gate, so Gate 3's spend is counted apart from Gate 1's.
     """
     artifact_root = os.path.join(research_dir, "gate_artifacts")
     config = Gate3Config(
         max_attempts=max_attempts,
         artifact_root=artifact_root,
         figure_root=figure_root,
+        consult_model=consult_model,
     )
     return GateContext(
         config=config,

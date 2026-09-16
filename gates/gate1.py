@@ -222,26 +222,12 @@ def _attach_generated_fixes(report: GateReport, model: ModelLayer, source: str) 
     """
     if report.passed or not model.available:
         return
-    outcome = llm_report.generate_fixes(model, report, source)
-    if outcome.usable:
-        report.generated_fixes = outcome.text
-    elif outcome.ungrounded:
-        # Rejected whole rather than repaired. A fix naming a variable the code
-        # does not contain sends the engineer chasing something that does not
-        # exist, which is the failure this gate exists to prevent.
-        report.checks.append(
-            CheckResult(
-                id="report.fixes_grounded",
-                passed=True,
-                severity=Severity.INFO,
-                message=(
-                    "the generated fixes cited "
-                    f"{', '.join(outcome.ungrounded[:4])}, which this run does "
-                    "not support; the deterministic template was used instead"
-                ),
-                evidence={"ungrounded": outcome.ungrounded, "degraded": True},
-            )
-        )
+    # Rejected whole rather than repaired. A fix naming a variable the code does
+    # not contain sends the engineer chasing something that does not exist,
+    # which is the failure this gate exists to prevent.
+    llm_report.attach_fixes(
+        report, llm_report.generate_fixes(model, report, source), subject="this run"
+    )
 
 
 def _record_model_budget(report: GateReport, model: ModelLayer) -> None:

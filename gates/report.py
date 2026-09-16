@@ -355,6 +355,13 @@ def _evidence_limitations(check: CheckResult) -> list[str]:
     return out
 
 
+def _evidence_claim_findings(check: CheckResult) -> list[str]:
+    return [
+        f"  {row['section']}: \"{row['quote']}\"" + (f"  ({row['why']})" if row.get("why") else "")
+        for row in check.evidence.get("findings", [])[:_MAX_EVIDENCE_ROWS]
+    ]
+
+
 def _evidence_unbound_sections(check: CheckResult) -> list[str]:
     out = [f"  {name}: no \\result{{}} token" for name in check.evidence.get("unbound", [])]
     if check.evidence.get("recorded"):
@@ -408,6 +415,7 @@ _EVIDENCE_RENDERERS = {
     "report.rendered_values_match_registry": _evidence_mismatches,
     "report.figures_referenced_exist": _evidence_figures,
     "report.limitations_declared": _evidence_limitations,
+    "report.model_unbound_claims": _evidence_claim_findings,
     "style.claim_sections_bound": _evidence_unbound_sections,
 }
 

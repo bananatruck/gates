@@ -121,6 +121,13 @@ def claim_sections(paper_text: str) -> list[str]:
     return found
 
 
+def flags_claim(line: str) -> bool:
+    """Whether :func:`extract_claims` takes a number from this findings line."""
+    if SKIP_LINE.search(line):
+        return False
+    return any(is_claim(token) for token in NUMBER.findall(CITATION.sub(" ", line)))
+
+
 def sections(paper_text: str) -> list[tuple[str, str]]:
     """Each top-level section as ``(heading, body)``, in order.
 

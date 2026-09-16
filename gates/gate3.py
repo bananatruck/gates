@@ -20,6 +20,12 @@ each check runs when its input exists:
                                                    limitations
     style.claim_sections_bound              FAIL   iff the manuscript has a
                                                    results section
+    report.model_unbound_claims             WARN   iff a model is set and
+                                                   flags a row; INFO if the
+                                                   scan could not run
+
+The model layer is Gate 1's (D31): the model reads what the number scanner
+passed and writes the REQUIRED FIXES, and neither can move the verdict.
 
 **What "eliminated by construction" actually means.** The claim in `PLAN.md`
 §5.2 is a property of the *pipeline*, not of a scanner: the writer emits
@@ -41,7 +47,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from . import llm_claims, llm_report
 from .errors import GateError
+from .llm import (
+    DEFAULT_MAX_PROMPT_CHARS,
+    DEFAULT_TIMEOUT_S as DEFAULT_MODEL_TIMEOUT_S,
+    ModelFn,
+    ModelLayer,
+)
 from .prose import claim_sections, extract_claims, sections
 from .registry import citable_values
 from .schema import CheckResult, GateReport, Severity, decide
@@ -91,6 +104,13 @@ class Gate3Config:
     #: renders, and says so: a self-rendered comparison is a weaker statement
     #: than an independent one, so its origin travels with it.
     rendered: str | None = None
+    #: The model layer's model, as in ``Gate1Config`` (D31). It reads the
+    #: findings prose the number scanner passed and drafts the writer's
+    #: REQUIRED FIXES, both outside the verdict. Absent, the gate issues the same
+    #: verdict, says the scan did not run, and sends the fix template.
+    consult_model: ModelFn | None = None
+    model_timeout_s: float = DEFAULT_MODEL_TIMEOUT_S
+    max_prompt_chars: int = DEFAULT_MAX_PROMPT_CHARS
 
     def attempt_dir(self, attempt: int) -> Path:
         return Path(self.artifact_root) / "gate3" / f"attempt_{attempt:02d}"
@@ -462,10 +482,17 @@ def run_gate3(
         _check_tokens_resolve(source, values),
         _check_rendered_matches(rendered, subs, values, origin),
     ]
+    model = ModelLayer(
+        config.consult_model,
+        timeout_s=config.model_timeout_s,
+        max_prompt_chars=config.max_prompt_chars,
+    )
     for optional in (
         _check_figures_exist(source, config.figure_root),
         _check_limitations_declared(source, rendered, declared, origin),
         _check_claim_sections_bound(source, values),
+        # WARN or INFO by construction, so decide() below is blind to it.
+        llm_claims.build_check(llm_claims.scan_claims(model, _mask_tokens(source))),
     ):
         if optional is not None:
             checks.append(optional)
@@ -481,6 +508,26 @@ def run_gate3(
         checks=checks,
         artifact_dir=str(artifact_dir),
     )
+    # The verdict is fixed above. Only now is the model asked to write anything
+    # the writer will read, as in Gate 1.
+    if not report.passed and model.available:
+        keys = sorted(values)
+        llm_report.attach_fixes(
+            report,
+            llm_report.generate_fixes(
+                model,
+                report,
+                source,
+                system=llm_report.REPORT_SYSTEM,
+                facts="CITABLE KEYS: " + ", ".join(keys),
+                grounding=lambda text: llm_report.check_manuscript_grounding(
+                    text, report, source, keys
+                ),
+            ),
+            subject="this manuscript and its registry",
+        )
+    if model.available:
+        report.model = model.budget.to_dict()
     (artifact_dir / "gate3_report.json").write_text(
         report.to_json(), encoding="utf-8"
     )
