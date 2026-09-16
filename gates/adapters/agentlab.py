@@ -464,9 +464,10 @@ def declared_limitations(report: GateReport) -> str:
 class ReviewOutcome:
     """How Gate 2's feedback loop ended, and what the writer must disclose."""
 
-    #: "pass" - a registry was admitted. "proceeded" - the budget was spent and
-    #: the run continues with its discrepancies declared. "no_pass" - ``revise``
-    #: stopped before the budget did.
+    #: "pass" - a registry was admitted. "proceeded" - a budget was spent, Gate
+    #: 2's or Gate 1's after a review, and the run continues with the last
+    #: review's discrepancies declared. "no_pass" - ``revise`` stopped before
+    #: either budget did.
     outcome: str = "no_pass"
     #: From the last review, on every exit. Empty means nothing to declare, not
     #: that nothing was checked.
@@ -492,8 +493,9 @@ def review_loop(
     running (F12). A Gate 1 rejection sends Gate 1's report back and costs a
     Gate 1 turn, not a Gate 2 one.
 
-    Bounded by the budget: every reviewed turn either passes or adds a
-    consecutive rejection. A spent Gate 2 budget does not raise (`CLAUDE.md` §4).
+    Bounded by both budgets. A spent Gate 2 budget does not raise (`CLAUDE.md`
+    §4). A spent Gate 1 budget raises ``GateFailure`` if no revision ever ran
+    clean, and otherwise ends the loop with the last review declared.
     """
     if not gate1_enabled():
         raise GateError("Gate 2 reviews Gate 1's registry, and GATES_GATE1 is off")
@@ -511,7 +513,13 @@ def review_loop(
         )
         gate1.close_turn(executed.passed)
         if not executed.passed:
+            # Nothing ever passed: Gate 1 raises, as it does outside this loop.
             gate1.check_can_continue()
+            if gate1.budget_exhausted:
+                # Something passed and Gate 2 reviewed it, so that review's
+                # discrepancies stand declared, the same as a spent Gate 2 budget.
+                result.outcome = "proceeded" if result.reviews else "no_pass"
+                break
             feedback = executed.feedback
             continue
         registry = build_registry(executed.report, task_ref=gate1.config.task_ref)

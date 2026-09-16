@@ -223,3 +223,52 @@ def test_a_hand_typed_fix_is_gate_1s_to_reject_and_costs_no_review(played):
     assert [t.rejections_after for t in outcome.turns] == [1, 1, 0]
     assert outcome.outcome == "pass"
     assert outcome.reviews_used == SCENARIOS["hand-typed-fix"].max_attempts
+
+
+def _typed_speedup():
+    from rig.gate2_scenarios import HAND_TYPED_FIX
+
+    return HAND_TYPED_FIX.turns[1].code()
+
+
+def test_gate_1_exhausted_with_nothing_run_raises(tmp_path):
+    """Gate 1's policy holds inside Gate 2's loop: a run that never produced a
+    valid experiment must not produce a paper."""
+    from gates import GateFailure
+    from gates.adapters.agentlab import make_context, make_review_context, review_loop
+
+    with pytest.raises(GateFailure):
+        review_loop(
+            make_review_context(research_dir=str(tmp_path)),
+            lambda feedback: _typed_speedup(),
+            gate1=make_context(research_dir=str(tmp_path), max_attempts=2),
+        )
+
+
+def test_gate_1_exhausted_after_a_review_proceeds_with_that_review_declared(tmp_path):
+    """Something passed Gate 1 and Gate 2 rejected it. If every fix after that is
+    rejected by Gate 1, the loop stops rather than asking forever, and the
+    writer still gets the discrepancy Gate 2 found."""
+    from gates.adapters.agentlab import make_context, make_review_context, review_loop
+    from rig.gate2_scenarios import DIVERGENCE_EXHAUSTS, LR, EPOCHS, SPEEDUP
+
+    calls = []
+
+    def revise(feedback):
+        calls.append(feedback)
+        if len(calls) > 5:
+            raise AssertionError("revise called after Gate 1's budget was spent")
+        return DIVERGENCE_EXHAUSTS.turns[0].code() if len(calls) == 1 else _typed_speedup()
+
+    outcome = review_loop(
+        make_review_context(
+            research_dir=str(tmp_path), max_attempts=3, relations=(SPEEDUP,),
+            plan_fields=(LR, EPOCHS),
+        ),
+        revise,
+        gate1=make_context(research_dir=str(tmp_path), max_attempts=2),
+    )
+    assert len(calls) == 3
+    assert len(outcome.reviews) == 1
+    assert outcome.outcome == "proceeded"
+    assert "the plan declared 0.001 and the run recorded 0.01" in outcome.declared
