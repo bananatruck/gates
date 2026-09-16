@@ -502,6 +502,13 @@ def review_loop(
     while (code := revise(feedback)) is not None:
         executed = gated_execute(code, gate1)
         result.executions.append(executed)
+        # review_turn, not turn: loop_summary reads turn and counts Gate 2 only.
+        record_divergence(
+            gate1,
+            executed.report,
+            reward_score=None,
+            extra={"review_turn": len(result.reviews), **(extra or {})},
+        )
         gate1.close_turn(executed.passed)
         if not executed.passed:
             gate1.check_can_continue()

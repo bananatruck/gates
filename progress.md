@@ -17,7 +17,7 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 branch: feature/gate2-feedback-loop
 head: 2a3a9a4
 head_date: 2026-09-14
-tests_total: 454
+tests_total: 455
 tests_gate1: 98
 tests_gate2: 92
 tests_gate3: 19
@@ -167,6 +167,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-14 | `2a3a9a4` | F7 closed: `Ledger.loop_summary()`; `review_loop` rows carry `max_attempts`. 453 tests. |
 
 | 09-16 | `fe4568d` | F12 recorded: Gate 2 to Gate 1 path open. `head` corrected. 453 tests. |
-| 09-16 | *this* | F12 closed: `review_loop(context, revise, gate1=)` runs each revision under Gate 1; `revise` returns code; scenarios emit code; scenario 4 is now the B8 decoy. 454 tests. |
+| 09-16 | `77efbac` | F12 closed: `review_loop(context, revise, gate1=)` runs each revision under Gate 1; `revise` returns code; scenarios emit code; scenario 4 is now the B8 decoy. 454 tests. |
+| 09-16 | *this* | Gate 1 runs inside `review_loop` reach the ledger as `review_turn` rows; `loop_summary` unchanged. 455 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.

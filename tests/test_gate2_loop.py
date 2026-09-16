@@ -116,12 +116,23 @@ def test_a_passing_turn_clears_the_rejection_count(played):
 
 def test_every_review_lands_in_the_ledger(played):
     for name, outcome in played.items():
-        rows = Ledger(outcome.ledger_path).rows()
-        assert len(rows) == outcome.turns_used, name
+        rows = [r for r in Ledger(outcome.ledger_path).rows() if "turn" in r]
+        assert len(rows) == outcome.reviews_used, name
         assert {row["scenario"] for row in rows} == {name}
         assert [row["verdict"] for row in rows] == [
-            turn.report.verdict.value for turn in outcome.turns
+            turn.report.verdict.value for turn in outcome.turns if turn.gate == 2
         ]
+
+
+def test_every_gate_1_run_in_the_loop_lands_in_the_ledger(played):
+    """The ledger records every attempt, and a revision is a Gate 1 attempt
+    before it is anything else. Those rows carry ``review_turn``, not ``turn``,
+    so ``loop_summary`` counts Gate 2 reviews only."""
+    for name, outcome in played.items():
+        rows = [r for r in Ledger(outcome.ledger_path).rows() if "review_turn" in r]
+        assert len(rows) == outcome.turns_used, name
+        assert {row["gate"] for row in rows} == {"GATE 1 — EXECUTION VALIDITY"}
+        assert {row["scenario"] for row in rows} == {name}
 
 
 def test_loop_stops_when_the_engineer_gives_up(tmp_path):
