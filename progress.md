@@ -15,9 +15,9 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: feature/gate2-feedback-loop
-head: 9a37134
+head: 2963c76
 head_date: 2026-09-16
-tests_total: 535
+tests_total: 536
 tests_gate1: 98
 tests_gate2: 92
 tests_gate3: 46
@@ -122,7 +122,7 @@ Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adap
    7. Remaining `style.*`, host-declared inputs only (D27).
    8. G3-M4: measure scanner misses (`\begin{abstract}` unscanned, `\cite` lines skipped, readout §6), report, do not silently fix.
    9. `source.identifiers_resolve` via injected `lookup` (B2). `citations_parse` and `metadata_agrees` have no input on Agent Laboratory: inline `(arXiv id)` citations, no bibliography.
-   Approved 09-16 (Q8-Q14): D31 model layer done; next a key-leak test across all three gates (Q14), then steps 6-9.
+   Approved 09-16 (Q8-Q14): D31 model layer and the Q14 key-leak test done; next steps 6-9.
    Also: `PLAN.md` §5.1/§5.2 name `report.citations_*` and claim citations are "eliminated by construction"; reconcile with what is built.
 2. `env.parent_proc_guard` INFO check (B3).
 3. F9 + F8 with model spend; F11 last. F2 and F5 wait on a host call site (out of scope 09-14).
@@ -167,6 +167,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | D33 | **Remaining `style.*`**: `style.no_orphan_references` FAIL, only when the manuscript uses `\ref` or `\label`; `style.floats_referenced` WARN; `style.acronyms_defined` dropped, since which acronyms need expanding is a preference D27 refuses without a host-declared list. Decided by Kesh. | pending - step 7 |
 | 09-16 | D34 | **`style.claim_sections_bound` holds only sections whose heading contains "results"** to at least one `\result{}` token, counted whether or not it resolves. A qualitative discussion is honest writing; a numberless Results section is the evasion. No results heading: the check emits nothing, and `style.sections_present` catches the absence when the host declares it. Rejected: every findings section (fails honest discussions, and an abstract is only seen as `\section{Abstract}`); one token anywhere (lets an empty Results through). Decided by Kesh (Q8). | `test_a_results_section_that_cites_nothing_fails`, `test_only_a_results_section_must_cite_a_measurement` |
 | 09-16 | D35 | **How D28 is built.** `declared` is a keyword on `run_gate3`, `gated_report` and `report_loop`, beside `registry`, since both come out of Gate 2's run; not on `Gate3Config`, which is built before Gate 2 runs. The writer places `\limitations{}`; `render_result_tokens(declared=)` replaces it first, inside a LaTeX `verbatim` block, because `_` breaks the build and `%` hides the rest of a line. `report.limitations_declared` FAIL checks every stripped line of the block against the rendered text (the host's when supplied), and emits nothing when `declared` is empty. LaTeX only. Decided by Kesh (Q9). | `test_a_manuscript_without_the_limitations_token_fails`, `test_latex_specials_in_a_limitation_cannot_break_or_hide_it` |
+| 09-16 | D36 | **Provider keys stay outside `gates/`.** The key lives only in the function `make_gate_model` returns, one per gate, so spend is counted per gate; Gate 1's child gets a scrubbed environment. No restructure. A test runs all three gates with a sentinel key and fails if any written file or model prompt holds it (it fails with the scrub disabled). Separate function instances share one provider rate limit. Decided by Kesh (Q14). | `test_no_gate_writes_or_sends_the_key` |
 | 09-13 | D21 | **Gate 3's retrieval registry is Agent Laboratory's `lit_review`, `ADD_PAPER` entries only.** A paper read with `FULL_TEXT` but never added does not count as retrieved. Identifier is the host's `arxiv_id`. Decided by Kesh. | pending - Gate 3 `source.cited_papers_in_registry` |
 
 ## session log
@@ -213,6 +214,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `edc5f77` | Gate 3 step 4: `style.claim_sections_bound` (D34), renderer and fix; `prose.sections()`; D14 guard for Gate 3 (fails with a renderer removed); the literal check no longer calls a numberless paper fully cited; docstring per D30/D7; scenario 5 `no-numbers-in-results`. 502 tests. |
 | 09-16 | `99a7098` | Gate 3 step 5: `\limitations{}` token and `report.limitations_declared` (D35), renderer and fix; `declared=` through the adapter; rig `Scenario.gate2`, scenario `undeclared-limitation` from Gate 2's `divergence-exhausts`. 513 tests. |
 | 09-16 | `9a37134` | Gate 1 fix: with no model, `ModelLayer.ask` recorded a failed call, so a run that printed and failed was told the model "could not be reached" (red first). No call is recorded now; `report.model` is `null`. 31 frozen reports carry the old record, noted in `reports/README.md`. 514 tests. |
-| 09-16 | *this* | D31: Gate 3 model layer. `gates/llm_claims.py` (claim scan over findings rows the scanner passed, `\begin{abstract}` included, tokens masked); `Gate3Config.consult_model`; fixes after the verdict with `REPORT_SYSTEM` and `CITABLE KEYS`, dropped whole on an unrecorded `\result{}`; `attach_fixes` moved out of `gate1.py`; `REPORT_GATE_INSTRUCTIONS`; D14 guard covers warnings. 535 tests. |
+| 09-16 | `2963c76` | D31: Gate 3 model layer. `gates/llm_claims.py` (claim scan over findings rows the scanner passed, `\begin{abstract}` included, tokens masked); `Gate3Config.consult_model`; fixes after the verdict with `REPORT_SYSTEM` and `CITABLE KEYS`, dropped whole on an unrecorded `\result{}`; `attach_fixes` moved out of `gate1.py`; `REPORT_GATE_INSTRUCTIONS`; D14 guard covers warnings. 535 tests. |
+| 09-16 | *this* | Q14 / D36: `tests/test_key_leak.py` plays Gates 1-3 through the adapter with a sentinel key and a fake host `inference`; no file or prompt holds it; verified failing with `_without_credentials` disabled. 536 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.

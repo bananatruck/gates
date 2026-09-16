@@ -84,7 +84,7 @@ No gate compares its own `attempt` against `max_attempts`.
 ## 5. Build conventions
 
 - Tests run with the repo venv: `.venv/bin/python -m pytest`.
-  All of them, every time. 535 pass today.
+  All of them, every time. 536 pass today.
 - Bug fixes start with a failing test that reproduces the bug.
 - Cache and build output live under `.cache/`. Nothing else belongs in the repo root.
 - Do not commit scratch notes, TODO dumps, or generated summary docs unless asked.
