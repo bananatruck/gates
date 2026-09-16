@@ -19,10 +19,12 @@ from pathlib import Path
 from ..report import render_evidence
 from ..errors import GateError
 from ..gate2 import IMPLAUSIBLE_SPEEDUP, PlanField, Range, Relation, SourceClaim
+from ..gate3 import RENDERED_FILENAME
 from .. import (
     REGISTRY_FILENAME,
     Gate1Config,
     Gate2Config,
+    Gate3Config,
     GateFailure,
     GateReport,
     Ledger,
@@ -32,6 +34,7 @@ from .. import (
     run_experiment,
     run_gate1,
     run_gate2,
+    run_gate3,
     unresolved_discrepancies,
 )
 
@@ -82,7 +85,7 @@ still useful, but printed values are not citable - only recorded ones are.
 class GateContext:
     """Per-phase gate state: budget, ledger, and what has passed so far."""
 
-    config: Gate1Config | Gate2Config
+    config: Gate1Config | Gate2Config | Gate3Config
     ledger: Ledger | None = None
     phase: str = "running experiments"
     reward_model: str | None = None
@@ -285,6 +288,34 @@ def make_review_context(
         ledger=Ledger(os.path.join(artifact_root, "divergence.jsonl")),
         phase=phase,
         reward_model=reward_model,
+    )
+
+
+def make_report_context(
+    *,
+    research_dir: str = "./research_dir",
+    phase: str = "report writing",
+    max_attempts: int = 3,
+    figure_root: str | None = None,
+) -> GateContext:
+    """Build the gate context for the writing phase, the one Gate 3 runs in.
+
+    Its own builder for the reason Gate 2 has one (D15): a third phase with its
+    own budget. ``phase`` is the host's own name for it (``ai_lab_repo.py:294``).
+    ``figure_root`` is where the run's figures live; ``None`` resolves them
+    against the working directory and skips the check that they stayed inside
+    the run.
+    """
+    artifact_root = os.path.join(research_dir, "gate_artifacts")
+    config = Gate3Config(
+        max_attempts=max_attempts,
+        artifact_root=artifact_root,
+        figure_root=figure_root,
+    )
+    return GateContext(
+        config=config,
+        ledger=Ledger(os.path.join(artifact_root, "divergence.jsonl")),
+        phase=phase,
     )
 
 
@@ -562,6 +593,91 @@ def review_loop(
             result.outcome = "proceeded"
             break
         feedback = reviewed.feedback
+    return result
+
+
+def gated_report(source: str, registry: dict[str, Any], context: GateContext) -> GatedExecution:
+    """Judge one manuscript under Gate 3 and return the verdict.
+
+    The mirror of :func:`gated_review` one phase later. ``source`` is the
+    writer's output with its ``\\result{}`` tokens intact. The evidence bundle
+    is the render Gate 3 wrote to disk, so what a host publishes is byte for
+    byte what the gate judged.
+    """
+    context.attempt += 1
+    report = run_gate3(source, registry, context.config, attempt=context.attempt)
+    report.rewrite = context.consecutive_rejections + 1
+    context.note(report)
+
+    print(f"$$$$ {render_summary(report)}")
+
+    return GatedExecution(
+        report=report,
+        feedback=render_feedback(report),
+        evidence_bundle=(Path(report.artifact_dir) / RENDERED_FILENAME).read_text(
+            encoding="utf-8"
+        ),
+        code=source,
+    )
+
+
+@dataclass
+class ReportOutcome:
+    """How Gate 3's feedback loop ended. No "proceeded": a spent budget raises."""
+
+    #: "pass" - a manuscript was admitted. "no_pass" - ``write`` stopped first.
+    outcome: str = "no_pass"
+    #: The admitted manuscript, rendered. The only text a host should publish,
+    #: and ``None`` unless Gate 3 passed it.
+    manuscript: str | None = None
+    reports: list[GatedExecution] = field(default_factory=list)
+
+
+def report_loop(
+    context: GateContext,
+    write: Callable[[str | None], str | None],
+    *,
+    registry: dict[str, Any],
+    extra: dict[str, Any] | None = None,
+) -> ReportOutcome:
+    """Gate 3's feedback loop: the one call site a host's writing phase needs.
+
+    ``write(feedback)`` returns the next manuscript with its ``\\result{}``
+    tokens intact, or ``None`` to stop, and is first called with ``None``.
+    ``registry`` is the one the writer cites: ``ReviewOutcome.registry`` when
+    Gate 2 ran, Gate 1's otherwise. Taking the registry rather than a
+    ``ReviewOutcome`` keeps Gate 3 usable by a host that does not run Gate 2.
+
+    A spent budget raises ``GateFailure`` (`CLAUDE.md` §4): an unverifiable
+    manuscript is not emitted.
+    """
+    if not registry.get("citable"):
+        # run_gate3 refuses it too, but only after the writer spent a turn.
+        raise GateError("Gate 1 did not pass, so there is nothing a manuscript may cite")
+    result = ReportOutcome()
+    feedback: str | None = None
+    while (source := write(feedback)) is not None:
+        written = gated_report(source, registry, context)
+        record_divergence(
+            context,
+            written.report,
+            reward_score=None,
+            extra={
+                "turn": len(result.reports),
+                "max_attempts": context.config.max_attempts,
+                **(extra or {}),
+            },
+        )
+        context.close_turn(written.passed)
+        result.reports.append(written)
+        if written.passed:
+            result.outcome = "pass"
+            result.manuscript = written.evidence_bundle
+            break
+        # Nothing earlier passed, or the loop would have ended, so this raises
+        # whenever the budget is spent.
+        context.check_can_continue()
+        feedback = written.feedback
     return result
 
 

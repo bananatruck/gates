@@ -15,12 +15,12 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: feature/gate2-feedback-loop
-head: 5ab0bf3
+head: 4508891
 head_date: 2026-09-16
-tests_total: 471
+tests_total: 480
 tests_gate1: 98
 tests_gate2: 92
-tests_gate3: 19
+tests_gate3: 28
 tests_llm_scan: 21
 tests_llm_layer: 14
 <!-- STATE:END -->
@@ -69,14 +69,14 @@ forever, but an unverifiable manuscript must not ship.
 | Gate 2 tier B — methodology conformance | **complete** — `method_conformance` FAIL, `method_traceable` WARN; host path via `make_review_context(plan_fields=, sources=, lit_review=)` | `run_gate2()` | part of 92 |
 | Gate 2 tier C — loop | **complete, model-free**. 6 scenarios. Every revision runs under Gate 1 first (F12). A spent Gate 2 budget proceeds with the discrepancies declared. A spent Gate 1 budget raises if nothing ran clean. `first=` reviews a pass the host already holds. The outcome carries `registry` and `declared`. No host calls it yet. | `gates/adapters/agentlab.py` `review_loop()`, driven by `rig/gate2_loop.py` | 26 |
 | Gate 2 tier comparison | complete. A vs A+B vs A+B+C | `rig/gate2_tier_comparison.py` | 8 |
-| Gate 3 — `report.*` regex checks | numeric + figure binding done | `run_gate3()` | 19 |
+| Gate 3 — `report.*` regex checks | numeric + figure binding done | `run_gate3()` | 19 of 28 |
 | Gate 3 — `source.*` | **not written** | — | 0 |
 | Gate 3 — `style.*` | **not written** | — | 0 |
-| Gate 3 loop | **not written**; reuses `rig/loop.py` unchanged | — | 0 |
+| Gate 3 loop | **adapter half done** (step 2): `make_report_context()`, `gated_report()`, `report_loop()`, `ReportOutcome`. A spent budget raises; a Gate 1-rejected registry is refused before `write` runs. Rig half (step 3) not written. | `gates/adapters/agentlab.py` `report_loop()` | 9, in `tests/test_gate3.py` |
 | LLM scan layer | complete, Gate 1 only | `gates/llm_scan.py` | 21 |
 | LLM plumbing (`ModelFn`, budget) | complete, Gate 1 only | `gates/llm.py` | 14 |
 | `gates/gate2_semantic.py` | **deleted** 09-13 (D4). Gate 2 is model-free (D19) | - | 15 removed |
-| Agent Laboratory adapter | `gated_execute`; `gated_review` and `review_loop` via `make_review_context()`, which takes `relations`, `ranges`, `plan_fields`, `sources` + `lit_review`; **`gated_report` absent** | `gates/adapters/agentlab.py` | — |
+| Agent Laboratory adapter | `gated_execute`; `gated_review` and `review_loop` via `make_review_context()`, which takes `relations`, `ranges`, `plan_fields`, `sources` + `lit_review`; `gated_report` and `report_loop` via `make_report_context()` | `gates/adapters/agentlab.py` | — |
 | Tier A evaluation harness | complete | `rig/gate2_tier_a_eval.py` | 45 labelled registries |
 
 Frozen and checksum-signed — do not edit: `reports/finalized-report-and-results/`.
@@ -111,7 +111,7 @@ Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adap
 
 1. Gate 3, in this order (revised 09-16 from `GATE3_implementation_plan.md` §6). Red test first each step, full suite, commit, push.
    1. ~~B4~~ done.
-   2. `make_report_context()` + `gated_report()` in the adapter, shaped like `review_loop`: `revise` returns the next manuscript; a spent budget raises `GateFailure`. Inputs from Gate 2: `ReviewOutcome.registry` (values to bind) and `ReviewOutcome.declared` (D28). `rig/loop.py` is Gate 1-wired (`run_loop`, `rig/loop.py:198`) and stays unchanged.
+   2. ~~Adapter entry point~~ done. Was: `make_report_context()` + `gated_report()` in the adapter, shaped like `review_loop`: `revise` returns the next manuscript; a spent budget raises `GateFailure`. Inputs from Gate 2: `ReviewOutcome.registry` (values to bind) and `ReviewOutcome.declared` (D28). `rig/loop.py` is Gate 1-wired (`run_loop`, `rig/loop.py:198`) and stays unchanged.
    3. `rig/gate3_loop.py` + scenarios 1, 2, 3, 6 (existing checks only).
    4. `style.claim_sections_bound` + scenario 5. Fix the "tiers" wording in the `gates/gate3.py` docstring.
    5. Declared-limitations check (D28), with renderer and fix directive (D14).
@@ -156,6 +156,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | D26 | **Canonical identifier is the arXiv id, compared version-stripped**; a version mismatch is evidence, not a failure. No DOI fallback: the reference host never sees a DOI, so a cited DOI fails as not retrieved. Decided by Kesh. | pending - `source.cited_papers_in_registry` |
 | 09-16 | D27 | **`style.sections_present` checks sections the host declares at wiring time** (D13 pattern). No default list in `gates/`. Agent Laboratory's adapter declares its writer's list (`papersolver.py:352`). Decided by Kesh. | pending - `style.sections_present` |
 | 09-16 | D28 | **Declared limitations are rendered, not authored.** The renderer inserts Gate 2's `declared` block verbatim and Gate 3 checks it is present. Rejected: matching a writer's paraphrase, which no deterministic check can do. Decided by Kesh. | pending - Gate 3 limitations check |
+| 09-16 | D29 | **Gate 3's loop is `report_loop` in the adapter, not `rig/loop.py`.** Amends D5. `run_loop` is Gate 1-wired (`rig/loop.py:198`); Gate 3 follows Gate 2's as-built shape. `report_loop` takes a registry, not a `ReviewOutcome`, so a host without Gate 2 can use it. `Ledger.loop_summary` counts Gate 2 rows only, since both phases share `divergence.jsonl`. | `test_a_spent_budget_raises_and_emits_nothing`, `test_gate_3_turns_are_not_counted_as_gate_2_reviews` |
 | 09-13 | D21 | **Gate 3's retrieval registry is Agent Laboratory's `lit_review`, `ADD_PAPER` entries only.** A paper read with `FULL_TEXT` but never added does not count as retrieved. Identifier is the host's `arxiv_id`. Decided by Kesh. | pending - Gate 3 `source.cited_papers_in_registry` |
 
 ## session log
@@ -194,6 +195,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `444dc4d` | Tier comparison: `rig/gate2_tier_comparison.py`, `tests/test_gate2_tiers.py` (8). A vs A+B: 27/27 both, divergences 0 vs 12/12, unverifiable 0 vs 6/6, 0/35 false rejections both. A+B vs A+B+C over 6 scenarios: fixed 0 vs 3/4, declared 4 vs 1. 471 tests. |
 | 09-16 | `12bf4a0` | Docs: README (Gate 2 row, porting step 5, test counts, Gate 2 rig), PLAN.md (as-built note, step 6), CLAUDE.md count 471. 471 tests. |
 | 09-16 | `5ab0bf3` | Gate 2 marked complete in this repo; components, D24, next steps (Gate 3 planning). 471 tests. |
-| 09-16 | *this* | Gate 3 step 1: B4 closed, `ARCHIVED` asserts 29 literals over abstract, results, discussion (red on the old 8 first). D25-D28 recorded, Gate 3 order revised. 471 tests. |
+| 09-16 | `4508891` | Gate 3 step 1: B4 closed, `ARCHIVED` asserts 29 literals over abstract, results, discussion (red on the old 8 first). D25-D28 recorded, Gate 3 order revised. 471 tests. |
+| 09-16 | *this* | Gate 3 step 2: `make_report_context`, `gated_report`, `report_loop`, `ReportOutcome`; `gate3.RENDERED_FILENAME`; `loop_summary` filtered to Gate 2 (red first: a Gate 3 turn counted as a Gate 2 run). D29. 480 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.

@@ -16,7 +16,13 @@ import pathlib
 
 import pytest
 
-from gates.errors import GateError
+from gates.adapters.agentlab import (
+    gated_report,
+    make_report_context,
+    make_review_context,
+    report_loop,
+)
+from gates.errors import GateError, GateFailure
 from gates.gate3 import (
     GATE_NAME,
     Gate3Config,
@@ -25,6 +31,7 @@ from gates.gate3 import (
 )
 from gates.report import render_feedback
 from gates.schema import Severity, Verdict
+from gates.setup import defaults
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 
@@ -269,6 +276,96 @@ def test_feedback_lists_the_keys_that_were_available(tmp_path):
     text = render_feedback(run_gate3(paper, registry(RECORDED), config(tmp_path)))
     assert "missing:  exp1.invented" in text
     assert "exp1.acc_at_400" in text
+
+
+# --------------------------------------------------------------------------- #
+# the host entry point and the loop
+# --------------------------------------------------------------------------- #
+
+
+def report_context(tmp_path, **kwargs):
+    return make_report_context(research_dir=str(tmp_path), **kwargs)
+
+
+def writer(*drafts):
+    """A scripted writer: each draft in turn, then stop. Keeps what it was sent."""
+    queue = list(drafts)
+
+    def write(feedback):
+        write.sent.append(feedback)
+        return queue.pop(0) if queue else None
+
+    write.sent = []
+    return write
+
+
+def test_the_host_wiring_path_actually_reaches_gate_3(tmp_path):
+    written = gated_report(TOKENISED, registry(RECORDED), report_context(tmp_path))
+    assert written.report.gate == GATE_NAME
+    assert written.passed
+
+
+def test_the_report_budget_defaults_to_the_setup_default(tmp_path):
+    assert report_context(tmp_path).config.max_attempts == defaults().gate3
+
+
+def test_a_passing_manuscript_comes_back_rendered(tmp_path):
+    outcome = report_loop(report_context(tmp_path), writer(TOKENISED),
+                          registry=registry(RECORDED))
+    assert outcome.outcome == "pass"
+    assert "0.9175257731958764" in outcome.manuscript
+    assert "\\result{" not in outcome.manuscript
+
+
+def test_a_rejected_manuscript_goes_back_to_the_writer(tmp_path):
+    write = writer(TYPED, TOKENISED)
+    outcome = report_loop(report_context(tmp_path), write, registry=registry(RECORDED))
+    assert [w.passed for w in outcome.reports] == [False, True]
+    assert write.sent[0] is None
+    assert "\\result{<key>}" in write.sent[1]
+    assert outcome.outcome == "pass"
+
+
+def test_a_spent_budget_raises_and_emits_nothing(tmp_path):
+    """The opposite of Gate 2: an unverifiable manuscript is not emitted."""
+    write = writer(TYPED, TYPED, TOKENISED)
+    with pytest.raises(GateFailure) as raised:
+        report_loop(report_context(tmp_path, max_attempts=2), write,
+                    registry=registry(RECORDED))
+    assert raised.value.gate == GATE_NAME
+    assert len(write.sent) == 2
+
+
+def test_a_writer_that_stops_gets_no_manuscript(tmp_path):
+    outcome = report_loop(report_context(tmp_path), writer(TYPED),
+                          registry=registry(RECORDED))
+    assert outcome.outcome == "no_pass"
+    assert outcome.manuscript is None
+    assert len(outcome.reports) == 1
+
+
+def test_a_registry_gate_1_rejected_never_reaches_the_writer(tmp_path):
+    write = writer(TOKENISED)
+    with pytest.raises(GateError, match="Gate 1 did not pass"):
+        report_loop(report_context(tmp_path), write,
+                    registry=registry(RECORDED, citable=False))
+    assert write.sent == []
+
+
+def test_every_attempt_lands_in_the_ledger(tmp_path):
+    context = report_context(tmp_path)
+    report_loop(context, writer(TYPED, TOKENISED), registry=registry(RECORDED))
+    rows = [r for r in context.ledger.rows() if r["gate"] == GATE_NAME]
+    assert [(r["turn"], r["verdict"]) for r in rows] == [(0, "FAIL"), (1, "PASS")]
+    assert {r["phase"] for r in rows} == {"report writing"}
+
+
+def test_gate_3_turns_are_not_counted_as_gate_2_reviews(tmp_path):
+    """Both phases append to one ledger, and M5 is Gate 2's number."""
+    context = report_context(tmp_path)
+    assert make_review_context(research_dir=str(tmp_path)).ledger.path == context.ledger.path
+    report_loop(context, writer(TYPED, TOKENISED), registry=registry(RECORDED))
+    assert context.ledger.loop_summary()["runs_reviewed"] == 0
 
 
 # --------------------------------------------------------------------------- #

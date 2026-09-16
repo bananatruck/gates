@@ -44,6 +44,9 @@ GATE_NAME = "GATE 3 — REPORT VALIDITY"
 #: The one thing a writing agent is allowed to emit where a number belongs.
 RESULT_TOKEN = re.compile(r"\\result\{([^}]+)\}")
 
+#: What the reader will see, written beside the report on every attempt.
+RENDERED_FILENAME = "manuscript.rendered"
+
 #: Figure references, in both dialects the archived manuscripts actually use.
 _FIGURES = (
     re.compile(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}"),
@@ -355,5 +358,5 @@ def run_gate3(
     (artifact_dir / "gate3_report.json").write_text(
         report.to_json(), encoding="utf-8"
     )
-    (artifact_dir / "manuscript.rendered").write_text(rendered, encoding="utf-8")
+    (artifact_dir / RENDERED_FILENAME).write_text(rendered, encoding="utf-8")
     return report

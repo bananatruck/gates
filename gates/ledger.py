@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .gate2 import GATE_NAME as GATE2_NAME
 from .schema import GateReport
 
 
@@ -95,12 +96,17 @@ class Ledger:
         failed; a run admitted first time is counted in ``runs_reviewed`` and
         nowhere else. ``unresolved_declared`` is Gate 2 working as designed: the
         budget was spent and the run proceeded with its discrepancies declared.
+
+        Gate 2 rows only. Gate 3's loop writes ``turn`` to the same ledger, and
+        counting its manuscripts here would restate Gate 2's published number.
         """
         # ponytail: runs are split on turn 0, so two loops appending to one
         # ledger at the same time would merge; key rows by run id if hosts ever
         # review concurrently.
         runs: list[list[dict[str, Any]]] = []
         for row in self.rows():
+            if row.get("gate") != GATE2_NAME:
+                continue
             if "turn" not in row or "max_attempts" not in row:
                 continue
             if row["turn"] == 0 or not runs:
