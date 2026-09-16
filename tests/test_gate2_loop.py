@@ -272,3 +272,49 @@ def test_gate_1_exhausted_after_a_review_proceeds_with_that_review_declared(tmp_
     assert len(outcome.reviews) == 1
     assert outcome.outcome == "proceeded"
     assert "the plan declared 0.001 and the run recorded 0.01" in outcome.declared
+
+
+def test_the_run_the_solver_already_passed_is_reviewed_without_rerunning(tmp_path):
+    """A host leaves the experiment phase holding a Gate 1 pass. Reviewing it
+    must not execute it a second time; revise is first asked for a fix."""
+    from gates.adapters.agentlab import (
+        gated_execute, make_context, make_review_context, review_loop,
+    )
+    from rig.gate2_scenarios import CLEAN, OUT_OF_RANGE, SPEEDUP
+
+    gate1 = make_context(research_dir=str(tmp_path))
+    passed = gated_execute(OUT_OF_RANGE.turns[0].code(), gate1)
+    sent = []
+
+    def revise(feedback):
+        sent.append(feedback)
+        return OUT_OF_RANGE.turns[1].code()
+
+    outcome = review_loop(
+        make_review_context(research_dir=str(tmp_path), relations=(SPEEDUP,)),
+        revise,
+        gate1=gate1,
+        first=passed,
+    )
+    assert outcome.outcome == "pass"
+    assert len(outcome.reviews) == 2
+    assert len(outcome.executions) == 1
+    assert gate1.attempt == 2
+    assert "coherence.range_valid" in sent[0]
+
+
+def test_a_first_run_gate_1_rejected_cannot_be_reviewed(tmp_path):
+    from gates import GateError
+    from gates.adapters.agentlab import (
+        gated_execute, make_context, make_review_context, review_loop,
+    )
+
+    gate1 = make_context(research_dir=str(tmp_path))
+    rejected = gated_execute(_typed_speedup(), gate1)
+    with pytest.raises(GateError):
+        review_loop(
+            make_review_context(research_dir=str(tmp_path)),
+            lambda feedback: None,
+            gate1=gate1,
+            first=rejected,
+        )

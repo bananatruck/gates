@@ -473,7 +473,8 @@ class ReviewOutcome:
     #: that nothing was checked.
     declared: str = ""
     reviews: list[GatedExecution] = field(default_factory=list)
-    #: Every Gate 1 run of every revision, in order, passed or not.
+    #: Every Gate 1 run this loop made, in order, passed or not. ``first`` is
+    #: not among them: the loop reviewed it but did not run it.
     executions: list[GatedExecution] = field(default_factory=list)
 
 
@@ -482,16 +483,21 @@ def review_loop(
     revise: Callable[[str | None], str | None],
     *,
     gate1: GateContext,
+    first: GatedExecution | None = None,
     extra: dict[str, Any] | None = None,
 ) -> ReviewOutcome:
     """Gate 2's feedback loop, tier C: the one call site a host needs.
 
     ``revise(feedback)`` returns the next version of the experiment's code, or
-    ``None`` to stop. It is called with ``None`` for the first submission. Each
-    version runs under Gate 1 on ``gate1`` first, and Gate 2 reviews only the
-    registry Gate 1 built from that run, so a fix cannot reach Gate 2 without
-    running (F12). A Gate 1 rejection sends Gate 1's report back and costs a
-    Gate 1 turn, not a Gate 2 one.
+    ``None`` to stop. Each version runs under Gate 1 on ``gate1`` first, and
+    Gate 2 reviews only the registry Gate 1 built from that run, so a fix cannot
+    reach Gate 2 without running (F12). A Gate 1 rejection sends Gate 1's report
+    back and costs a Gate 1 turn, not a Gate 2 one.
+
+    ``first`` is the Gate 1 pass the host already holds from its experiment
+    phase. It is reviewed without running again, and ``revise`` is first called
+    with that review's feedback. Without it, ``revise`` is first called with
+    ``None`` and its code is the first submission.
 
     Bounded by both budgets. A spent Gate 2 budget does not raise (`CLAUDE.md`
     §4). A spent Gate 1 budget raises ``GateFailure`` if no revision ever ran
@@ -499,30 +505,36 @@ def review_loop(
     """
     if not gate1_enabled():
         raise GateError("Gate 2 reviews Gate 1's registry, and GATES_GATE1 is off")
+    if first is not None and (first.report is None or not first.passed):
+        raise GateError("first must be a run Gate 1 passed; Gate 1's rejection stands")
     result = ReviewOutcome()
     feedback: str | None = None
-    while (code := revise(feedback)) is not None:
-        executed = gated_execute(code, gate1)
-        result.executions.append(executed)
-        # review_turn, not turn: loop_summary reads turn and counts Gate 2 only.
-        record_divergence(
-            gate1,
-            executed.report,
-            reward_score=None,
-            extra={"review_turn": len(result.reviews), **(extra or {})},
-        )
-        gate1.close_turn(executed.passed)
-        if not executed.passed:
-            # Nothing ever passed: Gate 1 raises, as it does outside this loop.
-            gate1.check_can_continue()
-            if gate1.budget_exhausted:
-                # Something passed and Gate 2 reviewed it, so that review's
-                # discrepancies stand declared, the same as a spent Gate 2 budget.
-                result.outcome = "proceeded" if result.reviews else "no_pass"
-                break
-            feedback = executed.feedback
-            continue
+    executed = first
+    while executed is not None or (code := revise(feedback)) is not None:
+        if executed is None:
+            executed = gated_execute(code, gate1)
+            result.executions.append(executed)
+            # review_turn, not turn: loop_summary reads turn and counts Gate 2 only.
+            record_divergence(
+                gate1,
+                executed.report,
+                reward_score=None,
+                extra={"review_turn": len(result.reviews), **(extra or {})},
+            )
+            gate1.close_turn(executed.passed)
+            if not executed.passed:
+                # Nothing ever passed: Gate 1 raises, as it does outside this loop.
+                gate1.check_can_continue()
+                if gate1.budget_exhausted:
+                    # Something passed and Gate 2 reviewed it, so that review's
+                    # discrepancies stand declared, as on a spent Gate 2 budget.
+                    result.outcome = "proceeded" if result.reviews else "no_pass"
+                    break
+                feedback = executed.feedback
+                executed = None
+                continue
         registry = build_registry(executed.report, task_ref=gate1.config.task_ref)
+        executed = None
         reviewed = gated_review(registry, context)
         record_divergence(
             context,
