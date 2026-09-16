@@ -15,7 +15,7 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: feature/gate2-feedback-loop
-head: 6881511
+head: e34620c
 head_date: 2026-09-16
 tests_total: 558
 tests_gate1: 98
@@ -180,6 +180,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | D43 | **`PLAN.md` comes down to what is built.** `report.bibliography_generated` and `report.citation_metadata_matches` leave §5.1, `report.citations_in_registry` is renamed to the as-built `source.cited_papers_in_registry`, and §5.2's citation row becomes detected-and-measured rather than "eliminated by construction". Rejected: building a registry-emitted bibliography to earn the construction claim, which would change how the host writes citations and cost the portability claim. Decided by Kesh. | pending - docs |
 | 09-16 | D44 | **`CLAUDE.md` §6 is narrowed, not deleted.** Step 6 built the retrieved-id half via `retrieved_arxiv_ids()`; `source.identifiers_resolve` still has no registry. Decided by Kesh. | pending - docs |
 | 09-16 | D45 | **F11's `SKILL.md` lands before F9.** If E1 installs G.A.T.E.S. through the skill, portability becomes evidence from the experiment instead of an artifact shipped beside it. Doing it after E1 leaves the paper's central claim the only one with no run behind it. Decided by Kesh. | pending - F11 |
+| 09-16 | D46 | **The `docs/gate3/` blobs stay in this branch's history.** `git add -A` committed them in `8ba2612` before `e34620c` untracked them, so 525 KB of PDF and PNG remain reachable. Purging them needs a force-push, which the working rules forbid, and rewriting published history to reclaim half a megabyte is not worth suspending that rule. Do not rebase them out. Decided by Kesh. | `.gitignore:15` |
 | 09-13 | D21 | **Gate 3's retrieval registry is Agent Laboratory's `lit_review`, `ADD_PAPER` entries only.** A paper read with `FULL_TEXT` but never added does not count as retrieved. Identifier is the host's `arxiv_id`. Decided by Kesh. | `retrieved_arxiv_ids` (amended by D25) |
 
 ## session log
@@ -230,6 +231,8 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `975059b` | Q14 / D36: `tests/test_key_leak.py` plays Gates 1-3 through the adapter with a sentinel key and a fake host `inference`; no file or prompt holds it; verified failing with `_without_credentials` disabled. 536 tests. |
 | 09-16 | `7c351cb` | Gate 3 step 6: `source.cited_papers_in_registry` (arXiv ids version-stripped, mismatch as evidence, DOIs fail), `retrieved=` through `run_gate3`/`gated_report`/`report_loop` (read after each write), `retrieved_arxiv_ids()`, fixes grounded against retrieved ids, scenario 4 `fabricated-citation`. Archive: 8 cited, 2 ADD_PAPER, 7 flag under D21; no search results logged. 551 tests. |
 | 09-16 | `6881511` | D37-D45 recorded: Kesh accepted all recommendations from the second question round. Next steps restructured, host edits back in scope (D42), F11 before F9 (D45). Docs only. 551 tests. |
-| 09-16 | *this* | Gate 3 step 7a: `style.sections_present` (D27, D40), renderer and fix; `Gate3Config.sections`; `WRITER_SECTIONS` in the adapter, the host's `papersolver.py:352` list minus `scaffold`, and `make_report_context`'s default. `\begin{abstract}` counts, `prose._heading` untouched. Scenario 8 `missing-section`; `Scenario.sections`. Six fixtures opt out with `sections=()` because they are two-section manuscripts testing other checks. 558 tests. |
+| 09-16 | `8ba2612` | Gate 3 step 7a: `style.sections_present` (D27, D40), renderer and fix; `Gate3Config.sections`; `WRITER_SECTIONS` in the adapter, the host's `papersolver.py:352` list minus `scaffold`, and `make_report_context`'s default. `\begin{abstract}` counts, `prose._heading` untouched. Scenario 8 `missing-section`; `Scenario.sections`. Six fixtures opt out with `sections=()` because they are two-section manuscripts testing other checks. 558 tests. |
+| 09-16 | `e34620c` | `docs/gate3/` untracked after `git add -A` swept it into `8ba2612`; `.gitignore` rule added so it cannot recur. See D46. 558 tests. |
+| 09-16 | *this* | Session log closed for `8ba2612` and `e34620c`; D46 recorded. 558 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.
