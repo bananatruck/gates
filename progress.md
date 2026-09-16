@@ -15,7 +15,7 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: feature/gate2-feedback-loop
-head: 975059b
+head: 7c351cb
 head_date: 2026-09-16
 tests_total: 551
 tests_gate1: 98
@@ -119,13 +119,16 @@ Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adap
    4. ~~`style.claim_sections_bound` + scenario 5~~ done. Was: plus the "tiers" wording in the `gates/gate3.py` docstring.
    5. ~~Declared-limitations check (D28)~~ done (D35).
    6. ~~Registry (D25, D26), `source.cited_papers_in_registry` + scenario 4~~ done. `PaperRecord` moved to step 9.
-   7. Remaining `style.*`, host-declared inputs only (D27).
-   8. G3-M4: measure scanner misses (`\begin{abstract}` unscanned, `\cite` lines skipped, readout §6), report, do not silently fix.
-   9. `PaperRecord` and `source.identifiers_resolve` via injected `lookup` (B2). `citations_parse` and `metadata_agrees` have no input on Agent Laboratory: inline `(arXiv id)` citations, no bibliography.
+   7. Remaining `style.*`, host-declared inputs only (D27, D33, D40). One check per commit: `sections_present`, `no_orphan_references`, `floats_referenced`.
+   8. G3-M4: measure scanner misses over the two archived manuscripts, report all three readout §6 classes, do not fix the scanner (D38, D39). Kesh reviews the labels before the figure is recorded (D37).
+   9. `PaperRecord` and `source.identifiers_resolve` via injected `lookup` (B2, D41). `citations_parse` and `metadata_agrees` have no input on Agent Laboratory: inline `(arXiv id)` citations, no bibliography.
+   10. Docs: `PLAN.md` §5.1/§5.2 per D43, README Gate 3, `CLAUDE.md` §6 per D44.
+   11. `mattpocock-skills:code-review` over `5ab0bf3..HEAD`. Merging to `main` needs Kesh's go-ahead.
    Approved 09-16 (Q8-Q14): D31 model layer and the Q14 key-leak test done; next steps 6-9.
-   Also: `PLAN.md` §5.1/§5.2 name `report.citations_*` and claim citations are "eliminated by construction"; reconcile with what is built.
-2. `env.parent_proc_guard` INFO check (B3).
-3. F9 + F8 with model spend; F11 last. F2 and F5 wait on a host call site (out of scope 09-14).
+   Approved 09-16 (second round, D37-D45): all recommendations accepted as written.
+2. Connect and live-test: host call sites in `AgentLaboratory-Gemini` on a branch, one gated run (D42, D45).
+3. `env.parent_proc_guard` INFO check (B3).
+4. F11 before F9, so E1 installs through the skill (D45). Then F9 + F8. F2 and F5 wait on a host call site.
 
 ## decision log
 
@@ -168,6 +171,15 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | D34 | **`style.claim_sections_bound` holds only sections whose heading contains "results"** to at least one `\result{}` token, counted whether or not it resolves. A qualitative discussion is honest writing; a numberless Results section is the evasion. No results heading: the check emits nothing, and `style.sections_present` catches the absence when the host declares it. Rejected: every findings section (fails honest discussions, and an abstract is only seen as `\section{Abstract}`); one token anywhere (lets an empty Results through). Decided by Kesh (Q8). | `test_a_results_section_that_cites_nothing_fails`, `test_only_a_results_section_must_cite_a_measurement` |
 | 09-16 | D35 | **How D28 is built.** `declared` is a keyword on `run_gate3`, `gated_report` and `report_loop`, beside `registry`, since both come out of Gate 2's run; not on `Gate3Config`, which is built before Gate 2 runs. The writer places `\limitations{}`; `render_result_tokens(declared=)` replaces it first, inside a LaTeX `verbatim` block, because `_` breaks the build and `%` hides the rest of a line. `report.limitations_declared` FAIL checks every stripped line of the block against the rendered text (the host's when supplied), and emits nothing when `declared` is empty. LaTeX only. Decided by Kesh (Q9). | `test_a_manuscript_without_the_limitations_token_fails`, `test_latex_specials_in_a_limitation_cannot_break_or_hide_it` |
 | 09-16 | D36 | **Provider keys stay outside `gates/`.** The key lives only in the function `make_gate_model` returns, one per gate, so spend is counted per gate; Gate 1's child gets a scrubbed environment. No restructure. A test runs all three gates with a sentinel key and fails if any written file or model prompt holds it (it fails with the scrub disabled). Separate function instances share one provider rate limit. Decided by Kesh (Q14). | `test_no_gate_writes_or_sends_the_key` |
+| 09-16 | D37 | **G3-M4's hand labels are reviewed before the figure is recorded.** It is the one Gate 3 number with a human label rather than a deterministic check behind it, and the paper quotes it. Decided by Kesh. | pending - step 8 |
+| 09-16 | D38 | **Step 8 measures the scanner and does not fix it.** All three readout §6 classes are reported, including the wrong-value ones: `-0.42` scans as `0.42` with the sign dropped, and `1.2e-3` scans as `1.2`. Rejected: fixing negatives and scientific notation first, because the published Gate 1 traceability number came from this scanner reading `.tex` (`gates/prose.py` docstring) and any change restates a measured result. Decided by Kesh. | pending - step 8 |
+| 09-16 | D39 | **G3-M4's denominator is the two archived manuscripts, and the §6 probe table is an enumeration of miss classes, not a rate.** No Wilson interval over two documents; the plan's G3-M4 asks for one and claiming it would be the same overclaim as a green check that never ran. Decided by Kesh. | pending - step 8 |
+| 09-16 | D40 | **`\begin{abstract}` satisfies a declared "abstract" for `style.sections_present`, and `prose._heading` is not changed.** Presence is a different question from claim scanning. The ungated archived manuscript's 11 literals stay invisible to the scanner and that gap is reported in G3-M4 rather than closed here, because closing it restates a measured result (D38). Decided by Kesh. | pending - `style.sections_present` |
+| 09-16 | D41 | **Step 9's HTTP client lives in the adapter, not `rig/`.** Adapters are where host knowledge lives; `rig/` is the model-free scenario loop and never opens a socket. Cache under `.cache/`. A network failure or an uncached miss emits nothing, never a pass. One live arXiv smoke test, marked so the default suite stays offline; arXiv asks for about one request every 3 seconds. Decided by Kesh. | pending - step 9 |
+| 09-16 | D42 | **Host edits are back in scope, on a branch in `AgentLaboratory-Gemini`, with one gated run budgeted.** Amends the 09-14 scope note. D25's real fabricated-citation number needs a run that logs per-section search results, and Gate 3 has never executed inside the scaffold it claims to be portable to. Decided by Kesh. | pending - connect |
+| 09-16 | D43 | **`PLAN.md` comes down to what is built.** `report.bibliography_generated` and `report.citation_metadata_matches` leave §5.1, `report.citations_in_registry` is renamed to the as-built `source.cited_papers_in_registry`, and §5.2's citation row becomes detected-and-measured rather than "eliminated by construction". Rejected: building a registry-emitted bibliography to earn the construction claim, which would change how the host writes citations and cost the portability claim. Decided by Kesh. | pending - docs |
+| 09-16 | D44 | **`CLAUDE.md` §6 is narrowed, not deleted.** Step 6 built the retrieved-id half via `retrieved_arxiv_ids()`; `source.identifiers_resolve` still has no registry. Decided by Kesh. | pending - docs |
+| 09-16 | D45 | **F11's `SKILL.md` lands before F9.** If E1 installs G.A.T.E.S. through the skill, portability becomes evidence from the experiment instead of an artifact shipped beside it. Doing it after E1 leaves the paper's central claim the only one with no run behind it. Decided by Kesh. | pending - F11 |
 | 09-13 | D21 | **Gate 3's retrieval registry is Agent Laboratory's `lit_review`, `ADD_PAPER` entries only.** A paper read with `FULL_TEXT` but never added does not count as retrieved. Identifier is the host's `arxiv_id`. Decided by Kesh. | `retrieved_arxiv_ids` (amended by D25) |
 
 ## session log
@@ -216,6 +228,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `9a37134` | Gate 1 fix: with no model, `ModelLayer.ask` recorded a failed call, so a run that printed and failed was told the model "could not be reached" (red first). No call is recorded now; `report.model` is `null`. 31 frozen reports carry the old record, noted in `reports/README.md`. 514 tests. |
 | 09-16 | `2963c76` | D31: Gate 3 model layer. `gates/llm_claims.py` (claim scan over findings rows the scanner passed, `\begin{abstract}` included, tokens masked); `Gate3Config.consult_model`; fixes after the verdict with `REPORT_SYSTEM` and `CITABLE KEYS`, dropped whole on an unrecorded `\result{}`; `attach_fixes` moved out of `gate1.py`; `REPORT_GATE_INSTRUCTIONS`; D14 guard covers warnings. 535 tests. |
 | 09-16 | `975059b` | Q14 / D36: `tests/test_key_leak.py` plays Gates 1-3 through the adapter with a sentinel key and a fake host `inference`; no file or prompt holds it; verified failing with `_without_credentials` disabled. 536 tests. |
-| 09-16 | *this* | Gate 3 step 6: `source.cited_papers_in_registry` (arXiv ids version-stripped, mismatch as evidence, DOIs fail), `retrieved=` through `run_gate3`/`gated_report`/`report_loop` (read after each write), `retrieved_arxiv_ids()`, fixes grounded against retrieved ids, scenario 4 `fabricated-citation`. Archive: 8 cited, 2 ADD_PAPER, 7 flag under D21; no search results logged. 551 tests. |
+| 09-16 | `7c351cb` | Gate 3 step 6: `source.cited_papers_in_registry` (arXiv ids version-stripped, mismatch as evidence, DOIs fail), `retrieved=` through `run_gate3`/`gated_report`/`report_loop` (read after each write), `retrieved_arxiv_ids()`, fixes grounded against retrieved ids, scenario 4 `fabricated-citation`. Archive: 8 cited, 2 ADD_PAPER, 7 flag under D21; no search results logged. 551 tests. |
+| 09-16 | *this* | D37-D45 recorded: Kesh accepted all recommendations from the second question round. Next steps restructured, host edits back in scope (D42), F11 before F9 (D45). Docs only. 551 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.
