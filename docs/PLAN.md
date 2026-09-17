@@ -528,34 +528,63 @@ Numeric binding — deterministic, eliminates fabricated results by construction
 The renderer, not the model, writes the numbers. A number that was never measured has no token,
 and a token that has no value does not compile.
 
-Citation binding — deterministic, eliminates fake citations by construction:
+Citation binding — deterministic, and **detection rather than construction**
+(as-built, D43):
 
 | ID | Check | Severity |
 |---|---|---|
-| `report.citations_in_registry` | Every cited arXiv ID is in the retrieval registry — a paper the scaffold actually fetched | FAIL |
-| `report.bibliography_generated` | The bibliography is emitted from the registry, never authored by the model | FAIL |
-| `report.citation_metadata_matches` | Title/author/year match the fetched record | FAIL |
+| `source.cited_papers_in_registry` | Every cited arXiv ID is in the retrieval registry — a paper the scaffold actually fetched | FAIL |
+| `source.identifiers_resolve` | Every cited ID resolves to a paper that exists, through an injected resolver. Absent, and reported absent, when no resolver is supplied or its source is unreachable | FAIL |
+
+Earlier drafts of this section named `report.bibliography_generated` and
+`report.citation_metadata_matches` and claimed citations were eliminated by
+construction. Neither is built, and neither can be on the reference host: Agent
+Laboratory writes citations inline as `(arXiv 2308.11483v1)` and emits no
+bibliography, so there is nothing for a renderer to generate from the registry
+and no metadata block to compare against (D26). Making the construction claim
+true would mean changing how the host writes citations, which costs the
+portability claim this project argues for. The two checks above detect a
+fabricated citation and report a rate instead.
 
 Claim entailment — model-assisted, reported as a rate:
 
 | ID | Check | Severity |
 |---|---|---|
-| `report.claims_entailed` | Each prose claim is checked against its supporting artifact with MiniCheck | WARN |
+| `report.model_unbound_claims` | A model reads the findings prose the number scanner passed and flags what reads like an unbound quantitative claim. Quote-grounded, and it cannot move the verdict | WARN |
 | `report.figures_referenced_exist` | Every `\includegraphics` target exists on disk and was produced by the gated run | FAIL |
+
+MiniCheck was deferred past this paper (D6). The WARN above is the model layer
+Gate 1 already had, rebuilt for manuscripts (D31).
 
 ### 5.2 Honesty boundary
 
-Three of the four MLR-Bench classes are eliminated by construction and may be claimed as such:
+Revised against what was built (D43). Two of the four MLR-Bench classes are
+eliminated by construction; the other two are detected and measured, and the
+difference matters more than the count:
 
 | MLR-Bench class | Gate 3 status |
 |---|---|
-| Fabricated numeric results | **Eliminated by construction** — no numeral can be emitted in a results context |
-| Fake / misattributed citations | **Eliminated by construction** — only registry IDs are citable |
+| Fabricated numeric results | **Eliminated by construction** — of the *pipeline*, not of a scanner. See below |
 | Silent failure scored as success | **Eliminated by construction** (Gate 1) — a crashed run cannot reach writing |
+| Fake / misattributed citations | **Detected and measured** — a citation nothing retrieved, or naming no paper that exists, is rejected. The writer is not prevented from typing one |
 | Unsupported claims in prose | **Reduced and measured** — "this demonstrates over-smoothing" cannot be made impossible |
 
-The fourth is reported with a confidence interval, before and after. Saying this precisely is
-worth more than overclaiming on all four.
+**What "eliminated by construction" means for the numeric class.** It is a
+property of the pipeline: the writer emits `\result{key}` tokens, the renderer
+substitutes registry values, so a number that was never measured has no token
+and a token with no value does not render.
+`report.no_numeric_literals_in_results` is the check that the pipeline was
+*used*, and as a scanner over prose it has a false-negative rate. G3-M4 measures
+it. The paper must state the construction claim in these terms, with that number
+beside it, or it is the same overclaim this gate exists to catch.
+
+The measurement is built and runs (`rig/gate3_scanner_miss.py`). Its figure is
+**not recorded here yet**: D37 holds it until the hand labels in
+`rig/gate3_m4_labels.py` have been reviewed, because the paper will quote it and
+it is the one Gate 3 number resting on a human judgement rather than a
+deterministic check. Run the module to see the current counts.
+
+Saying this precisely is worth more than claiming construction on all four.
 
 ---
 

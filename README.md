@@ -19,7 +19,7 @@ tendency, and closes the channel at three points.
 |---|---|---|
 | **1 — execution validity** | Did this code actually run, and were the reported numbers produced by *this* run? | **complete and measured** |
 | **2 — source ↔ result coherence** | Are the measured results within their bounds, consistent with each other, and produced the way the plan declared? | implemented, loop closed and tested |
-| **3 — report validity** | Does every number and citation in the manuscript trace to something that exists? | implemented and unit-tested |
+| **3 — report validity** | Does every number and citation in the manuscript trace to something that exists? | implemented, loop closed and tested |
 
 Gate 1 is finished for the scope it declares. It has been run against a complete
 controlled A/B campaign on a real model and a real scaffold; the numbers are in
@@ -32,6 +32,15 @@ here means a controlled campaign against a live scaffold produced numbers we
 can show you. Gates 2 and 3 have not had one yet, so they are listed as
 implemented, not measured — the same standard the gates impose on the agents
 they audit.
+
+Gate 3 checks numeric binding, figure and limitation binding, citations against
+what the run retrieved and against arXiv, and a set of deterministic report-format
+rules. One check reaches the network and says so when it cannot: with no resolver
+supplied, or none reachable, `source.identifiers_resolve` reports that citations
+went unchecked rather than passing them. `report.no_numeric_literals_in_results`
+is a scanner over prose and therefore has a false-negative rate;
+`python -m rig.gate3_scanner_miss` measures it against our own two manuscripts
+and names the cause of every miss.
 
 Full design: [`docs/PLAN.md`](docs/PLAN.md).
 
