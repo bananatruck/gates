@@ -195,6 +195,18 @@ def test_the_retrieval_recipe_reads_both_host_formats(tmp_path):
     assert retrieved_arxiv_ids(None, None) == set()
 
 
+def test_the_skill_describes_the_reference_host_as_wired():
+    """D42: the worked example is as-built, not a connect spec with drifting line numbers."""
+    assert "review_loop(..., first=final)" in SKILL
+    assert "writer_from_paper_solver" in SKILL
+    assert "arxiv_lookup" in SKILL
+    assert "reviser_from_mle_solver" in SKILL
+    assert "It is already wired (D42)." in SKILL
+    # Line numbers in the worked example would go stale on the next host edit.
+    assert "line 349" not in SKILL
+    assert "line 279" not in SKILL
+
+
 def test_the_writer_prompt_asks_for_the_tokens_the_renderer_substitutes():
     """A prompt that does not mention \\result{} leaves the writer typing numbers,
     and every numeric check then rejects every draft until the budget is spent."""

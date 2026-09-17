@@ -87,7 +87,7 @@ Three, one per phase. Each replaces a decision the host was making badly.
 Feed the reward model only what already passed; it ranks, it does not admit.
 On a spent budget, raise. A run that never produced a valid experiment must not produce a paper.
 
-**Gate 2, after results are interpreted.** Review the registry Gate 1 wrote.
+**Gate 2, after the verified run.** Review the registry Gate 1 wrote.
 On a spent budget, **proceed** with the unresolved discrepancies carried forward as declared limitations. A genuine novel result must not be blocked forever.
 
 **Gate 3, in the report-writing phase.** `report_loop` takes the registry the writer cites and the limitations Gate 2 declared.
@@ -121,12 +121,14 @@ A guard nobody has seen fail is a guard you are trusting on faith.
 
 ## Worked example: Agent Laboratory
 
-The reference host, and the comparison baseline. Call sites in `ai_lab_repo.py`:
+The reference host, and the comparison baseline.
+It is already wired (D42).
+Call sites in `ai_lab_repo.py`, as built:
 
-| Phase | Method | Where the gate goes |
+| Phase | Method | What it calls |
 |---|---|---|
-| running experiments | `running_experiments`, line 349 | `make_context` at line 360, `gated_execute` on the winning code at line 388 |
-| report writing | `report_writing`, line 279 | `PaperSolver` is built at line 294 and the winner taken at line 301; `report_loop` replaces the `initial_solve` / `solve` loop |
+| running experiments | `running_experiments` | `make_context`, then `gated_execute` on the winning code, then `review_loop(..., first=final)` if that run passed. `reviser_from_mle_solver` is the `revise` callback. |
+| report writing | `report_writing` | Refuses if Gate 1 left no citable registry. Then `report_loop` with `arxiv_lookup`, `writer_from_paper_solver`, and `retrieved_arxiv_ids(self.phd.lit_review, solver.section_related_work)`. |
 
 For the writing phase the `write` callback wraps the host's solver: the first call runs `solver.initial_solve()` and returns `"\n".join(solver.best_report[0][0])`, and each later call feeds the feedback in as a note, runs `solver.solve()`, and returns the new best report.
 Retrieval is `lambda: retrieved_arxiv_ids(self.phd.lit_review, solver.section_related_work)`, which reads the host's two formats: `lit_review` entries keyed `arxiv_id`, and per-section arXiv search results as text carrying `arXiv paper ID:` lines.

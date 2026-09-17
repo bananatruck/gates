@@ -14,10 +14,10 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 ## state
 
 <!-- STATE:BEGIN -->
-branch: feature/gate2-feedback-loop
-head: c4cbe2d
+branch: main
+head: dc31079
 head_date: 2026-09-16
-tests_total: 624
+tests_total: 625
 tests_gate1: 98
 tests_gate2: 92
 tests_gate3: 84
@@ -69,7 +69,7 @@ forever, but an unverifiable manuscript must not ship.
 | Gate 1 — execution validity | complete, evidence frozen | `gated_execute()` | 98 |
 | Gate 2 tier A — boundaries | **complete** — ranges, relations, non-finite guard, plausibility ceiling | `run_gate2()` | part of 92 |
 | Gate 2 tier B — methodology conformance | **complete** — `method_conformance` FAIL, `method_traceable` WARN; host path via `make_review_context(plan_fields=, sources=, lit_review=)` | `run_gate2()` | part of 92 |
-| Gate 2 tier C — loop | **complete, model-free**. 6 scenarios. Every revision runs under Gate 1 first (F12). A spent Gate 2 budget proceeds with the discrepancies declared. A spent Gate 1 budget raises if nothing ran clean. `first=` reviews a pass the host already holds. The outcome carries `registry` and `declared`. No host calls it yet. | `gates/adapters/agentlab.py` `review_loop()`, driven by `rig/gate2_loop.py` | 26 |
+| Gate 2 tier C — loop | **complete, model-free**. 6 scenarios. Every revision runs under Gate 1 first (F12). A spent Gate 2 budget proceeds with the discrepancies declared. A spent Gate 1 budget raises if nothing ran clean. `first=` reviews a pass the host already holds. The outcome carries `registry` and `declared`. **Host calls it** from `running_experiments` after `gated_execute` (D42). | `gates/adapters/agentlab.py` `review_loop()`, driven by `rig/gate2_loop.py` | 26 |
 | Gate 2 tier comparison | complete. A vs A+B vs A+B+C | `rig/gate2_tier_comparison.py` | 8 |
 | Gate 3 — `report.*` checks | numeric + figure binding; `limitations_declared` (step 5, D35); D14 guard | `run_gate3()` | 30 of 57 |
 | Gate 3 — `source.*` | **complete for this host.** `cited_papers_in_registry` (step 6: D21, D25, D26, D32) with `retrieved_arxiv_ids()`; `identifiers_resolve` (step 9, D41, D49) with `PaperRecord` in `gates/schema.py` and `arxiv_lookup()` in the adapter. `citations_parse` and `metadata_agrees` have no input here: inline citations, no bibliography | `run_gate3(retrieved=, )`, `Gate3Config.lookup` | 20 of 83, plus 11 in `tests/test_arxiv_lookup.py` |
@@ -79,19 +79,19 @@ forever, but an unverifiable manuscript must not ship.
 | Gate 3 model layer (D31) | complete, model-free by default. Claim scan (`report.model_unbound_claims`, WARN, quote-grounded, INFO when it cannot run); REQUIRED FIXES via `generate_fixes(system=, facts=, grounding=)` with `check_manuscript_grounding`; `llm_report.attach_fixes` shared with Gate 1; `make_report_context(consult_model=)`; `REPORT_GATE_INSTRUCTIONS` | `gates/llm_claims.py`, `gates/gate3.py` | 23, in `tests/test_gate3_model.py` |
 | LLM plumbing (`ModelFn`, budget) | complete, Gates 1 and 3 | `gates/llm.py` | 14 |
 | `gates/gate2_semantic.py` | **deleted** 09-13 (D4). Gate 2 is model-free (D19) | - | 15 removed |
-| Agent Laboratory adapter | `gated_execute`; `gated_review` and `review_loop` via `make_review_context()`, which takes `relations`, `ranges`, `plan_fields`, `sources` + `lit_review`; `gated_report` and `report_loop` via `make_report_context()` | `gates/adapters/agentlab.py` | — |
+| Agent Laboratory adapter | `gated_execute`; `gated_review` and `review_loop` via `make_review_context()`, which takes `relations`, `ranges`, `plan_fields`, `sources` + `lit_review`; `gated_report` and `report_loop` via `make_report_context()`. Host call sites on `AgentLaboratory-Gemini` `feat/gates-d42-connect`: `running_experiments` -> `review_loop(..., first=final)`, `report_writing` -> `report_loop` | `gates/adapters/agentlab.py` | host: `tests/test_gates_d42.py` |
 | Tier A evaluation harness | complete | `rig/gate2_tier_a_eval.py` | 45 labelled registries |
 
 Frozen and checksum-signed — do not edit: `reports/finalized-report-and-results/`.
 
 ## gate 2 - status
 
-**Complete in this repo as of 09-16.** Tiers A, B and C are built and connected: `review_loop` runs code under Gate 1, then reviews the registry under A+B. Every item that remains needs a host call site (out of scope) or model spend.
+**Complete in this repo as of 09-16.** Tiers A, B and C are built and connected: `review_loop` runs code under Gate 1, then reviews the registry under A+B. The host call sites landed 09-16 on `AgentLaboratory-Gemini` `feat/gates-d42-connect` (D42). Remaining items need a live gated run, declared `plan_fields` (F2), or model spend.
 
 Verified 09-14 against `85af14c` and `../AgentLaboratory-Gemini` (`feat/gates-verification-layer`, 7 files uncommitted).
 **Closed 09-14:** F4 (`0baf625`); F1 + F3 at adapter level, `review_loop` + `ReviewOutcome.declared` (`0baf625`); F6, `make_review_context(sources=, lit_review=)` (D23, `12aa1d9`); F10, exact published tallies asserted in `tests/test_gate2.py` (`60af585`); F7, `Ledger.loop_summary()` from `review_loop` rows (M5; a run enters the loop only if its first review failed). F12 (09-16), `review_loop(..., gate1=)` runs every revision under Gate 1, so Gate 2 never reviews a registry no run wrote.
-**Scope 09-14:** gates repo only. AgentLaboratory-Gemini is a test bed for results and data, not edited. Host-facing items are delivered as adapter entry points a host can call, not as host edits.
-Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adapter, which the rig drives. The open items:
+**Scope 09-14, amended D42:** gates repo plus host call sites on a branch. The live gated run is still budgeted.
+Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adapter, which the rig drives and the host now calls. The open items:
 
 | ID | Missing | Evidence | Needs |
 |---|---|---|---|
@@ -122,13 +122,13 @@ Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adap
    8. ~~G3-M4~~ done (D48): 34 of 49 detected, 15 missed, 6 false positives, scanner unchanged (D38). Labels reviewed and accepted 09-16, figure published in `PLAN.md` §5.2 and the README.
    9. ~~`PaperRecord` and `source.identifiers_resolve`~~ done (B2 closed, D41, D49). `citations_parse` and `metadata_agrees` not built: no input on Agent Laboratory, which cites inline and keeps no bibliography.
    10. ~~Docs~~ done: `PLAN.md` §5.1/§5.2 (D43), README, `CLAUDE.md` §6 (D44).
-   11. `mattpocock-skills:code-review` over `5ab0bf3..HEAD`. Merging to `main` needs Kesh's go-ahead.
-   **Gate 3 is code-complete.** Remaining Gate 3 work is the D37 label review, then the review in step 11.
+   11. ~~review~~ done (`46ddc85`). Merged to `main` at `dc31079`.
+   **Gate 3 is code-complete.** G3-M4 labels reviewed and accepted (D37).
    Approved 09-16 (Q8-Q14): D31 model layer and the Q14 key-leak test done; next steps 6-9.
    Approved 09-16 (second round, D37-D45): all recommendations accepted as written.
-2. Connect and live-test: host call sites in `AgentLaboratory-Gemini` on a branch, one gated run (D42, D45).
+2. ~~Connect~~ done on `AgentLaboratory-Gemini` `feat/gates-d42-connect`. Live gated run still budgeted (D42, D45).
 3. `env.parent_proc_guard` INFO check (B3).
-4. ~~F11~~ done (D45). F9 + F8 next, with model spend. F2 and F5 wait on a host call site.
+4. ~~F11~~ done (D45). F9 + F8 next, with model spend. F2 waits on declared `plan_fields`. F5 waits on the host passing the chosen budget.
 
 ## decision log
 
@@ -176,7 +176,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | D39 | **G3-M4's denominator is the two archived manuscripts, and the §6 probe table is an enumeration of miss classes, not a rate.** No Wilson interval over two documents; the plan's G3-M4 asks for one and claiming it would be the same overclaim as a green check that never ran. Decided by Kesh. | `rig/gate3_scanner_miss.py` prints no interval |
 | 09-16 | D40 | **`\begin{abstract}` satisfies a declared "abstract" for `style.sections_present`, and `prose._heading` is not changed.** Presence is a different question from claim scanning. The ungated archived manuscript's 11 literals stay invisible to the scanner and that gap is reported in G3-M4 rather than closed here, because closing it restates a measured result (D38). Decided by Kesh. | `test_a_latex_abstract_environment_counts_as_a_declared_abstract` |
 | 09-16 | D41 | **Step 9's HTTP client lives in the adapter, not `rig/`.** Adapters are where host knowledge lives; `rig/` is the model-free scenario loop and never opens a socket. Cache under `.cache/`. A network failure or an uncached miss emits nothing, never a pass. One live arXiv smoke test, marked so the default suite stays offline; arXiv asks for about one request every 3 seconds. Decided by Kesh. | `arxiv_lookup()` in `gates/adapters/agentlab.py`, `tests/test_arxiv_lookup.py` |
-| 09-16 | D42 | **Host edits are back in scope, on a branch in `AgentLaboratory-Gemini`, with one gated run budgeted.** Amends the 09-14 scope note. D25's real fabricated-citation number needs a run that logs per-section search results, and Gate 3 has never executed inside the scaffold it claims to be portable to. Decided by Kesh. | pending - connect |
+| 09-16 | D42 | **Host edits are back in scope, on a branch in `AgentLaboratory-Gemini`, with one gated run budgeted.** Amends the 09-14 scope note. D25's real fabricated-citation number needs a run that logs per-section search results, and Gate 3 has never executed inside the scaffold it claims to be portable to. Decided by Kesh. | **call sites connected** on `feat/gates-d42-connect`: `running_experiments` -> `review_loop(..., first=final)`, `report_writing` -> `report_loop`. Host tests: `tests/test_gates_d42.py`. Live run still budgeted. |
 | 09-16 | D43 | **`PLAN.md` comes down to what is built.** `report.bibliography_generated` and `report.citation_metadata_matches` leave §5.1, `report.citations_in_registry` is renamed to the as-built `source.cited_papers_in_registry`, and §5.2's citation row becomes detected-and-measured rather than "eliminated by construction". Rejected: building a registry-emitted bibliography to earn the construction claim, which would change how the host writes citations and cost the portability claim. Decided by Kesh. | `docs/PLAN.md` §5.1, §5.2 |
 | 09-16 | D44 | **`CLAUDE.md` §6 is narrowed, not deleted.** Step 6 built the retrieved-id half via `retrieved_arxiv_ids()`; `source.identifiers_resolve` still has no registry. Decided by Kesh. | `CLAUDE.md` §6 |
 | 09-16 | D45 | **F11's `SKILL.md` lands before F9.** If E1 installs G.A.T.E.S. through the skill, portability becomes evidence from the experiment instead of an artifact shipped beside it. Doing it after E1 leaves the paper's central claim the only one with no run behind it. Decided by Kesh. | `SKILL.md`, `tests/test_install_skill.py` |
@@ -246,6 +246,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `46ddc85` | Gate 3 step 11: review of `5ab0bf3..HEAD` found two real bugs, both fixed red-test-first. (1) **Duty 1**: `_check_identifiers_resolve` returned on the first resolver exception, discarding identifiers already known unresolved, so a paper citing one fabricated and one unreachable id could PASS. Now every id is asked about and an outage degrades only when nothing was found unresolved (D50). (2) A corrupt cache row raised out of `arxiv_lookup` and reached the gate as an outage; `_as_record` returns `None` and the row is refetched, and an unreadable cache file no longer takes the resolver down. 603 tests. |
 | 09-16 | `82c06bb` | **D37 closed: Kesh reviewed and accepted the G3-M4 labels.** Figure published in `PLAN.md` §5.2 (full table, causes, and both scoping notes) and the README Gate 3 paragraph. 603 tests. |
 | 09-16 | `c4cbe2d` | **F11 closed: `SKILL.md`**, the install path as a skill (`CLAUDE.md` §3, D45). Five steps: check the scaffold can be gated at all, write the adapter, place three call sites, budget in agent turns, prove it is wired. Carries the D42 connect spec with verified host line numbers (`running_experiments` 349, `make_context` 360, `gated_execute` 388, `report_writing` 279, `PaperSolver` 294, `best_report` 301) and states what this host cannot support. `tests/test_install_skill.py` (21) keeps it true: every entry point, file and number it names is checked, and the documented `write` recipe drives the real `report_loop` through a reject-fix-accept cycle against a fake solver of the host's shape. 624 tests. |
-| 09-16 | *this* | Session log closed; branch merged to `main` with `--no-ff`, matching `f8af469` and `d738e49`. Gate 3 is code-complete: nine checks, the loop, the model layer, G3-M4 published, and the install skill. 624 tests. |
+| 09-16 | `dc31079` | Session log closed; branch merged to `main` with `--no-ff`, matching `f8af469` and `d738e49`. Gate 3 is code-complete: nine checks, the loop, the model layer, G3-M4 published, and the install skill. 624 tests. |
+| 09-16 | *this* | **D42 call sites connected** on `AgentLaboratory-Gemini` `feat/gates-d42-connect`. `running_experiments` calls `review_loop(..., first=final)`; `report_writing` refuses a missing registry then calls `report_loop` with `arxiv_lookup` and `retrieved_arxiv_ids`. `SKILL.md` worked example brought down to as-built (no drifting line numbers). Live gated run still budgeted. 625 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.
