@@ -15,7 +15,7 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: main
-head: ea3bdb6
+head: edc41e3
 head_date: 2026-09-16
 tests_total: 636
 tests_gate1: 105
@@ -263,7 +263,8 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `03b5a86` | **D42 call sites connected** on `AgentLaboratory-Gemini` `feat/gates-d42-connect`. `running_experiments` calls `review_loop(..., first=final)`; `report_writing` refuses a missing registry then calls `report_loop` with `arxiv_lookup` and `retrieved_arxiv_ids`. `SKILL.md` worked example brought down to as-built (no drifting line numbers). Live gated run still budgeted. 625 tests. |
 | 09-16 | `a378655` | **B3 closed (D51).** `parent_guard` on `ExecutionRecord`, `env.parent_proc_guard` INFO in Gate 1, `docs/PLAN.md` §3.2 row. Red first (8 failing). Guard bite verified by forcing the capability check true (2 fail). Root path verified with `unshare -r`: `03b5a86` fails the proc test, this passes and reports `bypassable`. `CLAUDE.md` count now states the skip. 632 tests (631 pass, 1 skipped). |
 | 09-16 | `fbc583a` | **D52.** `SKILL.md` recipe rewritten (three rules, host effort kept, `ReviewOutcome.run`); worked example says the host callbacks predate it (F13-F15). `FakeSolver` now ranks, prompts and fills retrieval like `PaperSolver`. Red first: each defect shown alone (ranking: `no_pass`; list notes: doubled backslash). `ReviewOutcome.run` red first (`AttributeError`). F13-F17 recorded from the host review. 636 tests (635 pass, 1 skipped). |
-| 09-16 | `ea3bdb6` | Cleanup from the 09-16 review: `reports/status.zip` (a generated 09-07 status bundle swept in by `85af14c`) untracked and ignored, file kept on disk. Merged remote branches `feat/gate1-feedback-loop`, `feature/gate2-feedback-loop`, `fix/gate1-limitations`, `gate2-gate3`, `research/gate2-gate3-readout` deleted, and the local `feature/gate2-feedback-loop`. Kept: `origin/feature/verification-layer` (4 unmerged commits), `backup/local-main-f1b9fe2` (B5), `reports/finalized-report-and-results.zip`, `rig/report_accuracy.py` (a standalone measurement CLI, not dead code), `docs/GATE1_*.md` (dated closure records). 636 tests. |
-| 09-16 | *this* | Session log closed; `fix/b3-and-skill-recipe` merged to `main` with `--no-ff`, matching `dc31079`. B3 closed, D51-D52, F13-F17 open on the host. 636 tests. |
+| 09-16 | `ea3bdb6` | Cleanup from the 09-16 review: `reports/status.zip` (a generated 09-07 status bundle swept in by `85af14c`) untracked and ignored, file kept on disk. Branch deletion approved but blocked by the session's permission rules, so **still pending**: remote `feat/gate1-feedback-loop`, `feature/gate2-feedback-loop`, `fix/gate1-limitations`, `gate2-gate3`, `research/gate2-gate3-readout` (all 0 commits ahead of `main`), and local `feature/gate2-feedback-loop`, `fix/b3-and-skill-recipe`. Kept: `origin/feature/verification-layer` (4 unmerged commits), `backup/local-main-f1b9fe2` (B5), `reports/finalized-report-and-results.zip`, `rig/report_accuracy.py` (a standalone measurement CLI, not dead code), `docs/GATE1_*.md` (dated closure records). 636 tests. |
+| 09-16 | `2102abe` | Session log closed; `fix/b3-and-skill-recipe` merged to `main` with `--no-ff`, matching `dc31079`. B3 closed, D51-D52, F13-F17 open on the host. 636 tests. |
+| 09-16 | *this* | Merged at `edc41e3` and pushed. Corrected the `ea3bdb6` row: the branch deletions did not run. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.
