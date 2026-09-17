@@ -38,9 +38,18 @@ what the run retrieved and against arXiv, and a set of deterministic report-form
 rules. One check reaches the network and says so when it cannot: with no resolver
 supplied, or none reachable, `source.identifiers_resolve` reports that citations
 went unchecked rather than passing them. `report.no_numeric_literals_in_results`
-is a scanner over prose and therefore has a false-negative rate;
-`python -m rig.gate3_scanner_miss` measures it against our own two manuscripts
-and names the cause of every miss.
+is a scanner over prose and therefore has a false-negative rate. We measured it
+rather than assuming it: `python -m rig.gate3_scanner_miss` scores it against 49
+hand-labelled claims in our own two archived manuscripts and **detects 34, misses
+15, and reports 6 numbers that are not claims**. Twelve of the fifteen misses have
+one cause, a findings line carrying a `\ref`, which `SKIP_LINE` drops whole. The
+scanner is deliberately left unfixed, because the published Gate 1 traceability
+number came from it and changing it would restate a measured result.
+
+So "no fabricated number survives" is a property of the *pipeline* — the writer
+emits `\result{key}` tokens and the renderer substitutes recorded values — and not
+of that scanner, which checks the pipeline was used. The distinction is the whole
+point, and [`docs/PLAN.md`](docs/PLAN.md) §5.2 states it with the number beside it.
 
 Full design: [`docs/PLAN.md`](docs/PLAN.md).
 

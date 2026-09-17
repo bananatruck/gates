@@ -574,15 +574,45 @@ property of the pipeline: the writer emits `\result{key}` tokens, the renderer
 substitutes registry values, so a number that was never measured has no token
 and a token with no value does not render.
 `report.no_numeric_literals_in_results` is the check that the pipeline was
-*used*, and as a scanner over prose it has a false-negative rate. G3-M4 measures
-it. The paper must state the construction claim in these terms, with that number
-beside it, or it is the same overclaim this gate exists to catch.
+*used*, and as a scanner over prose it has a false-negative rate. The paper must
+state the construction claim in these terms, with that number beside it, or it is
+the same overclaim this gate exists to catch.
 
-The measurement is built and runs (`rig/gate3_scanner_miss.py`). Its figure is
-**not recorded here yet**: D37 holds it until the hand labels in
-`rig/gate3_m4_labels.py` have been reviewed, because the paper will quote it and
-it is the one Gate 3 number resting on a human judgement rather than a
-deterministic check. Run the module to see the current counts.
+**G3-M4, measured** (`rig/gate3_scanner_miss.py`; labels reviewed and accepted
+2026-09-16, D37):
+
+| | Gated | Ungated | Both |
+|---|---|---|---|
+| Claims hand-labelled in findings sections | 39 | 10 | **49** |
+| Detected by the scanner | 28 | 6 | **34** |
+| Missed | 11 | 4 | **15** |
+| Reported but not a claim | 1 | 5 | **6** |
+
+Two manuscripts, so counts and a raw fraction, and no confidence interval (D39).
+The miss rate is 15 of 49. The rate is not the finding; the causes are:
+
+| Misses | Cause |
+|---|---|
+| 12 | The findings line carries a `\ref`, which `SKIP_LINE` matches, so every number on it is dropped and the line reports nothing |
+| 2 | `NUMBER` requires a decimal point or four digits, so a two- or three-digit integer result is invisible |
+| 1 | `context_of` uses `line.find`, so a value stated twice on one line is deduplicated to one |
+
+Four fifths of everything the scanner cannot see has a single cause, and it is
+not the one the literature readout predicted: that probe found the class through
+`\cite`, but in a real manuscript a findings sentence points at the table or
+figure it discusses, so `\ref` is the common trigger. The third row understates
+the literal *count* without letting a line through, since the first occurrence
+still reports.
+
+Two scoping notes the paper must keep. Six of the 40 numbers the scanner reports
+are not claims at all: a value quoted from the cited literature, a step index, two
+thresholds fixed before the run, and a step count the paper specifies. And the
+unreadable `\begin{abstract}` (D40) costs nothing on this corpus, because the
+ungated run recorded no metrics and its abstract states none — the gap is real
+and it hid nothing here, and saying otherwise would be the overclaim again.
+
+The scanner is not changed (D38): the published Gate 1 traceability number came
+from it reading `.tex`, so a fix restates a measured result.
 
 Saying this precisely is worth more than claiming construction on all four.
 
