@@ -32,7 +32,7 @@ from gates.gate3 import (
 )
 from gates.prose import claim_sections
 from gates.report import render_feedback
-from gates.schema import Severity, Verdict
+from gates.schema import PaperRecord, Severity, Verdict
 from gates.setup import defaults
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
@@ -479,6 +479,115 @@ def test_the_writer_is_told_which_reference_has_no_label(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# source.identifiers_resolve
+# --------------------------------------------------------------------------- #
+
+CITES = RESULTS_ONLY + "We follow (arXiv 2410.21676v4).\n"
+
+
+def fake_lookup(*known: str, fails: bool = False):
+    """A dict-backed resolver, the shape B2 keeps the suite hermetic with."""
+
+    def lookup(identifier):
+        lookup.asked.append(identifier)
+        if fails:
+            raise OSError("export.arxiv.org: connection refused")
+        if identifier not in known:
+            return None
+        return PaperRecord(
+            identifier=identifier,
+            title="Scaling Laws",
+            authors=("Kaplan",),
+            year=2020,
+            locator=f"https://arxiv.org/abs/{identifier}",
+            content_hash="deadbeef",
+        )
+
+    lookup.asked = []
+    return lookup
+
+
+def test_a_citation_that_resolves_to_a_real_record_passes(tmp_path):
+    report = run_gate3(
+        CITES, registry(RECORDED), config(tmp_path, lookup=fake_lookup("2410.21676"))
+    )
+    assert check(report, "source.identifiers_resolve").passed
+
+
+def test_a_citation_that_resolves_to_nothing_fails(tmp_path):
+    """The fabricated-identifier case. source.cited_papers_in_registry catches a
+    paper this run never retrieved; this catches one that does not exist."""
+    report = run_gate3(CITES, registry(RECORDED), config(tmp_path, lookup=fake_lookup()))
+    resolved = check(report, "source.identifiers_resolve")
+    assert not resolved.passed
+    assert resolved.evidence["unresolved"] == ["2410.21676"]
+    assert report.verdict is Verdict.FAIL
+
+
+def test_without_a_lookup_citations_are_not_resolved_at_all(tmp_path):
+    """B2 and the standing rule: no input, no check, and no green row."""
+    report = run_gate3(CITES, registry(RECORDED), config(tmp_path))
+    assert check(report, "source.identifiers_resolve") is None
+
+
+def test_a_lookup_that_cannot_reach_the_network_says_so(tmp_path):
+    """The plan's S1. When the network is down the check does not pass, and the
+    report carries the absence so a reader knows citations went unchecked."""
+    report = run_gate3(
+        CITES, registry(RECORDED), config(tmp_path, lookup=fake_lookup(fails=True))
+    )
+    resolved = check(report, "source.identifiers_resolve")
+    assert resolved.severity is Severity.INFO
+    assert resolved.evidence["degraded"] is True
+    assert "could not" in resolved.message
+    # An outage is not a defect in the manuscript, so it cannot block it.
+    assert report.verdict is Verdict.PASS
+
+
+def test_the_lookup_is_asked_for_the_version_stripped_identifier(tmp_path):
+    """D26 makes the version-stripped arXiv id canonical. Whether v4 exists is
+    source.cited_papers_in_registry's question, against what the run read."""
+    lookup = fake_lookup("2410.21676")
+    run_gate3(CITES, registry(RECORDED), config(tmp_path, lookup=lookup))
+    assert lookup.asked == ["2410.21676"]
+
+
+def test_a_doi_is_never_sent_to_an_arxiv_lookup(tmp_path):
+    """D26: the reference host never sees a DOI, so a cited DOI is already a
+    failure in source.cited_papers_in_registry. Resolving it would be asking
+    arXiv about an identifier it does not issue."""
+    paper = RESULTS_ONLY + "We follow 10.1145/3292500.3330701.\n"
+    lookup = fake_lookup()
+    run_gate3(paper, registry(RECORDED), config(tmp_path, lookup=lookup))
+    assert lookup.asked == []
+
+
+def test_the_writer_is_told_which_identifier_did_not_resolve(tmp_path):
+    text = render_feedback(
+        run_gate3(CITES, registry(RECORDED), config(tmp_path, lookup=fake_lookup()))
+    )
+    assert "[source.identifiers_resolve]" in text
+    assert "does not resolve: 2410.21676" in text
+
+
+def test_a_resolved_record_carries_where_it_came_from(tmp_path):
+    """PaperRecord's locator and content_hash exist so "the same paper" is
+    checkable later, which is what any future tier B corpus work needs."""
+    report = run_gate3(
+        CITES, registry(RECORDED), config(tmp_path, lookup=fake_lookup("2410.21676"))
+    )
+    resolved = check(report, "source.identifiers_resolve")
+    assert resolved.evidence["resolved"] == [
+        {
+            "identifier": "2410.21676",
+            "title": "Scaling Laws",
+            "year": 2020,
+            "locator": "https://arxiv.org/abs/2410.21676",
+        }
+    ]
+
+
+# --------------------------------------------------------------------------- #
 # style.floats_referenced
 # --------------------------------------------------------------------------- #
 
@@ -833,6 +942,8 @@ def test_every_check_gate3_emits_can_be_rendered_and_has_a_fix(tmp_path):
             rendered=tampered,
             # The fixture paper has no abstract, so this trips sections_present.
             sections=("abstract", "results"),
+            # Resolves nothing, so the cited id trips identifiers_resolve.
+            lookup=lambda identifier: None,
             consult_model=model,
         ),
         declared="DECLARED LIMITATIONS\n\n  - a.b: unresolved\n",

@@ -97,6 +97,11 @@ class Scenario:
     #: The paper ids the host retrieved. ``None``: the host does not say, and
     #: citations go unchecked.
     retrieved: tuple[str, ...] | None = None
+    #: arXiv ids that resolve to a real paper. ``None``: no resolver is injected
+    #: and ``source.identifiers_resolve`` emits nothing. Declared as data rather
+    #: than a callable so the rig stays a table of scenarios, and the fake keeps
+    #: the loop offline (B2).
+    resolvable: tuple[str, ...] | None = None
     #: Sections the host declares (D27). Empty by default: these manuscripts are
     #: two sections long because each one exercises a numeric or citation check,
     #: and holding them to the reference host's eight would fail every scenario
@@ -211,6 +216,26 @@ MISSING_SECTION = Scenario(
     sections=("introduction", "results", "discussion"),
 )
 
+UNRESOLVABLE_CITATION = Scenario(
+    name="unresolvable-citation",
+    summary="A citation naming no paper that exists is rejected; the revision cites a real one.",
+    turns=(
+        Turn(
+            "cites arXiv 2501.00001v1, which no paper carries",
+            FABRICATED,
+            expect_fail=("source.identifiers_resolve",),
+            expect_feedback=("does not resolve: 2501.00001",),
+        ),
+        Turn("cites arXiv 1902.07153v2, a real paper", RETRIEVED_CITED, expect_pass=True),
+    ),
+    expect_outcome="pass",
+    expect_turns=2,
+    # No `retrieved`, so cited_papers_in_registry emits nothing and this scenario
+    # isolates the other half of the citation question: not "did we fetch it" but
+    # "does it exist".
+    resolvable=("1902.07153",),
+)
+
 ORPHAN_REFERENCE = Scenario(
     name="orphan-reference",
     summary="A figure reference with no label is rejected until the label exists.",
@@ -255,5 +280,6 @@ SCENARIOS: dict[str, Scenario] = {
         FABRICATED_CITATION,
         MISSING_SECTION,
         ORPHAN_REFERENCE,
+        UNRESOLVABLE_CITATION,
     )
 }

@@ -10,10 +10,15 @@ ranks only what already passed.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from dataclasses import dataclass, field
 import re
+import time
+import urllib.request
 from typing import Any, Callable, Iterable
+from xml.etree import ElementTree
 
 from pathlib import Path
 
@@ -21,6 +26,7 @@ from ..report import render_evidence
 from ..errors import GateError
 from ..gate2 import IMPLAUSIBLE_SPEEDUP, PlanField, Range, Relation, SourceClaim
 from ..gate3 import RENDERED_FILENAME
+from ..schema import PaperRecord
 from .. import (
     REGISTRY_FILENAME,
     Gate1Config,
@@ -319,6 +325,109 @@ def make_review_context(
     )
 
 
+#: arXiv's Atom API. The one endpoint anything in this project contacts.
+_ARXIV_API = "http://export.arxiv.org/api/query?id_list={}&max_results=1"
+
+#: arXiv asks for roughly one request every three seconds. Enforced between
+#: requests rather than as a per-call sleep, so a cache hit costs nothing.
+_ARXIV_MIN_INTERVAL_S = 3.0
+
+_ATOM = "{http://www.w3.org/2005/Atom}"
+
+#: Trailing version, stripped before the request (D26). Asking arXiv for a
+#: specific version would make a v4 citation of a paper the run read as v2 look
+#: like a different paper, which is the registry check's question, not this one's.
+_ARXIV_VERSION = re.compile(r"v\d+$")
+
+
+def _fetch_url(url: str) -> str:
+    """One GET, stdlib only. Raises on anything that is not a 200 with a body.
+
+    Separated so the resolver can be tested without a socket: every test above
+    passes its own ``fetch``, and this is what the real one does.
+    """
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "gates-validity-layer (citation resolution)"}
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return response.read().decode("utf-8")
+
+
+def arxiv_lookup(
+    *,
+    cache_dir: str = ".cache/arxiv",
+    fetch: Callable[[str], str] = _fetch_url,
+) -> Callable[[str], PaperRecord | None]:
+    """A resolver for ``Gate3Config.lookup``, backed by arXiv and a disk cache.
+
+    Lives in the adapter by D41, because ``gates/`` never opens a socket and
+    ``rig/`` is the model-free scenario loop. The gate receives only the returned
+    function, so it cannot tell arXiv from the dict-backed fake the suite uses.
+
+    Three behaviours the gate depends on:
+
+    * ``None`` means arXiv has no such paper. That is a verdict.
+    * **Raising** means the question could not be asked. Gate 3 turns that into
+      an INFO row saying citations went unchecked, never a rejection: an outage
+      is not a defect in the manuscript.
+    * A resolved *and* an absent answer are both cached; a failure is not. A
+      cached outage would keep citations unchecked after the network returned,
+      and an uncached absence would cost one request per fabricated citation on
+      every turn of the retry loop, which is the case the loop exists to retry.
+    """
+    path = Path(cache_dir) / "records.json"
+    cache: dict[str, dict[str, Any] | None] = {}
+    if path.exists():
+        cache = json.loads(path.read_text(encoding="utf-8"))
+    last_request = [0.0]
+
+    def lookup(identifier: str) -> PaperRecord | None:
+        key = _ARXIV_VERSION.sub("", identifier.strip())
+        if key in cache:
+            row = cache[key]
+            return None if row is None else PaperRecord(**_as_record(row))
+
+        wait = _ARXIV_MIN_INTERVAL_S - (time.monotonic() - last_request[0])
+        if last_request[0] and wait > 0:
+            time.sleep(wait)
+        body = fetch(_ARXIV_API.format(key))
+        last_request[0] = time.monotonic()
+
+        entry = ElementTree.fromstring(body).find(f"{_ATOM}entry")
+        cache[key] = None if entry is None else _parse_entry(entry, body)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(cache, indent=2, sort_keys=True), encoding="utf-8")
+        row = cache[key]
+        return None if row is None else PaperRecord(**_as_record(row))
+
+    return lookup
+
+
+def _parse_entry(entry: Any, body: str) -> dict[str, Any]:
+    """One Atom entry as a cache row. Missing fields stay empty, never guessed."""
+    published = (entry.findtext(f"{_ATOM}published") or "").strip()
+    return {
+        "identifier": "",  # filled from the key on read, so the cache stays keyed once
+        "title": " ".join((entry.findtext(f"{_ATOM}title") or "").split()),
+        "authors": [
+            " ".join((a.findtext(f"{_ATOM}name") or "").split())
+            for a in entry.findall(f"{_ATOM}author")
+        ],
+        "year": int(published[:4]) if published[:4].isdigit() else None,
+        "locator": (entry.findtext(f"{_ATOM}id") or "").strip(),
+        # What was retrieved, so "the same paper" is checkable later. Hashing the
+        # response rather than the parsed fields catches a metadata correction.
+        "content_hash": hashlib.sha256(body.encode("utf-8")).hexdigest(),
+    }
+
+
+def _as_record(row: dict[str, Any]) -> dict[str, Any]:
+    out = dict(row)
+    out["authors"] = tuple(out.get("authors") or ())
+    out["identifier"] = out.get("locator", "").rsplit("/", 1)[-1] or out["identifier"]
+    return out
+
+
 #: The sections this host's paper writer is told to produce
 #: (``papersolver.py:352``), which is what ``style.sections_present`` holds it to
 #: (D27). ``"scaffold"`` is dropped: it is the document skeleton the writer
@@ -342,6 +451,7 @@ def make_report_context(
     max_attempts: int = 3,
     figure_root: str | None = None,
     sections: tuple[str, ...] = WRITER_SECTIONS,
+    lookup: Callable[[str], PaperRecord | None] | None = None,
     consult_model: Any = None,
 ) -> GateContext:
     """Build the gate context for the writing phase, the one Gate 3 runs in.
@@ -351,7 +461,9 @@ def make_report_context(
     ``figure_root`` is where the run's figures live; ``None`` resolves them
     against the working directory and skips the check that they stayed inside
     the run. ``sections`` is what the manuscript must contain, defaulting to this
-    host's own writer list (D27); ``()`` leaves sections unchecked.
+    host's own writer list (D27); ``()`` leaves sections unchecked. ``lookup``
+    resolves a cited arXiv id to a real paper, usually :func:`arxiv_lookup`;
+    ``None`` leaves identifiers unresolved and says so in the report.
     ``consult_model`` is Gate 3's model layer (D31), built the way
     Gate 1's is: ``make_gate_model(backend, key)`` returns a new function for
     this gate, so Gate 3's spend is counted apart from Gate 1's.
@@ -362,6 +474,7 @@ def make_report_context(
         artifact_root=artifact_root,
         figure_root=figure_root,
         sections=sections,
+        lookup=lookup,
         consult_model=consult_model,
     )
     return GateContext(

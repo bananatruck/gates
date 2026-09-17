@@ -384,6 +384,18 @@ def _evidence_sections(check: CheckResult) -> list[str]:
     return out
 
 
+def _evidence_identifiers(check: CheckResult) -> list[str]:
+    ev = check.evidence
+    if ev.get("degraded"):
+        # The reason matters more than the list: a reader has to know the
+        # citations went unchecked, and why.
+        return [f"  not checked: {ev.get('reason', 'the resolver failed')}"]
+    out = [f"  does not resolve: {name}" for name in ev.get("unresolved", [])]
+    for row in ev.get("resolved", [])[:_MAX_EVIDENCE_ROWS]:
+        out.append(f"  resolves: {row['identifier']}  {row['title'][:48]}")
+    return out
+
+
 def _evidence_orphan_refs(check: CheckResult) -> list[str]:
     # The defined line is uncapped: it is the list the writer picks a target from.
     out = [f"  no label: {name}" for name in check.evidence.get("orphans", [])]
@@ -454,6 +466,7 @@ _EVIDENCE_RENDERERS = {
     "report.limitations_declared": _evidence_limitations,
     "report.model_unbound_claims": _evidence_claim_findings,
     "source.cited_papers_in_registry": _evidence_citations,
+    "source.identifiers_resolve": _evidence_identifiers,
     "style.sections_present": _evidence_sections,
     "style.no_orphan_references": _evidence_orphan_refs,
     "style.floats_referenced": _evidence_floats,
@@ -577,6 +590,12 @@ _FIXES = {
         "it is treated as fabricated. Cite only papers listed as retrieved "
         "above, by their arXiv id, or remove the citation. A DOI cannot have "
         "been retrieved here; cite the arXiv id instead."
+    ),
+    "source.identifiers_resolve": (
+        "A cited arXiv identifier names no paper that exists, so the citation "
+        "cannot be checked by anyone and is treated as invented. Replace it "
+        "with the identifier of a paper you actually retrieved, or remove the "
+        "citation and the claim that rests on it."
     ),
     "style.sections_present": (
         "A section this venue requires is missing. Write it, using the name "

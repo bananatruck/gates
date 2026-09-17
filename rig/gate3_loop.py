@@ -39,10 +39,33 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from gates import GateFailure, GateReport, render_feedback  # noqa: E402
 from gates.adapters.agentlab import make_report_context, report_loop  # noqa: E402
+from gates.schema import PaperRecord  # noqa: E402
 
 from rig.gate2_loop import run_gate2_loop  # noqa: E402
 from rig.gate2_scenarios import SCENARIOS as GATE2_SCENARIOS  # noqa: E402
 from rig.gate3_scenarios import SCENARIOS, Scenario, Turn  # noqa: E402
+
+
+def _resolver(resolvable: tuple[str, ...] | None):
+    """A dict-backed stand-in for :func:`arxiv_lookup`, so the rig stays offline.
+
+    ``None`` injects no resolver at all, which is what most scenarios want: they
+    are about numeric binding, and a check with no input emits nothing.
+    """
+    if resolvable is None:
+        return None
+
+    def lookup(identifier: str) -> PaperRecord | None:
+        if identifier not in resolvable:
+            return None
+        return PaperRecord(
+            identifier=identifier,
+            title=f"A paper the run retrieved ({identifier})",
+            locator=f"https://arxiv.org/abs/{identifier}",
+            content_hash="scripted",
+        )
+
+    return lookup
 
 
 class ScriptedWriter:
@@ -109,6 +132,7 @@ def run_gate3_loop(
         research_dir=str(workdir),
         max_attempts=scenario.max_attempts,
         sections=scenario.sections,
+        lookup=_resolver(scenario.resolvable),
     )
     outcome = LoopOutcome(
         scenario=scenario.name,

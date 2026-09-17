@@ -21,6 +21,10 @@ each check runs when its input exists:
     source.cited_papers_in_registry         FAIL   iff the host says what it
                                                    retrieved and the paper
                                                    cites something
+    source.identifiers_resolve              FAIL   iff a resolver is injected
+                                                   and the paper cites
+                                                   something; INFO if the
+                                                   resolver could not run
     style.sections_present                  FAIL   iff the host declares the
                                                    sections it requires
     style.no_orphan_references              FAIL   iff the manuscript
@@ -54,7 +58,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from . import llm_claims, llm_report
 from .errors import GateError
@@ -66,7 +70,7 @@ from .llm import (
 )
 from .prose import CITATION, claim_sections, extract_claims, sections
 from .registry import citable_values
-from .schema import CheckResult, GateReport, Severity, decide
+from .schema import CheckResult, GateReport, PaperRecord, Severity, decide
 
 GATE_NAME = "GATE 3 — REPORT VALIDITY"
 
@@ -121,6 +125,13 @@ class Gate3Config:
     #: sections a paper needs is the host's standard, and a default here would be
     #: a preference wearing a check's clothes.
     sections: tuple[str, ...] = ()
+    #: Resolves a version-stripped arXiv id to a record, or ``None`` if no such
+    #: paper exists. Injected exactly like ``consult_model``, so ``gates/`` never
+    #: opens a socket and the suite never depends on someone else's uptime (B2).
+    #: ``None`` means ``source.identifiers_resolve`` emits nothing. A resolver
+    #: that cannot reach its source raises, and the check reports that it could
+    #: not run rather than passing.
+    lookup: Callable[[str], PaperRecord | None] | None = None
     #: The host's own render, when the host renders. ``None`` means Gate 3
     #: renders, and says so: a self-rendered comparison is a weaker statement
     #: than an independent one, so its origin travels with it.
@@ -655,6 +666,78 @@ def _check_floats_referenced(source: str) -> CheckResult | None:
     )
 
 
+def _check_identifiers_resolve(
+    source: str, lookup: Callable[[str], PaperRecord | None] | None
+) -> CheckResult | None:
+    """Every cited arXiv id resolves to a paper that exists.
+
+    The sibling of ``source.cited_papers_in_registry``, asking the other half of
+    the question. That one catches a paper this run never retrieved; this catches
+    an identifier no such paper was ever issued. A citation can fail either.
+
+    Ids are looked up version-stripped (D26): whether v4 specifically exists is
+    what the run read, which the registry check already judges. DOIs are never
+    sent, because arXiv does not issue them and a cited DOI already fails the
+    registry check.
+
+    Returns ``None`` when the host injected no resolver, or the paper cites
+    nothing. A resolver that raises leaves an INFO row saying citations went
+    unchecked: an outage is not a defect in the manuscript, so it must not block
+    it, and it must not read as a pass either.
+    """
+    if lookup is None:
+        return None
+    cited = sorted({m.group(1) for m in CITATION.finditer(source)})
+    if not cited:
+        return None
+
+    resolved: list[dict[str, Any]] = []
+    unresolved: list[str] = []
+    for identifier in cited:
+        try:
+            record = lookup(identifier)
+        except Exception as exc:  # noqa: BLE001 - any resolver failure degrades
+            return CheckResult(
+                id="source.identifiers_resolve",
+                passed=True,
+                severity=Severity.INFO,
+                message=(
+                    f"{len(cited)} cited identifier(s) could not be resolved: "
+                    f"the resolver failed ({type(exc).__name__})"
+                ),
+                evidence={"degraded": True, "cited": cited, "reason": str(exc)[:200]},
+            )
+        if record is None:
+            unresolved.append(identifier)
+        else:
+            resolved.append({
+                "identifier": record.identifier,
+                "title": record.title,
+                "year": record.year,
+                "locator": record.locator,
+            })
+
+    return CheckResult(
+        id="source.identifiers_resolve",
+        passed=not unresolved,
+        severity=Severity.FAIL,
+        message=(
+            f"{len(unresolved)} of {len(cited)} cited identifier(s) name no "
+            f"existing paper: {', '.join(unresolved)}"
+            if unresolved
+            else f"all {len(cited)} cited identifier(s) resolve to a real paper"
+        ),
+        evidence={
+            "unresolved": unresolved,
+            "resolved": resolved,
+            "discrepancies": [
+                f"{name} is cited but no paper with that identifier exists"
+                for name in unresolved
+            ],
+        },
+    )
+
+
 def _check_claim_sections_bound(
     source: str, values: dict[str, Any]
 ) -> CheckResult | None:
@@ -752,6 +835,7 @@ def run_gate3(
         _check_figures_exist(source, config.figure_root),
         _check_limitations_declared(source, rendered, declared, origin),
         _check_cited_papers_in_registry(source, retrieved),
+        _check_identifiers_resolve(source, config.lookup),
         _check_sections_present(source, config.sections),
         _check_no_orphan_references(source),
         # WARN by construction, so decide() below is blind to it.

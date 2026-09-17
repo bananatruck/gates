@@ -63,6 +63,28 @@ class CheckResult:
         return d
 
 
+@dataclass(frozen=True)
+class PaperRecord:
+    """One paper an identifier resolved to, as the resolver found it.
+
+    Lives here rather than in ``gate3`` because a corpus of retrieved papers is
+    the missing object both Gate 3's citation binding and any future Gate 2
+    literature work need (`CLAUDE.md` §6), so it is built once.
+
+    ``locator`` and ``content_hash`` are what make "the same paper" checkable
+    later: an identifier alone says a record exists, not that the text behind it
+    is the text that was read. Both are recorded by whoever resolved the
+    identifier, never inferred here.
+    """
+
+    identifier: str
+    title: str
+    authors: tuple[str, ...] = ()
+    year: int | None = None
+    locator: str = ""
+    content_hash: str = ""
+
+
 @dataclass
 class MetricRecord:
     """One value the experiment declared through ``record_result``.
