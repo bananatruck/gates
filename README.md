@@ -18,8 +18,8 @@ tendency, and closes the channel at three points.
 | Gate | Question | Status |
 |---|---|---|
 | **1 — execution validity** | Did this code actually run, and were the reported numbers produced by *this* run? | **complete and measured** |
-| **2 — source ↔ result coherence** | Are the measured results consistent with what the cited literature reports? | implemented and unit-tested |
-| **3 — report validity** | Does every number and citation in the manuscript trace to something that exists? | implemented and unit-tested |
+| **2 — source ↔ result coherence** | Are the measured results within their bounds, consistent with each other, and produced the way the plan declared? | implemented, loop closed and tested |
+| **3 — report validity** | Does every number and citation in the manuscript trace to something that exists? | implemented, loop closed and tested |
 
 Gate 1 is finished for the scope it declares. It has been run against a complete
 controlled A/B campaign on a real model and a real scaffold; the numbers are in
@@ -32,6 +32,24 @@ here means a controlled campaign against a live scaffold produced numbers we
 can show you. Gates 2 and 3 have not had one yet, so they are listed as
 implemented, not measured — the same standard the gates impose on the agents
 they audit.
+
+Gate 3 checks numeric binding, figure and limitation binding, citations against
+what the run retrieved and against arXiv, and a set of deterministic report-format
+rules. One check reaches the network and says so when it cannot: with no resolver
+supplied, or none reachable, `source.identifiers_resolve` reports that citations
+went unchecked rather than passing them. `report.no_numeric_literals_in_results`
+is a scanner over prose and therefore has a false-negative rate. We measured it
+rather than assuming it: `python -m rig.gate3_scanner_miss` scores it against 49
+hand-labelled claims in our own two archived manuscripts and **detects 34, misses
+15, and reports 6 numbers that are not claims**. Twelve of the fifteen misses have
+one cause, a findings line carrying a `\ref`, which `SKIP_LINE` drops whole. The
+scanner is deliberately left unfixed, because the published Gate 1 traceability
+number came from it and changing it would restate a measured result.
+
+So "no fabricated number survives" is a property of the *pipeline* — the writer
+emits `\result{key}` tokens and the renderer substitutes recorded values — and not
+of that scanner, which checks the pipeline was used. The distinction is the whole
+point, and [`docs/PLAN.md`](docs/PLAN.md) §5.2 states it with the number beside it.
 
 Full design: [`docs/PLAN.md`](docs/PLAN.md).
 
@@ -274,7 +292,12 @@ against Agent Laboratory's MLE solver. An adapter is responsible for:
 2. calling `gated_execute` where the scaffold used to call its `exec` helper,
 3. charging one rewrite per *agent turn* (not per execution — automated repair
    loops must not eat the agent's budget),
-4. handing `render_feedback(report)` back to the agent on rejection.
+4. handing `render_feedback(report)` back to the agent on rejection,
+5. after the experiment phase, calling `review_loop` with a `revise` callback
+   that returns the engineer's next version of the code. Every version runs
+   under Gate 1 before Gate 2 reviews the registry it wrote, so a fix cannot
+   reach Gate 2 without running. The outcome carries the registry the writer
+   cites and the limitations it must declare.
 
 ## Artifacts
 
@@ -302,9 +325,9 @@ debugging aid.
 pip install -e ".[dev]" && pytest
 ```
 
-396 tests here — 53 for Gate 1, 56 for Gate 2, 19 for Gate 3, and the rest
-covering the value registry, the log scanner, and the loop — plus 76 in the
-host scaffold's integration suite. Every check in the tables above is tied to
+624 tests here: 98 for Gate 1, 126 for Gate 2 (checks, loop, and the tier
+comparison), 149 for Gate 3 (checks, model layer and loop), and the rest covering the value registry, the log
+scanner, and Gate 1's loop. The host scaffold's integration suite is separate. Every check in the tables above is tied to
 the test that holds it in place in
 [`docs/GATE1_REQUIREMENTS.md`](docs/GATE1_REQUIREMENTS.md).
 
@@ -338,6 +361,20 @@ search over a 1,000-character slice, so it reproduces exactly — and reports wh
 attempts Gate 1 rejected that upstream would have accepted. It does **not**
 reconstruct `get_score`; that is an LLM at temperature 0.6, so the ledger's
 reward column stays `null` unless a real model is passed to `run_loop`.
+
+Gate 2's loop has its own rig. Every submission there is code, run under Gate 1
+first, so a fix typed into a `record_result` call is rejected before Gate 2 sees
+it. A spent Gate 2 budget proceeds with the discrepancy declared instead of
+raising.
+
+```bash
+python -m rig.gate2_loop              # six scenarios, full transcript
+python -m rig.gate3_loop              # ten scenarios; a spent budget raises
+python -m rig.gate2_tier_comparison   # what tiers A, B and C each add
+```
+
+The comparison is in
+[`docs/research/gate2-tier-comparison.md`](docs/research/gate2-tier-comparison.md).
 
 What was outstanding for Gate 1 and how each item closed:
 [`docs/GATE1_COMPLETION.md`](docs/GATE1_COMPLETION.md). Nothing there blocks

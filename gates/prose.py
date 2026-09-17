@@ -53,7 +53,10 @@ SKIP_LINE = re.compile(
 #: "arXiv 2410.21676v4" contains "2410.21", which the number pattern happily
 #: reported as an unsourced empirical claim. An arXiv id is a citation, not a
 #: measurement, so it never enters the claim set.
-CITATION = re.compile(r"arxiv[:\s]*\d{4}\.\d{4,5}(v\d+)?", re.IGNORECASE)
+#:
+#: Group 1 is the id and group 2 its version, for Gate 3's citation check.
+#: Old-style ids (``hep-th/9901001``) are not matched.
+CITATION = re.compile(r"arxiv[:\s]*(\d{4}\.\d{4,5})(v\d+)?", re.IGNORECASE)
 
 _LATEX_HEADING = re.compile(r"\\section\{([^}]*)\}")
 #: Markdown headings, top two levels only. Kept separate from the LaTeX pattern
@@ -119,6 +122,29 @@ def claim_sections(paper_text: str) -> list[str]:
         if section and any(s in section for s in CLAIM_SECTIONS):
             found.append(section)
     return found
+
+
+def flags_claim(line: str) -> bool:
+    """Whether :func:`extract_claims` takes a number from this findings line."""
+    if SKIP_LINE.search(line):
+        return False
+    return any(is_claim(token) for token in NUMBER.findall(CITATION.sub(" ", line)))
+
+
+def sections(paper_text: str) -> list[tuple[str, str]]:
+    """Each top-level section as ``(heading, body)``, in order.
+
+    Text before the first heading is ``"preamble"``. Subsections stay in their
+    section's body, for the same reason :func:`_heading` ignores them.
+    """
+    out: list[tuple[str, list[str]]] = [("preamble", [])]
+    for line in paper_text.splitlines():
+        heading = _heading(line)
+        if heading is None:
+            out[-1][1].append(line)
+        else:
+            out.append((heading, []))
+    return [(heading, "\n".join(body)) for heading, body in out]
 
 
 def extract_claims(paper_text: str) -> list[Claim]:

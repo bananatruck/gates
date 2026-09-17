@@ -150,11 +150,14 @@ class ModelLayer:
         return self.fn is not None
 
     def ask(self, prompt: str, system_prompt: str = "") -> ModelCall:
-        """Call the model. Never raises."""
+        """Call the model. Never raises.
+
+        With no model there is no call, so nothing is spent or recorded. Counting
+        it as a failure made a deployment with no model read as one whose model
+        was down.
+        """
         if self.fn is None:
-            call = ModelCall(ok=False, error="no model was supplied")
-            self.budget.record(call)
-            return call
+            return ModelCall(ok=False, error="no model was supplied")
 
         truncated = len(prompt) > self.max_prompt_chars
         if truncated:

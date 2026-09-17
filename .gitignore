@@ -9,3 +9,7 @@ gate_artifacts/
 
 # libreoffice lock files
 .~lock.*#
+
+# Gate 3 diagrams and their exports. Kept out of the repo by decision, so a
+# stray `git add -A` cannot pick them up again.
+docs/gate3/

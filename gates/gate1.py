@@ -222,30 +222,16 @@ def _attach_generated_fixes(report: GateReport, model: ModelLayer, source: str) 
     """
     if report.passed or not model.available:
         return
-    outcome = llm_report.generate_fixes(model, report, source)
-    if outcome.usable:
-        report.generated_fixes = outcome.text
-    elif outcome.ungrounded:
-        # Rejected whole rather than repaired. A fix naming a variable the code
-        # does not contain sends the engineer chasing something that does not
-        # exist, which is the failure this gate exists to prevent.
-        report.checks.append(
-            CheckResult(
-                id="report.fixes_grounded",
-                passed=True,
-                severity=Severity.INFO,
-                message=(
-                    "the generated fixes cited "
-                    f"{', '.join(outcome.ungrounded[:4])}, which this run does "
-                    "not support; the deterministic template was used instead"
-                ),
-                evidence={"ungrounded": outcome.ungrounded, "degraded": True},
-            )
-        )
+    # Rejected whole rather than repaired. A fix naming a variable the code does
+    # not contain sends the engineer chasing something that does not exist,
+    # which is the failure this gate exists to prevent.
+    llm_report.attach_fixes(
+        report, llm_report.generate_fixes(model, report, source), subject="this run"
+    )
 
 
 def _record_model_budget(report: GateReport, model: ModelLayer) -> None:
-    if model.available or model.budget.calls:
+    if model.available:
         report.model = model.budget.to_dict()
 
 
@@ -910,10 +896,13 @@ def _annotate_provenance(source: str, execution: ExecutionRecord) -> None:
     """Decide, from the source, whether each recorded value was computed."""
     try:
         kinds = static_checks.classify_record_calls(source)
+        unused = static_checks.find_unused_record_values(source)
     except SyntaxError:
         return
     for metric in execution.metrics.values():
         metric.arg_kind = kinds.get(metric.lineno or -1, "unknown")
+        if metric.arg_kind in ("constant", "computed"):
+            metric.used_by_run = metric.lineno not in unused
 
 
 def _looks_like_ratio(metric: MetricRecord) -> bool:

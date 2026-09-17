@@ -63,6 +63,28 @@ class CheckResult:
         return d
 
 
+@dataclass(frozen=True)
+class PaperRecord:
+    """One paper an identifier resolved to, as the resolver found it.
+
+    Lives here rather than in ``gate3`` because a corpus of retrieved papers is
+    the missing object both Gate 3's citation binding and any future Gate 2
+    literature work need (`CLAUDE.md` §6), so it is built once.
+
+    ``locator`` and ``content_hash`` are what make "the same paper" checkable
+    later: an identifier alone says a record exists, not that the text behind it
+    is the text that was read. Both are recorded by whoever resolved the
+    identifier, never inferred here.
+    """
+
+    identifier: str
+    title: str
+    authors: tuple[str, ...] = ()
+    year: int | None = None
+    locator: str = ""
+    content_hash: str = ""
+
+
 @dataclass
 class MetricRecord:
     """One value the experiment declared through ``record_result``.
@@ -86,6 +108,11 @@ class MetricRecord:
     #: "literal"  — the call site is a constant expression.
     #: "unknown"  — the call site could not be resolved statically.
     arg_kind: str = "unknown"
+    #: Whether anything besides ``record_result`` or ``print`` reads the names
+    #: the value is built from. ``None`` when the call site reads no name or
+    #: could not be resolved. Tier B needs it: a plan value recorded and never
+    #: used matches the plan without being evidence about the run (B8).
+    used_by_run: bool | None = None
     #: Every ``record_result`` call for this key, oldest first, capped by the
     #: harness. Retained because the last value is not necessarily the reported
     #: one.

@@ -441,6 +441,13 @@ declared limitation that Gate 3 will require the report to state.
 
 Gate 2 is where the layer stops being purely deterministic, and the design says so openly.
 
+> **As built (09-16).** The semantic tier below was removed (D4), and Gate 2 is model-free (D19).
+> Gate 2 has three tiers. Tier A checks boundaries: ranges, declared relations, and plausibility.
+> Tier B checks the run against the plan fields declared at wiring time (D13, D17).
+> `reference_interval` compares against declared sources bound to `lit_review` (D23).
+> Tier C is `review_loop` in the adapter, and every revision runs under Gate 1 first (F12).
+> `progress.md` holds the decision log. The text below is the original design.
+
 ### 4.1 Inputs
 
 - Gate 1's verified registry (values only, with provenance)
@@ -521,34 +528,93 @@ Numeric binding — deterministic, eliminates fabricated results by construction
 The renderer, not the model, writes the numbers. A number that was never measured has no token,
 and a token that has no value does not compile.
 
-Citation binding — deterministic, eliminates fake citations by construction:
+Citation binding — deterministic, and **detection rather than construction**
+(as-built, D43):
 
 | ID | Check | Severity |
 |---|---|---|
-| `report.citations_in_registry` | Every cited arXiv ID is in the retrieval registry — a paper the scaffold actually fetched | FAIL |
-| `report.bibliography_generated` | The bibliography is emitted from the registry, never authored by the model | FAIL |
-| `report.citation_metadata_matches` | Title/author/year match the fetched record | FAIL |
+| `source.cited_papers_in_registry` | Every cited arXiv ID is in the retrieval registry — a paper the scaffold actually fetched | FAIL |
+| `source.identifiers_resolve` | Every cited ID resolves to a paper that exists, through an injected resolver. Absent, and reported absent, when no resolver is supplied or its source is unreachable | FAIL |
+
+Earlier drafts of this section named `report.bibliography_generated` and
+`report.citation_metadata_matches` and claimed citations were eliminated by
+construction. Neither is built, and neither can be on the reference host: Agent
+Laboratory writes citations inline as `(arXiv 2308.11483v1)` and emits no
+bibliography, so there is nothing for a renderer to generate from the registry
+and no metadata block to compare against (D26). Making the construction claim
+true would mean changing how the host writes citations, which costs the
+portability claim this project argues for. The two checks above detect a
+fabricated citation and report a rate instead.
 
 Claim entailment — model-assisted, reported as a rate:
 
 | ID | Check | Severity |
 |---|---|---|
-| `report.claims_entailed` | Each prose claim is checked against its supporting artifact with MiniCheck | WARN |
+| `report.model_unbound_claims` | A model reads the findings prose the number scanner passed and flags what reads like an unbound quantitative claim. Quote-grounded, and it cannot move the verdict | WARN |
 | `report.figures_referenced_exist` | Every `\includegraphics` target exists on disk and was produced by the gated run | FAIL |
+
+MiniCheck was deferred past this paper (D6). The WARN above is the model layer
+Gate 1 already had, rebuilt for manuscripts (D31).
 
 ### 5.2 Honesty boundary
 
-Three of the four MLR-Bench classes are eliminated by construction and may be claimed as such:
+Revised against what was built (D43). Two of the four MLR-Bench classes are
+eliminated by construction; the other two are detected and measured, and the
+difference matters more than the count:
 
 | MLR-Bench class | Gate 3 status |
 |---|---|
-| Fabricated numeric results | **Eliminated by construction** — no numeral can be emitted in a results context |
-| Fake / misattributed citations | **Eliminated by construction** — only registry IDs are citable |
+| Fabricated numeric results | **Eliminated by construction** — of the *pipeline*, not of a scanner. See below |
 | Silent failure scored as success | **Eliminated by construction** (Gate 1) — a crashed run cannot reach writing |
+| Fake / misattributed citations | **Detected and measured** — a citation nothing retrieved, or naming no paper that exists, is rejected. The writer is not prevented from typing one |
 | Unsupported claims in prose | **Reduced and measured** — "this demonstrates over-smoothing" cannot be made impossible |
 
-The fourth is reported with a confidence interval, before and after. Saying this precisely is
-worth more than overclaiming on all four.
+**What "eliminated by construction" means for the numeric class.** It is a
+property of the pipeline: the writer emits `\result{key}` tokens, the renderer
+substitutes registry values, so a number that was never measured has no token
+and a token with no value does not render.
+`report.no_numeric_literals_in_results` is the check that the pipeline was
+*used*, and as a scanner over prose it has a false-negative rate. The paper must
+state the construction claim in these terms, with that number beside it, or it is
+the same overclaim this gate exists to catch.
+
+**G3-M4, measured** (`rig/gate3_scanner_miss.py`; labels reviewed and accepted
+2026-09-16, D37):
+
+| | Gated | Ungated | Both |
+|---|---|---|---|
+| Claims hand-labelled in findings sections | 39 | 10 | **49** |
+| Detected by the scanner | 28 | 6 | **34** |
+| Missed | 11 | 4 | **15** |
+| Reported but not a claim | 1 | 5 | **6** |
+
+Two manuscripts, so counts and a raw fraction, and no confidence interval (D39).
+The miss rate is 15 of 49. The rate is not the finding; the causes are:
+
+| Misses | Cause |
+|---|---|
+| 12 | The findings line carries a `\ref`, which `SKIP_LINE` matches, so every number on it is dropped and the line reports nothing |
+| 2 | `NUMBER` requires a decimal point or four digits, so a two- or three-digit integer result is invisible |
+| 1 | `context_of` uses `line.find`, so a value stated twice on one line is deduplicated to one |
+
+Four fifths of everything the scanner cannot see has a single cause, and it is
+not the one the literature readout predicted: that probe found the class through
+`\cite`, but in a real manuscript a findings sentence points at the table or
+figure it discusses, so `\ref` is the common trigger. The third row understates
+the literal *count* without letting a line through, since the first occurrence
+still reports.
+
+Two scoping notes the paper must keep. Six of the 40 numbers the scanner reports
+are not claims at all: a value quoted from the cited literature, a step index, two
+thresholds fixed before the run, and a step count the paper specifies. And the
+unreadable `\begin{abstract}` (D40) costs nothing on this corpus, because the
+ungated run recorded no metrics and its abstract states none — the gap is real
+and it hid nothing here, and saying otherwise would be the overclaim again.
+
+The scanner is not changed (D38): the published Gate 1 traceability number came
+from it reading `.tex`, so a fix restates a measured result.
+
+Saying this precisely is worth more than claiming construction on all four.
 
 ---
 
@@ -620,7 +686,7 @@ An adapter is responsible for exactly four things:
 | 3a | `rig/` — the loop rig: the gate driven engineer-turn by engineer-turn, no model | **done** |
 | 4 | Fix `run_experiments.py --yaml-location`; re-run the archive for a real n | **CLI fixed**; runs pending |
 | 5 | The channel-fidelity experiment: fabrication rate vs. `MAX_LEN` | detector arm instrumented; writer arm pending |
-| 6 | Gate 2 | pending |
+| 6 | Gate 2 | **built**: tiers A and B, loop (tier C) through Gate 1; campaign (E1) pending |
 | 7 | Gate 3 | pending |
 | 8 | Evaluate on a CORE-Bench subset and PaperBench Code-Dev | pending |
 

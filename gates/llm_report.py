@@ -30,8 +30,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from typing import Callable, Iterable
+
 from .llm import ModelLayer
-from .schema import GateReport
+from .prose import CITATION
+from .schema import CheckResult, GateReport, Severity
 
 #: Identifiers the model may always use: they are not claims about this code.
 _ALWAYS_ALLOWED = frozenset(
@@ -91,6 +94,31 @@ _SYSTEM = (
 )
 
 
+#: Gate 3's version of the prompt above (D31). The reader writes prose, so the
+#: rules are about keys and tokens rather than names and lines.
+REPORT_SYSTEM = (
+    "You write the REQUIRED FIXES section of a report-validity gate's feedback "
+    "report. The reader is an automated paper-writing agent that will revise the "
+    "manuscript and resubmit it.\n\n"
+    "Write one numbered instruction per problem, in the order given. Each must "
+    "say what to change and where: name the section, and the result key to "
+    "cite.\n\n"
+    "Rules you must not break:\n"
+    "- A number that reports a result is written as \\result{<key>}, using ONLY "
+    "a key listed under CITABLE KEYS. Never invent a key. Never tell the writer "
+    "to type or round a number.\n"
+    "- Limitations the gate declared are inserted by writing \\limitations{}. "
+    "Never tell the writer to paraphrase them.\n"
+    "- Use only sections, keys and facts that appear in the report below. Put "
+    "keys in backticks.\n"
+    "- Do not restate the diagnosis; give the fix.\n"
+    "- No preamble and no closing remarks. Output the numbered list only.\n"
+    "- At most 4 instructions, at most 40 words each."
+)
+
+_PROPOSED_TOKEN = re.compile(r"\\result\{([^}]*)\}")
+
+
 @dataclass
 class FixOutcome:
     """The generated section, and whether it survived grounding."""
@@ -108,22 +136,57 @@ class FixOutcome:
 
 
 def generate_fixes(
-    layer: ModelLayer, report: GateReport, source: str = ""
+    layer: ModelLayer,
+    report: GateReport,
+    source: str = "",
+    *,
+    system: str = _SYSTEM,
+    facts: str = "",
+    grounding: Callable[[str], list[str]] | None = None,
 ) -> FixOutcome:
-    """Ask the model for REQUIRED FIXES, and refuse anything ungrounded."""
+    """Ask the model for REQUIRED FIXES, and refuse anything ungrounded.
+
+    Gate 1 calls it with the defaults. Gate 3 passes its own prompt, the keys
+    it may cite as ``facts``, and :func:`check_manuscript_grounding`.
+    """
     failures = report.failed_checks()
     if not failures:
         return FixOutcome(ok=True, text="")
     if not layer.available:
         return FixOutcome(ok=False, error="no model was supplied")
 
-    call = layer.ask(_render_facts(report), _SYSTEM)
+    prompt = _render_facts(report) + (f"\n\n{facts}" if facts else "")
+    call = layer.ask(prompt, system)
     if not call.ok:
         return FixOutcome(ok=False, error=call.error)
 
     text = _strip_preamble(call.text)
-    ungrounded = check_grounding(text, report, source)
+    ungrounded = (grounding or (lambda t: check_grounding(t, report, source)))(text)
     return FixOutcome(text=text, ok=True, ungrounded=ungrounded)
+
+
+def attach_fixes(report: GateReport, outcome: FixOutcome, *, subject: str) -> None:
+    """Keep the generated fixes if they are grounded; record it if they are not.
+
+    Called after the verdict is set. Rejected whole rather than repaired: a fix
+    naming something ``subject`` does not contain sends the agent chasing it.
+    """
+    if outcome.usable:
+        report.generated_fixes = outcome.text
+    elif outcome.ungrounded:
+        report.checks.append(
+            CheckResult(
+                id="report.fixes_grounded",
+                passed=True,
+                severity=Severity.INFO,
+                message=(
+                    "the generated fixes cited "
+                    f"{', '.join(outcome.ungrounded[:4])}, which {subject} does "
+                    "not support; the deterministic template was used instead"
+                ),
+                evidence={"ungrounded": outcome.ungrounded, "degraded": True},
+            )
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -191,13 +254,16 @@ def _is_code_like(span: str) -> bool:
     return bool(_CODE_LIKE.match(span))
 
 
-def check_grounding(text: str, report: GateReport, source: str = "") -> list[str]:
+def check_grounding(
+    text: str, report: GateReport, source: str = "", extra_names: Iterable[str] = ()
+) -> list[str]:
     """Tokens the model used that the report does not support.
 
     Only backticked identifiers and explicit line references are checked. A
     sentence of ordinary English asserts nothing verifiable and is left alone.
     """
     names, linenos = build_vocabulary(report, source)
+    names.update(extra_names)
     offenders: list[str] = []
 
     for match in _BACKTICKED.finditer(text):
@@ -225,6 +291,36 @@ def check_grounding(text: str, report: GateReport, source: str = "") -> list[str
 
     seen: set[str] = set()
     return [x for x in offenders if not (x in seen or seen.add(x))]
+
+
+def check_manuscript_grounding(
+    text: str,
+    report: GateReport,
+    source: str,
+    citable: Iterable[str],
+    *,
+    papers: Iterable[str] = (),
+) -> list[str]:
+    """Gate 3's grounding: the generic rules, plus every proposed token's key.
+
+    A fix telling the writer to cite ``\\result{exp1.f1}`` when nothing
+    recorded ``exp1.f1`` rebuilds the defect Gate 3 exists to catch, so any
+    proposed key outside the registry rejects the whole draft. ``<key>`` is the
+    placeholder the rules themselves use. The same holds for arXiv ids: each
+    one the fix names must be in ``papers``, compared without its version.
+    """
+    citable = set(citable)
+    parts = {part for key in citable for part in _IDENTIFIER.findall(key)}
+    offenders = check_grounding(text, report, source, citable | parts)
+    for key in _PROPOSED_TOKEN.findall(text):
+        key = key.strip()
+        if key not in citable and key != "<key>":
+            offenders.append(f"\\result{{{key}}}")
+    papers = set(papers)
+    for match in CITATION.finditer(text):
+        if match.group(1) not in papers:
+            offenders.append(match.group(0))
+    return offenders
 
 
 # --------------------------------------------------------------------------- #

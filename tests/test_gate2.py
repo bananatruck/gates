@@ -467,6 +467,31 @@ def test_a_constant_read_from_a_binding_does_prove_conformance(tmp_path):
     assert report.passed
 
 
+def test_a_constant_the_run_never_used_cannot_prove_conformance(tmp_path):
+    """B8, the decoy hole, end to end through a real Gate 1 run.
+
+    The run records the declared 0.001 and builds its optimizer with 0.01.
+    Which value the optimizer got is unprovable from the registry, so the field
+    is unverifiable rather than divergent (D17), and never conforming.
+    """
+    from gates.gate1 import Gate1Config, run_gate1
+    from gates.registry import build_registry
+
+    src = (
+        "lr = 0.001\n"
+        "optimizer_lr = 0.01\n"
+        "loss = optimizer_lr * 3\n"
+        "record_result('config.lr', lr)\n"
+        "record_result('train.loss', loss)\n"
+    )
+    gate1 = run_gate1(src, Gate1Config(artifact_root=str(tmp_path / "g1"), timeout_s=30))
+    reg = build_registry(gate1)
+    report = run_gate2(reg, config(tmp_path / "g2", plan_fields=(LR,)))
+    assert conformance(report).evidence["conforming"] == []
+    assert traceable(report).evidence["unverifiable"][0]["reason"] == "unused"
+    assert "never reads" in render_feedback(report) or "never reads" in traceable(report).message
+
+
 def test_a_registry_without_provenance_cannot_prove_conformance(tmp_path):
     """Unknown is not the same as fine."""
     reg = registry({"config.lr": (0.001, None)})
@@ -1037,6 +1062,36 @@ def test_the_review_context_carries_gate_2_configuration(tmp_path):
     assert result.report.verdict is Verdict.FAIL
 
 
+def test_sources_declared_at_wiring_time_reach_the_reference_interval(tmp_path):
+    """F6. Declared like plan fields (D13), bound to papers the host fetched (D23)."""
+    lit_review = [{"arxiv_id": "1902.07153", "full_text": "...", "summary": "SGC"}]
+    claim = SourceClaim(key="exp1.acc", source_id="1902.07153", value=0.81, setting="Cora")
+    ctx = make_review_context(research_dir=str(tmp_path), sources=(claim,), lit_review=lit_review)
+
+    report = gated_review(registry({"exp1.acc": (0.40, "ratio")}), ctx).report
+    check = next(c for c in report.checks if c.id == "coherence.reference_interval")
+    assert not check.passed
+    assert check.evidence["out_of_band"][0]["candidates"][0]["source_id"] == "1902.07153"
+
+
+def test_a_source_nobody_fetched_is_refused_at_wiring_time(tmp_path):
+    """A band must never come from a paper that is not in the host's lit_review."""
+    claim = SourceClaim(key="exp1.acc", source_id="2401.00001", value=0.81)
+    with pytest.raises(GateError, match="2401.00001"):
+        make_review_context(
+            research_dir=str(tmp_path),
+            sources=(claim,),
+            lit_review=[{"arxiv_id": "1902.07153"}],
+        )
+
+
+def test_declared_sources_without_a_lit_review_are_refused(tmp_path):
+    """Unbound sources would reopen the hole the binding closes."""
+    claim = SourceClaim(key="exp1.acc", source_id="1902.07153", value=0.81)
+    with pytest.raises(GateError, match="lit_review"):
+        make_review_context(research_dir=str(tmp_path), sources=(claim,))
+
+
 def test_a_plan_declared_at_wiring_time_reaches_tier_b(tmp_path):
     """Tier B had its checks and no host path to them.
 
@@ -1116,3 +1171,35 @@ def test_an_exhausted_budget_is_labelled_by_the_gate_that_spent_it(tmp_path):
     with pytest.raises(GateFailure) as excinfo:
         ctx.check_can_continue()
     assert excinfo.value.gate == GATE_NAME
+
+
+# --------------------------------------------------------------------------- #
+# published evaluation numbers (F10)
+# --------------------------------------------------------------------------- #
+
+
+def test_tier_a_evaluation_still_reproduces_its_published_numbers():
+    """`docs/research/gate2-tier-a-evidence.md`: 27/27 detected, 0/18 false
+    positives, 27/27 attributed. A check change that moves these must update
+    the document in the same commit, not drift past it."""
+    from collections import Counter
+
+    from rig.gate2_tier_a_eval import CASES, run
+
+    rows = [run(c) for c in CASES]
+    assert Counter(r["outcome"] for r in rows) == Counter(TP=27, TN=18)
+    labelled = [r for c, r in zip(CASES, rows) if c.expect_check]
+    assert (sum(r["right_check"] for r in labelled), len(labelled)) == (27, 27)
+
+
+def test_tier_b_evaluation_still_reproduces_its_published_numbers():
+    """`docs/research/gate2-tier-b-evidence.md`: divergence 12/12 with 0/17
+    false positives, traceability 6/6 with 0/23, 29/29 cases correct."""
+    from collections import Counter
+
+    from rig.gate2_tier_b_eval import CASES, run
+
+    rows = [run(c) for c in CASES]
+    assert Counter(r["divergence"] for r in rows) == Counter(TP=12, TN=17)
+    assert Counter(r["traceability"] for r in rows) == Counter(TP=6, TN=23)
+    assert all(r["correct"] for r in rows) and len(rows) == 29

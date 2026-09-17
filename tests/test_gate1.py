@@ -27,6 +27,7 @@ from gates.report import render_feedback, render_summary  # noqa: E402
 from gates.static_checks import (  # noqa: E402
     classify_record_calls,
     find_banned_calls,
+    find_unused_record_values,
     find_unbound_names,
 )
 
@@ -206,6 +207,38 @@ def test_a_name_bound_outside_plain_assignment_is_not_called_constant(binding):
     """The taint pass under-reports on purpose: a warning costs a rewrite."""
     kinds = classify_record_calls(f"{binding}\nrecord_result('k', acc)\n")
     assert list(kinds.values()) == ["computed"]
+
+
+@pytest.mark.parametrize(
+    "body, unused",
+    [
+        # the decoy: recorded, then the optimizer is built from something else
+        ("lr = 0.001\nopt = make(lr=0.01)\nrecord_result('config.lr', lr)", True),
+        ("lr = 0.001\nopt = make(lr=lr)\nrecord_result('config.lr', lr)", False),
+        # printing a value is not using it
+        ("lr = 0.001\nprint(f'lr={lr}')\nrecord_result('config.lr', lr)", True),
+        ("lr = 0.001\nopt = make(lr=0.01)\nrecord_result('config.lr', float(lr))", True),
+        # a call-site literal reads no name, so there is nothing to decide
+        ("record_result('config.lr', 0.001)", False),
+    ],
+)
+def test_a_recorded_value_the_run_never_reads_is_found(body, unused):
+    """B8: a plan value can be recorded and then ignored by the computation."""
+    assert bool(find_unused_record_values(body + "\n")) is unused
+
+
+def test_the_decoy_reaches_the_metric_provenance(config):
+    src = (
+        "lr = 0.001\n"
+        "used = 0.01\n"
+        "step = used * 2\n"
+        "record_result('config.lr', lr)\n"
+        "record_result('config.step', step)\n"
+    )
+    metrics = run_gate1(src, config()).metrics()
+    assert metrics["config.lr"].used_by_run is False
+    assert metrics["config.step"].used_by_run is False
+    assert metrics["config.lr"].arg_kind == "constant"
 
 
 def test_constant_chain_terminates_on_a_self_reference():

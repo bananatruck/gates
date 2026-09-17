@@ -161,12 +161,14 @@ def _evidence_literals(check: CheckResult) -> list[str]:
 
 
 def _evidence_missing_keys(check: CheckResult) -> list[str]:
+    # Uncapped: each list is one line, so a cap saves no lines, and the recorded
+    # keys are the menu the agent picks its fix from. A cut list hid real keys.
     ev = check.evidence
     out = []
     if ev.get("missing"):
-        out.append("  missing:  " + ", ".join(ev["missing"][:_MAX_EVIDENCE_ROWS]))
+        out.append("  missing:  " + ", ".join(ev["missing"]))
     if ev.get("recorded"):
-        out.append("  recorded: " + ", ".join(ev["recorded"][:_MAX_EVIDENCE_ROWS]))
+        out.append("  recorded: " + ", ".join(ev["recorded"]))
     return out
 
 
@@ -277,6 +279,7 @@ def _evidence_traceable(check: CheckResult) -> list[str]:
         "not_recorded": "the run never recorded it",
         "literal": "recorded, but typed at the record_result call",
         "no_provenance": "recorded, but the registry carries no provenance",
+        "unused": "recorded, but the run never reads it",
     }
     out = []
     for row in check.evidence.get("unverifiable", [])[:_MAX_EVIDENCE_ROWS]:
@@ -344,6 +347,78 @@ def _evidence_figures(check: CheckResult) -> list[str]:
     return out
 
 
+def _evidence_limitations(check: CheckResult) -> list[str]:
+    # Uncapped: the writer is told to state each of these, so each is shown.
+    out = [f"  not stated: {line}" for line in check.evidence.get("missing", [])]
+    if not check.evidence.get("token_found", True):
+        out.append("  no \\limitations{} token in the manuscript")
+    return out
+
+
+def _evidence_claim_findings(check: CheckResult) -> list[str]:
+    return [
+        f"  {row['section']}: \"{row['quote']}\"" + (f"  ({row['why']})" if row.get("why") else "")
+        for row in check.evidence.get("findings", [])[:_MAX_EVIDENCE_ROWS]
+    ]
+
+
+def _evidence_citations(check: CheckResult) -> list[str]:
+    # The retrieved line is uncapped: it is the list the writer cites from.
+    ev = check.evidence
+    out = []
+    if ev.get("not_retrieved"):
+        out.append("  not retrieved: " + ", ".join(ev["not_retrieved"]))
+    for row in ev.get("version_mismatches", [])[:_MAX_EVIDENCE_ROWS]:
+        out.append(f"  version: cites {row['cited']}, read {', '.join(row['retrieved'])}")
+    if ev.get("retrieved"):
+        out.append("  retrieved: " + ", ".join(ev["retrieved"]))
+    return out
+
+
+def _evidence_sections(check: CheckResult) -> list[str]:
+    # Both lines uncapped: the writer adds one section per missing name, and
+    # needs the headings it did write to see which name it used instead.
+    out = [f"  missing:  {name}" for name in check.evidence.get("missing", [])]
+    if check.evidence.get("headings"):
+        out.append("  written:  " + ", ".join(check.evidence["headings"]))
+    return out
+
+
+def _evidence_identifiers(check: CheckResult) -> list[str]:
+    ev = check.evidence
+    out = [f"  does not resolve: {name}" for name in ev.get("unresolved", [])]
+    if ev.get("unchecked"):
+        # Shown whether or not the row failed: a writer told only about the
+        # named ids would think the rest were confirmed.
+        out.append("  not checked: " + ", ".join(ev["unchecked"]))
+        out.append(f"    {ev.get('reason', 'the resolver failed')}")
+    for row in ev.get("resolved", [])[:_MAX_EVIDENCE_ROWS]:
+        out.append(f"  resolves: {row['identifier']}  {row['title'][:48]}")
+    return out
+
+
+def _evidence_orphan_refs(check: CheckResult) -> list[str]:
+    # The defined line is uncapped: it is the list the writer picks a target from.
+    out = [f"  no label: {name}" for name in check.evidence.get("orphans", [])]
+    if check.evidence.get("labels"):
+        out.append("  defined:  " + ", ".join(check.evidence["labels"]))
+    return out
+
+
+def _evidence_floats(check: CheckResult) -> list[str]:
+    return [
+        f"  never referenced: {row['label']} ({row['kind']})"
+        for row in check.evidence.get("unreferenced", [])[:_MAX_EVIDENCE_ROWS]
+    ]
+
+
+def _evidence_unbound_sections(check: CheckResult) -> list[str]:
+    out = [f"  {name}: no \\result{{}} token" for name in check.evidence.get("unbound", [])]
+    if check.evidence.get("recorded"):
+        out.append("  recorded: " + ", ".join(check.evidence["recorded"]))
+    return out
+
+
 def _carry_forward(report: GateReport) -> list[str]:
     """Declared discrepancies belonging to checks that passed.
 
@@ -389,6 +464,14 @@ _EVIDENCE_RENDERERS = {
     "report.all_tokens_resolve": _evidence_missing_keys,
     "report.rendered_values_match_registry": _evidence_mismatches,
     "report.figures_referenced_exist": _evidence_figures,
+    "report.limitations_declared": _evidence_limitations,
+    "report.model_unbound_claims": _evidence_claim_findings,
+    "source.cited_papers_in_registry": _evidence_citations,
+    "source.identifiers_resolve": _evidence_identifiers,
+    "style.sections_present": _evidence_sections,
+    "style.no_orphan_references": _evidence_orphan_refs,
+    "style.floats_referenced": _evidence_floats,
+    "style.claim_sections_bound": _evidence_unbound_sections,
 }
 
 
@@ -496,6 +579,41 @@ _FIXES = {
         "A referenced figure is missing or was not produced by this run. "
         "Generate the figure inside the run's artifact directory, or remove "
         "the reference."
+    ),
+    "report.limitations_declared": (
+        "Gate 2 could not resolve the limitations listed above, so the paper "
+        "must state them. Put \\limitations{} where the paper discusses its "
+        "limitations and the renderer inserts them word for word. Do not "
+        "paraphrase them or leave them out."
+    ),
+    "source.cited_papers_in_registry": (
+        "A citation names a paper no search or review in this run returned, so "
+        "it is treated as fabricated. Cite only papers listed as retrieved "
+        "above, by their arXiv id, or remove the citation. A DOI cannot have "
+        "been retrieved here; cite the arXiv id instead."
+    ),
+    "source.identifiers_resolve": (
+        "A cited arXiv identifier names no paper that exists, so the citation "
+        "cannot be checked by anyone and is treated as invented. Replace it "
+        "with the identifier of a paper you actually retrieved, or remove the "
+        "citation and the claim that rests on it."
+    ),
+    "style.sections_present": (
+        "A section this venue requires is missing. Write it, using the name "
+        "listed above as its heading. If the material is already there under "
+        "another heading, rename that heading rather than repeating the text."
+    ),
+    "style.no_orphan_references": (
+        "A cross-reference names a label the manuscript never defines, so it "
+        "renders as \"??\" for the reader. Add \\label{<name>} to the figure, "
+        "table or section being referenced, using one of the defined labels "
+        "above if the target already exists, or drop the reference."
+    ),
+    "style.claim_sections_bound": (
+        "A results section cites no measured value. State its findings with "
+        "\\result{<key>}, using the recorded keys listed above. Describing "
+        "results without numbers does not pass: a paper with no measured "
+        "result is not a report of one."
     ),
     "env.code_identity": (
         "The source that ran does not hash to the source submitted. Report this "

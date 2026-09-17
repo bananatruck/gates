@@ -205,6 +205,20 @@ def test_no_model_falls_back_without_claiming_degradation(config):
     assert "standard guidance" not in text
 
 
+def test_no_model_claims_no_outage_after_a_run_either(config):
+    """The static path above never asks the model. A run that executed and
+    printed does: the log scan asked, got "no model was supplied", and that was
+    recorded as a failed call, so the feedback reported an outage in a
+    deployment that has no model at all."""
+    crashed = "print('hello')\nrecord_metadata('seed', 0)\nraise ValueError('boom')\n"
+    report = run_gate1(crashed, config())
+    assert not report.passed
+    assert report.model is None
+    text = render_feedback(report)
+    assert "could not be reached" not in text
+    assert "standard guidance" not in text
+
+
 def test_a_failing_model_degrades_and_says_so(config):
     def explode(prompt, system):
         raise TimeoutError("gateway timeout")

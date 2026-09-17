@@ -84,7 +84,7 @@ No gate compares its own `attempt` against `max_attempts`.
 ## 5. Build conventions
 
 - Tests run with the repo venv: `.venv/bin/python -m pytest`.
-  All of them, every time. 425 pass today.
+  All of them, every time. 624 pass today.
 - Bug fixes start with a failing test that reproduces the bug.
 - Cache and build output live under `.cache/`. Nothing else belongs in the repo root.
 - Do not commit scratch notes, TODO dumps, or generated summary docs unless asked.
@@ -99,8 +99,10 @@ No gate compares its own `attempt` against `max_attempts`.
   The Gate 1 string appears in four files inside the signed report package, including captured run logs.
   Rewriting them breaks the match between the code and the frozen evidence.
 - **`gates/retrieval.py` is not a paper registry.**
-  Despite the name it is BM25 over the log-line exemplar bank in `gates/exemplars.py`.
-  The registry of papers the scaffold actually fetched does not exist yet, and both Gate 2 tier B and Gate 3 citation binding need it.
+ Despite the name it is BM25 over the log-line exemplar bank in `gates/exemplars.py`.
+ The registry of papers the scaffold fetched now exists in half: `retrieved_arxiv_ids()` in the adapter reads the host's `lit_review` and per-section search results, which is enough for `source.cited_papers_in_registry`.
+ What does not exist is a corpus of the papers themselves. `PaperRecord` in `gates/schema.py` is its shape, and `source.identifiers_resolve` fills one record at a time through an injected resolver rather than keeping a store.
+ Gate 2 tier B literature work still needs the corpus.
 
 ## 7. Session workflow and progress tracking
 
