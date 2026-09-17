@@ -407,6 +407,78 @@ def test_the_reference_host_declares_its_writers_own_sections(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# style.no_orphan_references
+# --------------------------------------------------------------------------- #
+
+
+def test_a_reference_to_a_label_nobody_defined_fails(tmp_path):
+    """A dangling \\ref renders as "??" in the PDF, so a reader sees it."""
+    paper = RESULTS_ONLY + "Accuracy is shown in Figure \\ref{fig:acc}.\n"
+    report = run_gate3(paper, registry(RECORDED), config(tmp_path))
+    orphans = check(report, "style.no_orphan_references")
+    assert not orphans.passed
+    assert orphans.evidence["orphans"] == ["fig:acc"]
+    assert report.verdict is Verdict.FAIL
+
+
+def test_a_manuscript_that_cross_references_nothing_emits_no_reference_check(tmp_path):
+    """D33: emitted only when the manuscript cross-references at all."""
+    report = run_gate3(TOKENISED, registry(RECORDED), config(tmp_path))
+    assert check(report, "style.no_orphan_references") is None
+
+
+def test_a_reference_with_a_matching_label_passes(tmp_path):
+    paper = (
+        RESULTS_ONLY
+        + "Accuracy is shown in Figure \\ref{fig:acc}.\n"
+        + "\\begin{figure}\\label{fig:acc}\\end{figure}\n"
+    )
+    assert check(
+        run_gate3(paper, registry(RECORDED), config(tmp_path)),
+        "style.no_orphan_references",
+    ).passed
+
+
+def test_a_label_nothing_references_is_not_an_orphan_reference(tmp_path):
+    """An unreferenced float is style.floats_referenced's, at WARN. A label on a
+    section nobody points at is nobody's. Neither is a dangling reference."""
+    paper = RESULTS_ONLY + "\\begin{figure}\\label{fig:acc}\\end{figure}\n"
+    orphans = check(
+        run_gate3(paper, registry(RECORDED), config(tmp_path)),
+        "style.no_orphan_references",
+    )
+    assert orphans.passed
+    assert "no cross-reference to resolve" in orphans.message
+
+
+def test_a_cleveref_list_is_split_into_its_targets(tmp_path):
+    """\\cref{a,b} is two references. Reading it as one target named "a,b"
+    would report an orphan that does not exist and miss the one that does."""
+    paper = (
+        RESULTS_ONLY
+        + "See \\cref{fig:acc,fig:loss}.\n"
+        + "\\begin{figure}\\label{fig:acc}\\end{figure}\n"
+    )
+    orphans = check(
+        run_gate3(paper, registry(RECORDED), config(tmp_path)),
+        "style.no_orphan_references",
+    )
+    assert orphans.evidence["orphans"] == ["fig:loss"]
+
+
+def test_the_writer_is_told_which_reference_has_no_label(tmp_path):
+    paper = (
+        RESULTS_ONLY
+        + "Accuracy is in Figure \\ref{fig:acc}.\n"
+        + "\\begin{table}\\label{tab:main}\\end{table}\n"
+    )
+    text = render_feedback(run_gate3(paper, registry(RECORDED), config(tmp_path)))
+    assert "[style.no_orphan_references]" in text
+    assert "no label: fig:acc" in text
+    assert "defined:  tab:main" in text
+
+
+# --------------------------------------------------------------------------- #
 # report.limitations_declared
 # --------------------------------------------------------------------------- #
 
@@ -676,6 +748,10 @@ def test_every_check_gate3_emits_can_be_rendered_and_has_a_fix(tmp_path):
         "against \\result{exp1.invented}.\n\\includegraphics{absent.png}\n"
         "\\section{Further Results}\nSGC is fast.\n"
         "\\section{Related Work}\nAs in (arXiv 2501.00001v1).\n"
+        # Last, and outside the findings sections: the claim scan numbers the
+        # rows it hands the model, so a line added above "SGC is fast" would
+        # shift the row this fixture's scripted model quotes.
+        "See Figure \\ref{fig:absent}.\n"
     )
     self_rendered, _ = render_result_tokens(paper, citable_values(reg))
     tampered = self_rendered.replace("0.97", "0.98")

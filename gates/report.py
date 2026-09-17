@@ -384,6 +384,14 @@ def _evidence_sections(check: CheckResult) -> list[str]:
     return out
 
 
+def _evidence_orphan_refs(check: CheckResult) -> list[str]:
+    # The defined line is uncapped: it is the list the writer picks a target from.
+    out = [f"  no label: {name}" for name in check.evidence.get("orphans", [])]
+    if check.evidence.get("labels"):
+        out.append("  defined:  " + ", ".join(check.evidence["labels"]))
+    return out
+
+
 def _evidence_unbound_sections(check: CheckResult) -> list[str]:
     out = [f"  {name}: no \\result{{}} token" for name in check.evidence.get("unbound", [])]
     if check.evidence.get("recorded"):
@@ -440,6 +448,7 @@ _EVIDENCE_RENDERERS = {
     "report.model_unbound_claims": _evidence_claim_findings,
     "source.cited_papers_in_registry": _evidence_citations,
     "style.sections_present": _evidence_sections,
+    "style.no_orphan_references": _evidence_orphan_refs,
     "style.claim_sections_bound": _evidence_unbound_sections,
 }
 
@@ -565,6 +574,12 @@ _FIXES = {
         "A section this venue requires is missing. Write it, using the name "
         "listed above as its heading. If the material is already there under "
         "another heading, rename that heading rather than repeating the text."
+    ),
+    "style.no_orphan_references": (
+        "A cross-reference names a label the manuscript never defines, so it "
+        "renders as \"??\" for the reader. Add \\label{<name>} to the figure, "
+        "table or section being referenced, using one of the defined labels "
+        "above if the target already exists, or drop the reference."
     ),
     "style.claim_sections_bound": (
         "A results section cites no measured value. State its findings with "

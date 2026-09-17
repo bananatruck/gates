@@ -56,6 +56,12 @@ WITH_LIMITATIONS = CLEAN + "\n\\section{Discussion}\n\\limitations{}\n"
 #: The clean manuscript plus the Discussion a host declaring one requires.
 WITH_DISCUSSION = CLEAN + "\n\\section{Discussion}\nThe label budget matters less than expected.\n"
 
+#: A figure reference with no \label to resolve against, and the fix. The
+#: reference sits on its own line because prose.SKIP_LINE drops any line
+#: holding \ref, and the accuracy above it must stay visible to the scanner.
+DANGLING_REF = CLEAN + "\nAccuracy is plotted in Figure \\ref{fig:acc}.\n"
+LABELLED_REF = DANGLING_REF + "\\begin{figure}\\label{fig:acc}\\end{figure}\n"
+
 #: A related-work line citing a paper no search returned, and one citing a
 #: paper the run did retrieve.
 FABRICATED = CLEAN + "\n\\section{Related Work}\nWe follow (arXiv 2501.00001v1).\n"
@@ -205,6 +211,22 @@ MISSING_SECTION = Scenario(
     sections=("introduction", "results", "discussion"),
 )
 
+ORPHAN_REFERENCE = Scenario(
+    name="orphan-reference",
+    summary="A figure reference with no label is rejected until the label exists.",
+    turns=(
+        Turn(
+            "references fig:acc, which has no label",
+            DANGLING_REF,
+            expect_fail=("style.no_orphan_references",),
+            expect_feedback=("no label: fig:acc",),
+        ),
+        Turn("figure labelled fig:acc", LABELLED_REF, expect_pass=True),
+    ),
+    expect_outcome="pass",
+    expect_turns=2,
+)
+
 BUDGET_EXHAUSTS = Scenario(
     name="budget-exhausts",
     summary="The writer types the accuracy on every turn. Raises; no manuscript.",
@@ -232,5 +254,6 @@ SCENARIOS: dict[str, Scenario] = {
         UNDECLARED_LIMITATION,
         FABRICATED_CITATION,
         MISSING_SECTION,
+        ORPHAN_REFERENCE,
     )
 }

@@ -23,6 +23,8 @@ each check runs when its input exists:
                                                    cites something
     style.sections_present                  FAIL   iff the host declares the
                                                    sections it requires
+    style.no_orphan_references              FAIL   iff the manuscript
+                                                   cross-references or labels
     style.claim_sections_bound              FAIL   iff the manuscript has a
                                                    results section
     report.model_unbound_claims             WARN   iff a model is set and
@@ -538,6 +540,64 @@ def _check_sections_present(source: str, declared: tuple[str, ...]) -> CheckResu
     )
 
 
+#: Cross-reference commands LaTeX resolves against a ``\label``, and the labels
+#: themselves. ``cleveref``'s ``\cref{a,b}`` holds a comma list, so targets are
+#: split: reading it as one target named "a,b" would invent an orphan and miss
+#: the real one.
+_REF = re.compile(r"\\(?:auto|c|C|eq|page)?ref\{([^}]+)\}")
+_LABEL = re.compile(r"\\label\{([^}]+)\}")
+
+
+def _check_no_orphan_references(source: str) -> CheckResult | None:
+    """Every cross-reference resolves to a label the manuscript defines.
+
+    D33, and FAIL because a dangling ``\\ref`` renders as "??" in the PDF: a
+    reader sees it, so it is a defect rather than a preference. An unreferenced
+    label is not judged here. A float nobody points at is
+    ``style.floats_referenced``'s, at WARN, and a label on a section nobody
+    points at is nobody's.
+
+    Returns ``None`` when the manuscript neither references nor labels anything.
+    """
+    labels = {m.group(1).strip() for m in _LABEL.finditer(source)}
+    referenced = {
+        target.strip()
+        for m in _REF.finditer(source)
+        for target in m.group(1).split(",")
+        if target.strip()
+    }
+    if not referenced and not labels:
+        return None
+    orphans = sorted(referenced - labels)
+    if orphans:
+        message = (
+            f"{len(orphans)} cross-reference(s) name no label in the "
+            f"manuscript: {', '.join(orphans)}"
+        )
+    elif not referenced:
+        message = (
+            f"{len(labels)} label(s) defined and no cross-reference to resolve"
+        )
+    else:
+        message = f"{len(referenced)} cross-reference(s) resolve to a label"
+    return CheckResult(
+        id="style.no_orphan_references",
+        passed=not orphans,
+        severity=Severity.FAIL,
+        message=message,
+        evidence={
+            "orphans": orphans,
+            "referenced": sorted(referenced),
+            "labels": sorted(labels),
+            "discrepancies": [
+                f"the manuscript references {name!r} and defines no such label, "
+                f"so it renders as \"??\""
+                for name in orphans
+            ],
+        },
+    )
+
+
 def _check_claim_sections_bound(
     source: str, values: dict[str, Any]
 ) -> CheckResult | None:
@@ -636,6 +696,7 @@ def run_gate3(
         _check_limitations_declared(source, rendered, declared, origin),
         _check_cited_papers_in_registry(source, retrieved),
         _check_sections_present(source, config.sections),
+        _check_no_orphan_references(source),
         _check_claim_sections_bound(source, values),
         # WARN or INFO by construction, so decide() below is blind to it.
         llm_claims.build_check(llm_claims.scan_claims(model, _mask_tokens(source))),
