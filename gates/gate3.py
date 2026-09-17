@@ -681,9 +681,15 @@ def _check_identifiers_resolve(
     registry check.
 
     Returns ``None`` when the host injected no resolver, or the paper cites
-    nothing. A resolver that raises leaves an INFO row saying citations went
-    unchecked: an outage is not a defect in the manuscript, so it must not block
-    it, and it must not read as a pass either.
+    nothing.
+
+    **An outage cannot launder a fabrication.** Every identifier is asked about,
+    and a resolver failure on one does not discard what the others established.
+    Only when nothing was found unresolved *and* something could not be asked
+    does this degrade to an INFO row: an outage is not a defect in the
+    manuscript, so it must not block it, and it must not read as a pass either.
+    Returning early on the first failure would let a paper citing one fabricated
+    id and one unreachable id through, which is duty 1.
     """
     if lookup is None:
         return None
@@ -693,20 +699,15 @@ def _check_identifiers_resolve(
 
     resolved: list[dict[str, Any]] = []
     unresolved: list[str] = []
+    unchecked: list[str] = []
+    reasons: list[str] = []
     for identifier in cited:
         try:
             record = lookup(identifier)
-        except Exception as exc:  # noqa: BLE001 - any resolver failure degrades
-            return CheckResult(
-                id="source.identifiers_resolve",
-                passed=True,
-                severity=Severity.INFO,
-                message=(
-                    f"{len(cited)} cited identifier(s) could not be resolved: "
-                    f"the resolver failed ({type(exc).__name__})"
-                ),
-                evidence={"degraded": True, "cited": cited, "reason": str(exc)[:200]},
-            )
+        except Exception as exc:  # noqa: BLE001 - any resolver fault is "cannot ask"
+            unchecked.append(identifier)
+            reasons.append(f"{type(exc).__name__}: {exc}"[:120])
+            continue
         if record is None:
             unresolved.append(identifier)
         else:
@@ -717,24 +718,46 @@ def _check_identifiers_resolve(
                 "locator": record.locator,
             })
 
+    evidence: dict[str, Any] = {
+        "unresolved": unresolved,
+        "resolved": resolved,
+        "unchecked": unchecked,
+        "discrepancies": [
+            f"{name} is cited but no paper with that identifier exists"
+            for name in unresolved
+        ],
+    }
+    if not unresolved and unchecked:
+        evidence["degraded"] = True
+        evidence["reason"] = "; ".join(dict.fromkeys(reasons))
+        return CheckResult(
+            id="source.identifiers_resolve",
+            passed=True,
+            severity=Severity.INFO,
+            message=(
+                f"{len(unchecked)} of {len(cited)} cited identifier(s) could not "
+                f"be resolved: the resolver failed"
+            ),
+            evidence=evidence,
+        )
+
+    message = (
+        f"{len(unresolved)} of {len(cited)} cited identifier(s) name no "
+        f"existing paper: {', '.join(unresolved)}"
+        if unresolved
+        else f"all {len(cited)} cited identifier(s) resolve to a real paper"
+    )
+    if unchecked:
+        # Said on the failing row too, so the writer is not left thinking the
+        # named ids were the only problem.
+        message += f"; {len(unchecked)} could not be checked"
+        evidence["reason"] = "; ".join(dict.fromkeys(reasons))
     return CheckResult(
         id="source.identifiers_resolve",
         passed=not unresolved,
         severity=Severity.FAIL,
-        message=(
-            f"{len(unresolved)} of {len(cited)} cited identifier(s) name no "
-            f"existing paper: {', '.join(unresolved)}"
-            if unresolved
-            else f"all {len(cited)} cited identifier(s) resolve to a real paper"
-        ),
-        evidence={
-            "unresolved": unresolved,
-            "resolved": resolved,
-            "discrepancies": [
-                f"{name} is cited but no paper with that identifier exists"
-                for name in unresolved
-            ],
-        },
+        message=message,
+        evidence=evidence,
     )
 
 

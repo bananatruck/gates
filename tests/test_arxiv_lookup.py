@@ -138,6 +138,23 @@ def test_malformed_xml_raises_rather_than_resolving(tmp_path):
         lookup("2410.21676")
 
 
+def test_an_unreadable_cache_file_is_rebuilt_rather_than_raising(tmp_path):
+    """The cache is a convenience. A truncated write from an earlier run must not
+    take the resolver, and through it the whole writing phase, down with it."""
+    (tmp_path / "records.json").write_text("{not json", encoding="utf-8")
+    lookup = arxiv_lookup(cache_dir=str(tmp_path), fetch=fetcher(ATOM))
+    assert lookup("2410.21676").year == 2019
+
+
+def test_a_cache_row_missing_its_fields_is_refetched(tmp_path):
+    """A row this resolver cannot turn into a PaperRecord is a cache miss, not an
+    error. Raising here reaches the gate as "citations went unchecked", which
+    would hide a corrupt cache behind an outage message."""
+    (tmp_path / "records.json").write_text('{"2410.21676": {"nonsense": 1}}', encoding="utf-8")
+    lookup = arxiv_lookup(cache_dir=str(tmp_path), fetch=fetcher(ATOM))
+    assert lookup("2410.21676").title.startswith("Simplifying")
+
+
 def test_the_cache_file_is_readable_by_a_human(tmp_path):
     """It is evidence. An operator has to be able to see what was resolved."""
     arxiv_lookup(cache_dir=str(tmp_path), fetch=fetcher(ATOM))("2410.21676")

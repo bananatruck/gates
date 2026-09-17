@@ -377,37 +377,53 @@ def arxiv_lookup(
     """
     path = Path(cache_dir) / "records.json"
     cache: dict[str, dict[str, Any] | None] = {}
-    if path.exists():
+    try:
         cache = json.loads(path.read_text(encoding="utf-8"))
-    last_request = [0.0]
+    except (OSError, ValueError):
+        # The cache is a convenience. A truncated write from an earlier run must
+        # not take the resolver down, and through it the whole writing phase.
+        cache = {}
+    last_request: list[float | None] = [None]
 
     def lookup(identifier: str) -> PaperRecord | None:
         key = _ARXIV_VERSION.sub("", identifier.strip())
         if key in cache:
             row = cache[key]
-            return None if row is None else PaperRecord(**_as_record(row))
+            if row is None:
+                return None
+            record = _as_record(row)
+            if record is not None:
+                return record
+            # A row this cannot read is a miss, not an error. Raising would
+            # reach Gate 3 as "citations went unchecked", which would hide a
+            # corrupt cache behind an outage message.
 
-        wait = _ARXIV_MIN_INTERVAL_S - (time.monotonic() - last_request[0])
-        if last_request[0] and wait > 0:
-            time.sleep(wait)
+        if last_request[0] is not None:
+            wait = _ARXIV_MIN_INTERVAL_S - (time.monotonic() - last_request[0])
+            if wait > 0:
+                time.sleep(wait)
         body = fetch(_ARXIV_API.format(key))
         last_request[0] = time.monotonic()
 
         entry = ElementTree.fromstring(body).find(f"{_ATOM}entry")
-        cache[key] = None if entry is None else _parse_entry(entry, body)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(cache, indent=2, sort_keys=True), encoding="utf-8")
+        cache[key] = None if entry is None else _parse_entry(entry, key, body)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(cache, indent=2, sort_keys=True), encoding="utf-8")
+        except OSError:
+            # An unwritable cache costs requests, not correctness.
+            pass
         row = cache[key]
-        return None if row is None else PaperRecord(**_as_record(row))
+        return None if row is None else _as_record(row)
 
     return lookup
 
 
-def _parse_entry(entry: Any, body: str) -> dict[str, Any]:
+def _parse_entry(entry: Any, key: str, body: str) -> dict[str, Any]:
     """One Atom entry as a cache row. Missing fields stay empty, never guessed."""
     published = (entry.findtext(f"{_ATOM}published") or "").strip()
     return {
-        "identifier": "",  # filled from the key on read, so the cache stays keyed once
+        "identifier": key,
         "title": " ".join((entry.findtext(f"{_ATOM}title") or "").split()),
         "authors": [
             " ".join((a.findtext(f"{_ATOM}name") or "").split())
@@ -421,11 +437,24 @@ def _parse_entry(entry: Any, body: str) -> dict[str, Any]:
     }
 
 
-def _as_record(row: dict[str, Any]) -> dict[str, Any]:
-    out = dict(row)
-    out["authors"] = tuple(out.get("authors") or ())
-    out["identifier"] = out.get("locator", "").rsplit("/", 1)[-1] or out["identifier"]
-    return out
+def _as_record(row: Any) -> PaperRecord | None:
+    """A cache row as a record, or ``None`` if the row cannot be read as one.
+
+    Returns rather than raises so a corrupt cache is a miss and gets refetched.
+    A raise here would surface in Gate 3 as an unreachable resolver, which would
+    report citations as unchecked when the network was fine.
+    """
+    if not isinstance(row, dict) or not isinstance(row.get("title"), str):
+        return None
+    year = row.get("year")
+    return PaperRecord(
+        identifier=str(row.get("identifier") or ""),
+        title=row["title"],
+        authors=tuple(row.get("authors") or ()),
+        year=year if isinstance(year, int) else None,
+        locator=str(row.get("locator") or ""),
+        content_hash=str(row.get("content_hash") or ""),
+    )
 
 
 #: The sections this host's paper writer is told to produce

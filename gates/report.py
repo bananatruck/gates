@@ -386,11 +386,12 @@ def _evidence_sections(check: CheckResult) -> list[str]:
 
 def _evidence_identifiers(check: CheckResult) -> list[str]:
     ev = check.evidence
-    if ev.get("degraded"):
-        # The reason matters more than the list: a reader has to know the
-        # citations went unchecked, and why.
-        return [f"  not checked: {ev.get('reason', 'the resolver failed')}"]
     out = [f"  does not resolve: {name}" for name in ev.get("unresolved", [])]
+    if ev.get("unchecked"):
+        # Shown whether or not the row failed: a writer told only about the
+        # named ids would think the rest were confirmed.
+        out.append("  not checked: " + ", ".join(ev["unchecked"]))
+        out.append(f"    {ev.get('reason', 'the resolver failed')}")
     for row in ev.get("resolved", [])[:_MAX_EVIDENCE_ROWS]:
         out.append(f"  resolves: {row['identifier']}  {row['title'][:48]}")
     return out

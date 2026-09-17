@@ -544,6 +544,29 @@ def test_a_lookup_that_cannot_reach_the_network_says_so(tmp_path):
     assert report.verdict is Verdict.PASS
 
 
+def test_a_fabricated_citation_still_fails_when_another_lookup_breaks(tmp_path):
+    """Duty 1. An outage must not launder a fabrication: once an identifier is
+    known to resolve to nothing, a later resolver failure cannot turn the whole
+    check into "could not check" and let the manuscript through."""
+
+    def lookup(identifier):
+        if identifier == "2501.00001":
+            return None
+        raise OSError("export.arxiv.org: connection refused")
+
+    paper = (
+        RESULTS_ONLY
+        + "We follow (arXiv 2501.00001v1) and (arXiv 2410.21676v4).\n"
+    )
+    report = run_gate3(paper, registry(RECORDED), config(tmp_path, lookup=lookup))
+    resolved = check(report, "source.identifiers_resolve")
+    assert resolved.severity is Severity.FAIL
+    assert resolved.evidence["unresolved"] == ["2501.00001"]
+    assert report.verdict is Verdict.FAIL
+    # And the manuscript is still told the rest went unchecked.
+    assert resolved.evidence["unchecked"] == ["2410.21676"]
+
+
 def test_the_lookup_is_asked_for_the_version_stripped_identifier(tmp_path):
     """D26 makes the version-stripped arXiv id canonical. Whether v4 exists is
     source.cited_papers_in_registry's question, against what the run read."""
