@@ -15,9 +15,9 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: feature/gate2-feedback-loop
-head: 4cf3d32
+head: 2d76579
 head_date: 2026-09-16
-tests_total: 571
+tests_total: 580
 tests_gate1: 98
 tests_gate2: 92
 tests_gate3: 75
@@ -120,7 +120,7 @@ Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adap
    5. ~~Declared-limitations check (D28)~~ done (D35).
    6. ~~Registry (D25, D26), `source.cited_papers_in_registry` + scenario 4~~ done. `PaperRecord` moved to step 9.
    7. ~~Remaining `style.*`~~ done (D27, D33, D40): `sections_present`, `no_orphan_references`, `floats_referenced`. `acronyms_defined` dropped.
-   8. G3-M4: measure scanner misses over the two archived manuscripts, report all three readout §6 classes, do not fix the scanner (D38, D39). Kesh reviews the labels before the figure is recorded (D37).
+   8. ~~G3-M4~~ measured (D48): 34 of 49 detected, 15 missed, 6 false positives, scanner unchanged (D38). **Blocked on Kesh's label review (D37)** before the figure reaches README or the paper.
    9. `PaperRecord` and `source.identifiers_resolve` via injected `lookup` (B2, D41). `citations_parse` and `metadata_agrees` have no input on Agent Laboratory: inline `(arXiv id)` citations, no bibliography.
    10. Docs: `PLAN.md` §5.1/§5.2 per D43, README Gate 3, `CLAUDE.md` §6 per D44.
    11. `mattpocock-skills:code-review` over `5ab0bf3..HEAD`. Merging to `main` needs Kesh's go-ahead.
@@ -180,6 +180,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | D43 | **`PLAN.md` comes down to what is built.** `report.bibliography_generated` and `report.citation_metadata_matches` leave §5.1, `report.citations_in_registry` is renamed to the as-built `source.cited_papers_in_registry`, and §5.2's citation row becomes detected-and-measured rather than "eliminated by construction". Rejected: building a registry-emitted bibliography to earn the construction claim, which would change how the host writes citations and cost the portability claim. Decided by Kesh. | pending - docs |
 | 09-16 | D44 | **`CLAUDE.md` §6 is narrowed, not deleted.** Step 6 built the retrieved-id half via `retrieved_arxiv_ids()`; `source.identifiers_resolve` still has no registry. Decided by Kesh. | pending - docs |
 | 09-16 | D45 | **F11's `SKILL.md` lands before F9.** If E1 installs G.A.T.E.S. through the skill, portability becomes evidence from the experiment instead of an artifact shipped beside it. Doing it after E1 leaves the paper's central claim the only one with no run behind it. Decided by Kesh. | pending - F11 |
+| 09-16 | D48 | **G3-M4's headline is the cause, not the rate.** 12 of 15 misses come from one rule: `SKIP_LINE` matches `\ref`, so a findings sentence that points at its own table or figure reports nothing. The readout found this class with a `\cite` probe and called it rare; on real manuscripts `\ref` is the common trigger, because that is how a findings sentence refers to a float. Two further findings: `duplicate_context` is a fourth class the readout did not reach (`context_of` uses `line.find`, so a value stated twice on one line is deduplicated to one), and it understates the literal count without letting a line through. The unreadable `\begin{abstract}` (D40) hides nothing on this corpus, because the ungated run recorded no metrics and its abstract states none; the readout must not imply otherwise. | `rig/gate3_scanner_miss.py`, `tests/test_gate3_m4.py` |
 | 09-16 | D47 | **A WARN-only check gets no rig scenario.** The rig proves a reject-fix-accept cycle closes, and a check that never rejects has no cycle. `style.floats_referenced` is covered by unit tests asserting the warning is emitted and the verdict stays PASS. Rejected: a scenario showing a non-blocking warning, which would test the loop's indifference to it rather than the loop. | `rig/gate3_scenarios.py`, nine scenarios |
 | 09-16 | D46 | **The `docs/gate3/` blobs stay in this branch's history.** `git add -A` committed them in `8ba2612` before `e34620c` untracked them, so 525 KB of PDF and PNG remain reachable. Purging them needs a force-push, which the working rules forbid, and rewriting published history to reclaim half a megabyte is not worth suspending that rule. Do not rebase them out. Decided by Kesh. | `.gitignore:15` |
 | 09-13 | D21 | **Gate 3's retrieval registry is Agent Laboratory's `lit_review`, `ADD_PAPER` entries only.** A paper read with `FULL_TEXT` but never added does not count as retrieved. Identifier is the host's `arxiv_id`. Decided by Kesh. | `retrieved_arxiv_ids` (amended by D25) |
@@ -236,6 +237,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `e34620c` | `docs/gate3/` untracked after `git add -A` swept it into `8ba2612`; `.gitignore` rule added so it cannot recur. See D46. 558 tests. |
 | 09-16 | `46c9d53` | Session log closed for `8ba2612` and `e34620c`; D46 recorded. 558 tests. |
 | 09-16 | `4cf3d32` | Gate 3 step 7b: `style.no_orphan_references` (D33), renderer and fix. A `\ref` with no `\label` fails; an unreferenced label does not, since a float nobody points at is `floats_referenced`'s. `\cref{a,b}` split into targets. Scenario 9 `orphan-reference`. D14 guard fixture trips it; verified biting. 565 tests. |
-| 09-16 | *this* | Gate 3 step 7c: `style.floats_referenced` (D33), WARN, renderer only - `_required_fixes` reads failures, so a WARN fix entry would be dead code, as with `report.model_unbound_claims`. Multi-line and starred environments matched; an unlabelled float is not counted. No rig scenario: a WARN check never rejects, so there is no cycle to close (D47). **Step 7 complete.** 571 tests. |
+| 09-16 | `2d76579` | Gate 3 step 7c: `style.floats_referenced` (D33), WARN, renderer only - `_required_fixes` reads failures, so a WARN fix entry would be dead code, as with `report.model_unbound_claims`. Multi-line and starred environments matched; an unlabelled float is not counted. No rig scenario: a WARN check never rejects, so there is no cycle to close (D47). **Step 7 complete.** 571 tests. |
+| 09-16 | *this* | Gate 3 step 8 (G3-M4): `rig/gate3_m4_labels.py` (hand labels, hash-pinned), `rig/gate3_scanner_miss.py`, `tests/test_gate3_m4.py` (9). **34 of 49 labelled claims detected, 15 missed (30.6%); 40 reported of which 6 are not claims.** 12 of 15 misses are one cause: `SKIP_LINE` matching `\ref` (D48). Scanner not changed (D38). Awaiting Kesh's label review before the figure is published (D37). 580 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.
