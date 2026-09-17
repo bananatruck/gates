@@ -22,7 +22,9 @@ from gates import (  # noqa: E402
     run_experiment,
     run_gate1,
 )
+from gates import gate1, runner  # noqa: E402
 from gates.log_checks import scan_streams  # noqa: E402
+from gates.schema import ExecutionRecord  # noqa: E402
 from gates.report import render_feedback, render_summary  # noqa: E402
 from gates.static_checks import (  # noqa: E402
     classify_record_calls,
@@ -85,7 +87,7 @@ visible = b'{sentinel}' in parent_env
 record_result('security.parent_proc_visible', visible)
 """
 record = run_experiment(source, {str(tmp_path)!r}, timeout_s=30)
-print(record.metrics['security.parent_proc_visible'].value)
+print(record.metrics['security.parent_proc_visible'].value, record.parent_guard)
 '''
     environment = os.environ.copy()
     environment["GATE_TEST_SECRET_INITIAL"] = sentinel
@@ -100,7 +102,61 @@ print(record.metrics['security.parent_proc_visible'].value)
     )
 
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "False"
+    visible, guard = result.stdout.split()
+    # Non-root CI must prove the guard holds. Under uid 0 the child keeps
+    # CAP_SYS_PTRACE and reads the parent anyway (B3); the record must say so.
+    if os.geteuid() != 0:
+        assert guard == "active"
+    assert visible == str(guard != "active")
+
+
+@pytest.mark.parametrize(
+    "guard, passed",
+    [("active", True), ("bypassable", False), ("failed", False), ("unsupported", False)],
+)
+def test_the_report_says_whether_the_parent_process_was_hidden(guard, passed):
+    """B3: an inert guard used to be neither detected nor reported."""
+    check = gate1._check_parent_guard(_record(parent_guard=guard))
+    assert check.id == "env.parent_proc_guard"
+    assert check.severity is Severity.INFO
+    assert check.passed is passed
+    assert check.evidence["state"] == guard
+
+
+def test_an_unmeasured_guard_emits_nothing():
+    """A record built by hand never measured the guard, so it gets no row."""
+    assert gate1._check_parent_guard(_record()) is None
+
+
+def test_a_real_run_reports_the_guard_it_ran_under(config):
+    """The row is information for whoever reads the report, not a verdict."""
+    source = (
+        "import random\nrandom.seed(0)\nrecord_metadata('seed', 0)\n"
+        "m = random.random()\nrecord_result('m', m)\n"
+    )
+    report = run_gate1(source, config())
+    rows = [c for c in report.checks if c.id == "env.parent_proc_guard"]
+    assert len(rows) == 1
+    assert rows[0].evidence["state"] == report.execution.parent_guard
+    assert report.passed
+
+
+def _record(**overrides):
+    fields = dict(
+        exit_code=0, timed_out=False, duration_s=0.0, stdout_path="",
+        stderr_path="", stdout_bytes=0, stderr_bytes=0,
+    )
+    return ExecutionRecord(**{**fields, **overrides})
+
+
+def test_a_ptrace_capable_child_is_reported_as_able_to_bypass(monkeypatch):
+    """Root's child gets the bounding set on exec; anyone else's keeps only ambient."""
+    status = "CapAmb:\t0000000000000000\nCapBnd:\t000001ffffffffff\n"
+    monkeypatch.setattr(runner, "_proc_status", lambda: status)
+    monkeypatch.setattr(runner.os, "geteuid", lambda: 0)
+    assert runner._child_holds_ptrace_capability()
+    monkeypatch.setattr(runner.os, "geteuid", lambda: 1000)
+    assert not runner._child_holds_ptrace_capability()
 
 
 # --------------------------------------------------------------------------- #
