@@ -25,6 +25,8 @@ each check runs when its input exists:
                                                    sections it requires
     style.no_orphan_references              FAIL   iff the manuscript
                                                    cross-references or labels
+    style.floats_referenced                 WARN   iff the manuscript labels a
+                                                   figure or table
     style.claim_sections_bound              FAIL   iff the manuscript has a
                                                    results section
     report.model_unbound_claims             WARN   iff a model is set and
@@ -598,6 +600,61 @@ def _check_no_orphan_references(source: str) -> CheckResult | None:
     )
 
 
+#: A float and the labels inside it. Non-greedy and DOTALL because the reference
+#: host writes multi-line environments, so the label rarely sits on the ``\begin``
+#: line. ``figure*`` and ``table*`` count: the star changes the column span, not
+#: whether a reader needs to be sent to it.
+_FLOAT = re.compile(
+    r"\\begin\{(figure|table)\*?\}(.*?)\\end\{\1\*?\}", re.DOTALL
+)
+
+
+def _check_floats_referenced(source: str) -> CheckResult | None:
+    """Every labelled figure and table is pointed at from the text.
+
+    D33, and WARN rather than FAIL: a float the prose never mentions is a
+    drafting slip, not an unverifiable claim, and costing the writer a turn for
+    it could cost the paper on the last attempt. A float with no label at all is
+    not counted, because there is no way to reference one and demanding a label
+    is a preference D27 refuses without a host saying so.
+
+    Returns ``None`` when the manuscript labels no float.
+    """
+    labelled: list[dict[str, str]] = []
+    for match in _FLOAT.finditer(source):
+        kind, body = match.group(1), match.group(2)
+        for label in _LABEL.finditer(body):
+            labelled.append({"label": label.group(1).strip(), "kind": kind})
+    if not labelled:
+        return None
+    referenced = {
+        target.strip()
+        for m in _REF.finditer(source)
+        for target in m.group(1).split(",")
+    }
+    unreferenced = [row for row in labelled if row["label"] not in referenced]
+    return CheckResult(
+        id="style.floats_referenced",
+        passed=not unreferenced,
+        severity=Severity.WARN,
+        message=(
+            f"{len(unreferenced)} of {len(labelled)} labelled float(s) are never "
+            f"referenced in the text, e.g. {unreferenced[0]['label']}"
+            if unreferenced
+            else f"all {len(labelled)} labelled float(s) referenced in the text"
+        ),
+        evidence={
+            "unreferenced": unreferenced,
+            "labelled": labelled,
+            "discrepancies": [
+                f"the {row['kind']} labelled {row['label']!r} is never "
+                f"referenced, so a reader is never sent to it"
+                for row in unreferenced
+            ],
+        },
+    )
+
+
 def _check_claim_sections_bound(
     source: str, values: dict[str, Any]
 ) -> CheckResult | None:
@@ -697,6 +754,8 @@ def run_gate3(
         _check_cited_papers_in_registry(source, retrieved),
         _check_sections_present(source, config.sections),
         _check_no_orphan_references(source),
+        # WARN by construction, so decide() below is blind to it.
+        _check_floats_referenced(source),
         _check_claim_sections_bound(source, values),
         # WARN or INFO by construction, so decide() below is blind to it.
         llm_claims.build_check(llm_claims.scan_claims(model, _mask_tokens(source))),

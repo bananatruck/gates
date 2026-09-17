@@ -392,6 +392,13 @@ def _evidence_orphan_refs(check: CheckResult) -> list[str]:
     return out
 
 
+def _evidence_floats(check: CheckResult) -> list[str]:
+    return [
+        f"  never referenced: {row['label']} ({row['kind']})"
+        for row in check.evidence.get("unreferenced", [])[:_MAX_EVIDENCE_ROWS]
+    ]
+
+
 def _evidence_unbound_sections(check: CheckResult) -> list[str]:
     out = [f"  {name}: no \\result{{}} token" for name in check.evidence.get("unbound", [])]
     if check.evidence.get("recorded"):
@@ -449,6 +456,7 @@ _EVIDENCE_RENDERERS = {
     "source.cited_papers_in_registry": _evidence_citations,
     "style.sections_present": _evidence_sections,
     "style.no_orphan_references": _evidence_orphan_refs,
+    "style.floats_referenced": _evidence_floats,
     "style.claim_sections_bound": _evidence_unbound_sections,
 }
 

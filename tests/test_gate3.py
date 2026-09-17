@@ -479,6 +479,74 @@ def test_the_writer_is_told_which_reference_has_no_label(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# style.floats_referenced
+# --------------------------------------------------------------------------- #
+
+
+def test_a_labelled_figure_the_text_never_points_at_warns(tmp_path):
+    """WARN, not FAIL (D33). A figure the prose never mentions is a drafting
+    slip, and costing the writer a turn for it could cost the paper."""
+    paper = RESULTS_ONLY + "\\begin{figure}\\label{fig:acc}\\end{figure}\n"
+    report = run_gate3(paper, registry(RECORDED), config(tmp_path))
+    floats = check(report, "style.floats_referenced")
+    assert floats.severity is Severity.WARN
+    assert not floats.passed
+    assert floats.evidence["unreferenced"] == [{"label": "fig:acc", "kind": "figure"}]
+    # A warning never moves the verdict.
+    assert report.verdict is Verdict.PASS
+
+
+def test_a_labelled_table_is_held_to_the_same_rule(tmp_path):
+    paper = RESULTS_ONLY + "\\begin{table}\\label{tab:main}\\end{table}\n"
+    floats = check(
+        run_gate3(paper, registry(RECORDED), config(tmp_path)),
+        "style.floats_referenced",
+    )
+    assert floats.evidence["unreferenced"] == [{"label": "tab:main", "kind": "table"}]
+
+
+def test_a_referenced_float_does_not_warn(tmp_path):
+    paper = (
+        RESULTS_ONLY
+        + "\\begin{figure}\\label{fig:acc}\\end{figure}\n"
+        + "Accuracy is plotted in Figure \\ref{fig:acc}.\n"
+    )
+    assert check(
+        run_gate3(paper, registry(RECORDED), config(tmp_path)),
+        "style.floats_referenced",
+    ).passed
+
+
+def test_a_manuscript_with_no_labelled_float_emits_no_float_check(tmp_path):
+    """A label on a section is not a float, so there is nothing to reference."""
+    paper = RESULTS_ONLY + "\\label{sec:results}\n"
+    report = run_gate3(paper, registry(RECORDED), config(tmp_path))
+    assert check(report, "style.floats_referenced") is None
+
+
+def test_a_float_labelled_on_a_later_line_still_counts(tmp_path):
+    """The reference host writes multi-line environments, so the label rarely
+    sits on the \\begin line."""
+    paper = (
+        RESULTS_ONLY
+        + "\\begin{figure}\n\\includegraphics{acc.png}\n"
+        + "\\caption{Accuracy}\n\\label{fig:acc}\n\\end{figure}\n"
+    )
+    floats = check(
+        run_gate3(paper, registry(RECORDED), config(tmp_path)),
+        "style.floats_referenced",
+    )
+    assert floats.evidence["unreferenced"] == [{"label": "fig:acc", "kind": "figure"}]
+
+
+def test_the_writer_is_told_which_float_goes_unmentioned(tmp_path):
+    paper = RESULTS_ONLY + "\\begin{figure}\\label{fig:acc}\\end{figure}\n"
+    text = render_feedback(run_gate3(paper, registry(RECORDED), config(tmp_path)))
+    assert "[style.floats_referenced]" in text
+    assert "never referenced: fig:acc (figure)" in text
+
+
+# --------------------------------------------------------------------------- #
 # report.limitations_declared
 # --------------------------------------------------------------------------- #
 
@@ -752,6 +820,7 @@ def test_every_check_gate3_emits_can_be_rendered_and_has_a_fix(tmp_path):
         # rows it hands the model, so a line added above "SGC is fast" would
         # shift the row this fixture's scripted model quotes.
         "See Figure \\ref{fig:absent}.\n"
+        "\\begin{figure}\\label{fig:unmentioned}\\end{figure}\n"
     )
     self_rendered, _ = render_result_tokens(paper, citable_values(reg))
     tampered = self_rendered.replace("0.97", "0.98")

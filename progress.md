@@ -15,12 +15,12 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: feature/gate2-feedback-loop
-head: 46c9d53
+head: 4cf3d32
 head_date: 2026-09-16
-tests_total: 565
+tests_total: 571
 tests_gate1: 98
 tests_gate2: 92
-tests_gate3: 69
+tests_gate3: 75
 tests_llm_scan: 21
 tests_llm_layer: 14
 <!-- STATE:END -->
@@ -73,7 +73,7 @@ forever, but an unverifiable manuscript must not ship.
 | Gate 2 tier comparison | complete. A vs A+B vs A+B+C | `rig/gate2_tier_comparison.py` | 8 |
 | Gate 3 — `report.*` checks | numeric + figure binding; `limitations_declared` (step 5, D35); D14 guard | `run_gate3()` | 30 of 57 |
 | Gate 3 — `source.*` | `cited_papers_in_registry` done (step 6: D21, D25, D26, D32), with `retrieved_arxiv_ids()` reading the host's formats. `identifiers_resolve` is step 9. `PaperRecord` moved to step 9, the first step that needs more than an id. | `run_gate3(retrieved=)`, `report_loop(retrieved=)` | 11 of 57 |
-| Gate 3 — `style.*` | `claim_sections_bound` done (step 4, D34); `sections_present` done (step 7a, D27/D40), host list in `WRITER_SECTIONS`; `no_orphan_references` done (step 7b, D33); `floats_referenced` remains (D33) | `run_gate3()` | 19 of 69 |
+| Gate 3 — `style.*` | **complete.** `claim_sections_bound` (step 4, D34); `sections_present` (7a, D27/D40), host list in `WRITER_SECTIONS`; `no_orphan_references` (7b, D33); `floats_referenced` (7c, D33, WARN). `acronyms_defined` dropped by D33 | `run_gate3()` | 25 of 75 |
 | Gate 3 loop | **complete for the existing checks, model-free.** Adapter half (step 2): `make_report_context()`, `gated_report()`, `report_loop()`, `ReportOutcome`; a spent budget raises; a Gate 1-rejected registry is refused before `write` runs. Rig half (step 3): 7 scenarios, all six plan scenarios; the registry and declared limitations come from a real Gate 2 run (`clean` unless a scenario names another); a raised loop is rebuilt from `context.history`. | `gates/adapters/agentlab.py` `report_loop()`, driven by `rig/gate3_loop.py` | 9 of 57 in `tests/test_gate3.py`, 17 in `tests/test_gate3_loop.py` |
 | LLM scan layer | complete, Gate 1 only | `gates/llm_scan.py` | 21 |
 | Gate 3 model layer (D31) | complete, model-free by default. Claim scan (`report.model_unbound_claims`, WARN, quote-grounded, INFO when it cannot run); REQUIRED FIXES via `generate_fixes(system=, facts=, grounding=)` with `check_manuscript_grounding`; `llm_report.attach_fixes` shared with Gate 1; `make_report_context(consult_model=)`; `REPORT_GATE_INSTRUCTIONS` | `gates/llm_claims.py`, `gates/gate3.py` | 23, in `tests/test_gate3_model.py` |
@@ -119,7 +119,7 @@ Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adap
    4. ~~`style.claim_sections_bound` + scenario 5~~ done. Was: plus the "tiers" wording in the `gates/gate3.py` docstring.
    5. ~~Declared-limitations check (D28)~~ done (D35).
    6. ~~Registry (D25, D26), `source.cited_papers_in_registry` + scenario 4~~ done. `PaperRecord` moved to step 9.
-   7. Remaining `style.*`, host-declared inputs only (D27, D33, D40). One check per commit: ~~`sections_present`~~, ~~`no_orphan_references`~~ done; `floats_referenced` next.
+   7. ~~Remaining `style.*`~~ done (D27, D33, D40): `sections_present`, `no_orphan_references`, `floats_referenced`. `acronyms_defined` dropped.
    8. G3-M4: measure scanner misses over the two archived manuscripts, report all three readout §6 classes, do not fix the scanner (D38, D39). Kesh reviews the labels before the figure is recorded (D37).
    9. `PaperRecord` and `source.identifiers_resolve` via injected `lookup` (B2, D41). `citations_parse` and `metadata_agrees` have no input on Agent Laboratory: inline `(arXiv id)` citations, no bibliography.
    10. Docs: `PLAN.md` §5.1/§5.2 per D43, README Gate 3, `CLAUDE.md` §6 per D44.
@@ -180,6 +180,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | D43 | **`PLAN.md` comes down to what is built.** `report.bibliography_generated` and `report.citation_metadata_matches` leave §5.1, `report.citations_in_registry` is renamed to the as-built `source.cited_papers_in_registry`, and §5.2's citation row becomes detected-and-measured rather than "eliminated by construction". Rejected: building a registry-emitted bibliography to earn the construction claim, which would change how the host writes citations and cost the portability claim. Decided by Kesh. | pending - docs |
 | 09-16 | D44 | **`CLAUDE.md` §6 is narrowed, not deleted.** Step 6 built the retrieved-id half via `retrieved_arxiv_ids()`; `source.identifiers_resolve` still has no registry. Decided by Kesh. | pending - docs |
 | 09-16 | D45 | **F11's `SKILL.md` lands before F9.** If E1 installs G.A.T.E.S. through the skill, portability becomes evidence from the experiment instead of an artifact shipped beside it. Doing it after E1 leaves the paper's central claim the only one with no run behind it. Decided by Kesh. | pending - F11 |
+| 09-16 | D47 | **A WARN-only check gets no rig scenario.** The rig proves a reject-fix-accept cycle closes, and a check that never rejects has no cycle. `style.floats_referenced` is covered by unit tests asserting the warning is emitted and the verdict stays PASS. Rejected: a scenario showing a non-blocking warning, which would test the loop's indifference to it rather than the loop. | `rig/gate3_scenarios.py`, nine scenarios |
 | 09-16 | D46 | **The `docs/gate3/` blobs stay in this branch's history.** `git add -A` committed them in `8ba2612` before `e34620c` untracked them, so 525 KB of PDF and PNG remain reachable. Purging them needs a force-push, which the working rules forbid, and rewriting published history to reclaim half a megabyte is not worth suspending that rule. Do not rebase them out. Decided by Kesh. | `.gitignore:15` |
 | 09-13 | D21 | **Gate 3's retrieval registry is Agent Laboratory's `lit_review`, `ADD_PAPER` entries only.** A paper read with `FULL_TEXT` but never added does not count as retrieved. Identifier is the host's `arxiv_id`. Decided by Kesh. | `retrieved_arxiv_ids` (amended by D25) |
 
@@ -234,6 +235,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `8ba2612` | Gate 3 step 7a: `style.sections_present` (D27, D40), renderer and fix; `Gate3Config.sections`; `WRITER_SECTIONS` in the adapter, the host's `papersolver.py:352` list minus `scaffold`, and `make_report_context`'s default. `\begin{abstract}` counts, `prose._heading` untouched. Scenario 8 `missing-section`; `Scenario.sections`. Six fixtures opt out with `sections=()` because they are two-section manuscripts testing other checks. 558 tests. |
 | 09-16 | `e34620c` | `docs/gate3/` untracked after `git add -A` swept it into `8ba2612`; `.gitignore` rule added so it cannot recur. See D46. 558 tests. |
 | 09-16 | `46c9d53` | Session log closed for `8ba2612` and `e34620c`; D46 recorded. 558 tests. |
-| 09-16 | *this* | Gate 3 step 7b: `style.no_orphan_references` (D33), renderer and fix. A `\ref` with no `\label` fails; an unreferenced label does not, since a float nobody points at is `floats_referenced`'s. `\cref{a,b}` split into targets. Scenario 9 `orphan-reference`. D14 guard fixture trips it; verified biting. 565 tests. |
+| 09-16 | `4cf3d32` | Gate 3 step 7b: `style.no_orphan_references` (D33), renderer and fix. A `\ref` with no `\label` fails; an unreferenced label does not, since a float nobody points at is `floats_referenced`'s. `\cref{a,b}` split into targets. Scenario 9 `orphan-reference`. D14 guard fixture trips it; verified biting. 565 tests. |
+| 09-16 | *this* | Gate 3 step 7c: `style.floats_referenced` (D33), WARN, renderer only - `_required_fixes` reads failures, so a WARN fix entry would be dead code, as with `report.model_unbound_claims`. Multi-line and starred environments matched; an unlabelled float is not counted. No rig scenario: a WARN check never rejects, so there is no cycle to close (D47). **Step 7 complete.** 571 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.
