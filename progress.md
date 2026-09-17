@@ -15,9 +15,9 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: feature/gate2-feedback-loop
-head: 46ddc85
+head: 82c06bb
 head_date: 2026-09-16
-tests_total: 603
+tests_total: 624
 tests_gate1: 98
 tests_gate2: 92
 tests_gate3: 84
@@ -99,7 +99,7 @@ Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adap
 | F5 | Setup budgets reach nothing. **Host side only**: both context builders take `max_attempts` and their defaults match `setup.defaults()`. | `gates/setup.py:121` prints JSON only | host passes the chosen budget (out of scope 09-14) |
 | F8 | M6 wallclock overhead is not measured. | spec §4 M6 | paired timing, with F9 |
 | F9 | E1 not run: MLR-Bench's 10 tasks, gated vs ungated, paired. | spec §5 E1 | F1, F2, model spend |
-| F11 | No `SKILL.md` install path, for any gate. | `CLAUDE.md` §3; no `SKILL.md` in the tree | after F1 fixes the call sites |
+| ~~F11~~ | **Closed 09-16.** `SKILL.md` + `tests/test_install_skill.py`. | — | — |
 
 ## blockers
 
@@ -128,7 +128,7 @@ Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adap
    Approved 09-16 (second round, D37-D45): all recommendations accepted as written.
 2. Connect and live-test: host call sites in `AgentLaboratory-Gemini` on a branch, one gated run (D42, D45).
 3. `env.parent_proc_guard` INFO check (B3).
-4. F11 before F9, so E1 installs through the skill (D45). Then F9 + F8. F2 and F5 wait on a host call site.
+4. ~~F11~~ done (D45). F9 + F8 next, with model spend. F2 and F5 wait on a host call site.
 
 ## decision log
 
@@ -179,7 +179,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | D42 | **Host edits are back in scope, on a branch in `AgentLaboratory-Gemini`, with one gated run budgeted.** Amends the 09-14 scope note. D25's real fabricated-citation number needs a run that logs per-section search results, and Gate 3 has never executed inside the scaffold it claims to be portable to. Decided by Kesh. | pending - connect |
 | 09-16 | D43 | **`PLAN.md` comes down to what is built.** `report.bibliography_generated` and `report.citation_metadata_matches` leave §5.1, `report.citations_in_registry` is renamed to the as-built `source.cited_papers_in_registry`, and §5.2's citation row becomes detected-and-measured rather than "eliminated by construction". Rejected: building a registry-emitted bibliography to earn the construction claim, which would change how the host writes citations and cost the portability claim. Decided by Kesh. | `docs/PLAN.md` §5.1, §5.2 |
 | 09-16 | D44 | **`CLAUDE.md` §6 is narrowed, not deleted.** Step 6 built the retrieved-id half via `retrieved_arxiv_ids()`; `source.identifiers_resolve` still has no registry. Decided by Kesh. | `CLAUDE.md` §6 |
-| 09-16 | D45 | **F11's `SKILL.md` lands before F9.** If E1 installs G.A.T.E.S. through the skill, portability becomes evidence from the experiment instead of an artifact shipped beside it. Doing it after E1 leaves the paper's central claim the only one with no run behind it. Decided by Kesh. | pending - F11 |
+| 09-16 | D45 | **F11's `SKILL.md` lands before F9.** If E1 installs G.A.T.E.S. through the skill, portability becomes evidence from the experiment instead of an artifact shipped beside it. Doing it after E1 leaves the paper's central claim the only one with no run behind it. Decided by Kesh. | `SKILL.md`, `tests/test_install_skill.py` |
 | 09-16 | D50 | **A known fabrication outranks an outage.** `source.identifiers_resolve` asks about every cited id and never returns early on a resolver failure. It degrades to INFO only when nothing was found unresolved; if one id resolves to nothing and another cannot be reached, the check FAILs on the first and reports the second as unchecked. Found by review: the early return let such a manuscript pass, which is duty 1. Consequence for D49: a corrupt cache must not raise either, or it arrives as an outage while the network is fine. | `test_a_fabricated_citation_still_fails_when_another_lookup_breaks`, `test_a_cache_row_missing_its_fields_is_refetched` |
 | 09-16 | D49 | **A resolver is asked for the version-stripped id, and a failure raises rather than returning `None`.** Version-stripped per D26: whether v4 specifically exists is what the run read, which `source.cited_papers_in_registry` already judges. The raise-vs-`None` split is what the design rests on: `None` means arXiv has no such paper, so the citation fails; a raise means the question could not be asked, so Gate 3 emits an INFO row saying citations went unchecked and the verdict is untouched. Collapsing them would make an outage reject an honest manuscript. A resolved or absent answer is cached; a failure is not, since a cached outage would keep citations unchecked after the network returned. | `test_a_lookup_that_cannot_reach_the_network_says_so`, `test_a_failed_fetch_is_not_cached` |
 | 09-16 | D48 | **G3-M4's headline is the cause, not the rate.** 12 of 15 misses come from one rule: `SKIP_LINE` matches `\ref`, so a findings sentence that points at its own table or figure reports nothing. The readout found this class with a `\cite` probe and called it rare; on real manuscripts `\ref` is the common trigger, because that is how a findings sentence refers to a float. Two further findings: `duplicate_context` is a fourth class the readout did not reach (`context_of` uses `line.find`, so a value stated twice on one line is deduplicated to one), and it understates the literal count without letting a line through. The unreadable `\begin{abstract}` (D40) hides nothing on this corpus, because the ungated run recorded no metrics and its abstract states none; the readout must not imply otherwise. | `rig/gate3_scanner_miss.py`, `tests/test_gate3_m4.py` |
@@ -244,6 +244,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `426f152` | Gate 3 step 9: `PaperRecord` in `gates/schema.py`; `Gate3Config.lookup`; `source.identifiers_resolve` (FAIL, INFO when the resolver raises), renderer and fix; `arxiv_lookup()` in the adapter (D41) with a `.cache/` disk cache, 3 s spacing, version-stripped ids (D49); `make_report_context(lookup=)`; scenario 10 `unresolvable-citation` with a declarative fake. Live arXiv test passes, skipped unless `GATES_LIVE_ARXIV=1`. `citations_parse` and `metadata_agrees` not built: no input on this host. **Gate 3's check list is complete.** 600 tests. |
 | 09-16 | `513b082` | Gate 3 step 10 (docs): `PLAN.md` §5.1/§5.2 brought down to as-built (D43) - the two unbuildable citation checks removed with the reason, §5.2's citation row is detected-and-measured, and the numeric row now says construction is a property of the pipeline with G3-M4 beside it. G3-M4's figure deliberately not recorded there, pending D37. `CLAUDE.md` §6 narrowed (D44). README Gate 3 row and description. Enforcement cells filled for D27, D33, D38-D41, D43, D44. 600 tests. |
 | 09-16 | `46ddc85` | Gate 3 step 11: review of `5ab0bf3..HEAD` found two real bugs, both fixed red-test-first. (1) **Duty 1**: `_check_identifiers_resolve` returned on the first resolver exception, discarding identifiers already known unresolved, so a paper citing one fabricated and one unreachable id could PASS. Now every id is asked about and an outage degrades only when nothing was found unresolved (D50). (2) A corrupt cache row raised out of `arxiv_lookup` and reached the gate as an outage; `_as_record` returns `None` and the row is refetched, and an unreadable cache file no longer takes the resolver down. 603 tests. |
-| 09-16 | *this* | **D37 closed: Kesh reviewed and accepted the G3-M4 labels.** Figure published in `PLAN.md` §5.2 (full table, causes, and both scoping notes) and the README Gate 3 paragraph. 603 tests. |
+| 09-16 | `82c06bb` | **D37 closed: Kesh reviewed and accepted the G3-M4 labels.** Figure published in `PLAN.md` §5.2 (full table, causes, and both scoping notes) and the README Gate 3 paragraph. 603 tests. |
+| 09-16 | *this* | **F11 closed: `SKILL.md`**, the install path as a skill (`CLAUDE.md` §3, D45). Five steps: check the scaffold can be gated at all, write the adapter, place three call sites, budget in agent turns, prove it is wired. Carries the D42 connect spec with verified host line numbers (`running_experiments` 349, `make_context` 360, `gated_execute` 388, `report_writing` 279, `PaperSolver` 294, `best_report` 301) and states what this host cannot support. `tests/test_install_skill.py` (21) keeps it true: every entry point, file and number it names is checked, and the documented `write` recipe drives the real `report_loop` through a reject-fix-accept cycle against a fake solver of the host's shape. 624 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.
