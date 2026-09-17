@@ -345,6 +345,46 @@ def test_the_outcome_names_the_registry_the_writer_cites(tmp_path):
     assert nothing.registry is None
 
 
+def test_the_outcome_names_the_run_it_reviewed(tmp_path):
+    """The writer must describe the run whose registry it cites. A host that
+    keeps the code its phase started with pairs revised numbers with the old
+    experiment, and cannot tell which execution to keep without re-deriving the
+    loop's order."""
+    from gates.adapters.agentlab import (
+        gated_execute, make_context, make_review_context, review_loop,
+    )
+    from rig.gate2_scenarios import OUT_OF_RANGE, SPEEDUP
+
+    def review(root, revisions):
+        gate1 = make_context(research_dir=str(root))
+        first = gated_execute(OUT_OF_RANGE.turns[0].code(), gate1)
+        pending = iter(revisions)
+        outcome = review_loop(
+            make_review_context(research_dir=str(root), relations=(SPEEDUP,)),
+            lambda feedback: next(pending, None),
+            gate1=gate1,
+            first=first,
+        )
+        return first, outcome
+
+    first, revised = review(tmp_path / "revised", [OUT_OF_RANGE.turns[1].code()])
+    assert revised.outcome == "pass"
+    assert revised.run.code == OUT_OF_RANGE.turns[1].code()
+    assert revised.registry["run"]["run_id"] == revised.run.report.execution.run_id
+
+    # A revision Gate 1 rejected was never reviewed, so the cited run is still first.
+    first, kept = review(tmp_path / "kept", [_typed_speedup()])
+    assert kept.run is first
+    assert kept.registry["run"]["run_id"] == first.report.execution.run_id
+
+    nothing = review_loop(
+        make_review_context(research_dir=str(tmp_path)),
+        lambda feedback: None,
+        gate1=make_context(research_dir=str(tmp_path)),
+    )
+    assert nothing.run is None
+
+
 def test_a_proceeded_run_cites_the_registry_it_declared(played):
     registry = played["divergence-exhausts"].registry
     assert registry["values"]["config.lr"]["value"] == 0.01

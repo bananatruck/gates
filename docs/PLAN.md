@@ -299,6 +299,7 @@ Provenance (recorded, not gated):
 |---|---|---|
 | `output.untruncated` | stdout/stderr byte counts; asserts no truncation was applied | INFO |
 | `env.provenance` | Python version, platform, seed, device, key library versions, code SHA-256 | INFO |
+| `env.parent_proc_guard` | whether the experiment could read the gate's own process: `active`, or why not (`bypassable` under CAP_SYS_PTRACE, `failed`, `unsupported`) | INFO |
 
 ### 3.3 The results contract
 

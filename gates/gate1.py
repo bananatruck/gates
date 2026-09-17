@@ -190,6 +190,9 @@ def run_gate1(source: str, config: Gate1Config, attempt: int = 1) -> GateReport:
             ]
         )
     checks.append(_check_untruncated(execution))
+    guard = _check_parent_guard(execution)
+    if guard is not None:
+        checks.append(guard)
     checks.append(_record_environment(execution))
 
     report.checks = checks
@@ -874,6 +877,36 @@ def _check_untruncated(execution: ExecutionRecord) -> CheckResult:
             "stdout_path": execution.stdout_path,
             "stderr_path": execution.stderr_path,
         },
+    )
+
+
+_GUARD_GAPS = {
+    "bypassable": "the experiment ran with CAP_SYS_PTRACE (root), which ignores the non-dumpable flag",
+    "failed": "prctl refused to mark the parent non-dumpable",
+    "unsupported": "this platform has no non-dumpable flag; only environment scrubbing applied",
+}
+
+
+def _check_parent_guard(execution: ExecutionRecord) -> CheckResult | None:
+    """Whether the experiment could read this process's memory or environment (B3).
+
+    INFO, never a verdict: the code under test did nothing wrong, the host
+    running it did. The row exists so a report never implies an isolation it
+    did not have. A record nothing measured emits no row.
+    """
+    state = execution.parent_guard
+    if state is None:
+        return None
+    return CheckResult(
+        id="env.parent_proc_guard",
+        passed=state == "active",
+        severity=Severity.INFO,
+        message=(
+            "the experiment could not read the parent process"
+            if state == "active"
+            else f"the experiment could read the parent process: {_GUARD_GAPS.get(state, state)}"
+        ),
+        evidence={"state": state},
     )
 
 

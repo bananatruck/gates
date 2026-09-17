@@ -67,6 +67,7 @@ _SENSITIVE_ENV_NAMES = {
 
 _PR_GET_DUMPABLE = 3
 _PR_SET_DUMPABLE = 4
+_CAP_SYS_PTRACE = 19
 _DUMPABLE_LOCK = threading.Lock()
 _DUMPABLE_USERS = 0
 _DUMPABLE_ORIGINAL: int | None = None
@@ -137,7 +138,7 @@ def run_experiment(
     started = time.monotonic()
     # Writing to files rather than PIPE: an experiment that outproduces the pipe
     # buffer would otherwise deadlock, which is exactly what a long run does.
-    with _hide_parent_process_from_child():
+    with _hide_parent_process_from_child() as parent_guard:
         with open(stdout_path, "wb") as out, open(stderr_path, "wb") as err:
             popen_kwargs: dict[str, object] = {
                 "stdout": out,
@@ -176,6 +177,7 @@ def run_experiment(
         argv=list(argv),
         started_at=started_at,
         finished_at=_utc_now(),
+        parent_guard=parent_guard,
     )
 
     _load_results(results_path, record)
@@ -214,9 +216,14 @@ def _hide_parent_process_from_child():
 
     Other operating systems retain environment scrubbing but need a real
     sandbox or separate account for the equivalent parent-process boundary.
+
+    Yields whether the boundary holds, so the report can say so (B3): the flag
+    does nothing against a child holding CAP_SYS_PTRACE, which is every child of
+    an unconfined root parent.
     """
     global _DUMPABLE_USERS, _DUMPABLE_ORIGINAL
     joined = False
+    state = "unsupported"
     if sys.platform.startswith("linux"):
         with _DUMPABLE_LOCK:
             if _DUMPABLE_USERS == 0:
@@ -226,8 +233,14 @@ def _hide_parent_process_from_child():
             if _DUMPABLE_ORIGINAL is not None:
                 _DUMPABLE_USERS += 1
                 joined = True
+        if not joined:
+            state = "failed"
+        elif _child_holds_ptrace_capability():
+            state = "bypassable"
+        else:
+            state = "active"
     try:
-        yield
+        yield state
     finally:
         if joined:
             with _DUMPABLE_LOCK:
@@ -237,6 +250,29 @@ def _hide_parent_process_from_child():
                     _DUMPABLE_ORIGINAL = None
                     if original is not None:
                         _prctl(_PR_SET_DUMPABLE, original)
+
+
+def _child_holds_ptrace_capability() -> bool:
+    """Whether an experiment child would hold CAP_SYS_PTRACE after exec.
+
+    A root parent's child gets the bounding set; any other child keeps only the
+    ambient set. No ``/proc`` means the child cannot read ``/proc`` either.
+    """
+    # ponytail: ignores securebits, no_new_privs and file capabilities on the
+    # interpreter; read /proc/<child>/status after spawn if those ever matter.
+    wanted = "CapBnd" if os.geteuid() == 0 else "CapAmb"
+    for line in _proc_status().splitlines():
+        name, _, value = line.partition(":")
+        if name == wanted:
+            return bool(int(value, 16) >> _CAP_SYS_PTRACE & 1)
+    return False
+
+
+def _proc_status() -> str:
+    try:
+        return Path("/proc/self/status").read_text(encoding="utf-8")
+    except OSError:
+        return ""
 
 
 def _prctl(option: int, argument: int = 0) -> int:

@@ -13,3 +13,7 @@ gate_artifacts/
 # Gate 3 diagrams and their exports. Kept out of the repo by decision, so a
 # stray `git add -A` cannot pick them up again.
 docs/gate3/
+
+# A generated Sep 7 status bundle that 85af14c swept in. Kept on disk, no
+# longer tracked; the signed package beside it is the report of record.
+reports/status.zip

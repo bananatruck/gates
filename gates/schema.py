@@ -199,6 +199,11 @@ class ExecutionRecord:
     finished_at: str = ""
     #: sha256 of the source as read by the child process that ran it.
     code_sha256: str | None = None
+    #: Whether the child was kept out of the parent's memory and ``/proc``
+    #: environment: ``active``, ``bypassable`` (the child holds CAP_SYS_PTRACE),
+    #: ``failed`` (prctl refused) or ``unsupported`` (not Linux). ``None`` when
+    #: nothing measured it, as for a record built by hand.
+    parent_guard: str | None = None
 
     @property
     def clean_exit(self) -> bool:

@@ -102,46 +102,58 @@ def test_the_named_reachability_tests_exist():
 class FakeSolver:
     """The reference host's writing solver, reduced to the shape SKILL.md uses.
 
-    ``papersolver.PaperSolver`` keeps ``best_report`` as ``[[lines, score]]`` and
-    fills ``section_related_work`` while it writes. Both are reproduced, because
-    the recipe reads both. The prompt fed back in is kept so the test can show the
-    feedback actually reached the writer.
+    ``papersolver.PaperSolver`` keeps one best draft in ``best_report`` as
+    ``[(lines, score, ...)]``, replaces it only when a new draft scores higher,
+    interpolates ``notes`` straight into its prompt, and fills
+    ``section_related_work`` while it writes. All four are reproduced, because
+    the recipe depends on all four. Each draft is ``(text, reward score)``.
     """
 
-    def __init__(self, drafts):
+    def __init__(self, drafts, notes=""):
         self._drafts = list(drafts)
-        self.best_report = [[[], 0.0]]
+        self.best_report = [([], 0.0)]
         self.section_related_work: dict[str, str] = {}
-        self.notes: list[str] = []
+        self.notes = notes
+        self.prompts: list[str] = []
 
-    def _advance(self):
-        draft = self._drafts.pop(0)
-        self.best_report = [[draft.splitlines(), 1.0]]
+    def _next(self):
+        text, score = self._drafts.pop(0)
         # The host searches arXiv per section as it writes (D32), so the retrieval
         # record is incomplete until after the first draft exists.
         self.section_related_work["related work"] = (
             "arXiv paper ID: 1902.07153v2\narXiv paper ID: 2410.21676v4"
         )
+        return text.splitlines(), score
 
     def initial_solve(self):
-        self._advance()
+        self.best_report = [self._next()]
 
     def solve(self):
-        self._advance()
+        self.prompts.append(
+            f"The following are notes, instructions, and general tips for you: {self.notes}"
+        )
+        if not self._drafts:
+            return
+        lines, score = self._next()
+        if score > self.best_report[-1][1]:
+            self.best_report = [(lines, score)]
 
 
 def writer_from(solver):
     """The ``write`` callback exactly as SKILL.md describes it."""
 
     def write(feedback):
-        if not solver._drafts:
-            return None
         if feedback is None:
             solver.initial_solve()
-        else:
-            solver.notes.append(feedback)
-            solver.solve()
-        return "\n".join(solver.best_report[0][0])
+            return "\n".join(solver.best_report[0][0])
+        # The gate outranks the reward model: the rejected draft loses its score,
+        # so whatever the solver writes next replaces it.
+        lines, _, *rest = solver.best_report[0]
+        solver.best_report[0] = (lines, float("-inf"), *rest)
+        solver.notes = f"{solver.notes}\n{feedback}" if solver.notes else feedback
+        solver.solve()
+        lines, score, *_ = solver.best_report[0]
+        return None if score == float("-inf") else "\n".join(lines)
 
     return write
 
@@ -160,7 +172,7 @@ BOUND = "\\section{Results}\nAccuracy was \\result{exp1.acc}.\n"
 def test_the_documented_writer_shape_drives_the_real_loop(tmp_path):
     """The install recipe, run. A typed number is rejected, the feedback reaches
     the solver, and the revision that cites the token is admitted."""
-    solver = FakeSolver([TYPED, BOUND])
+    solver = FakeSolver([(TYPED, 0.5), (BOUND, 0.9)])
     outcome = report_loop(
         make_report_context(research_dir=str(tmp_path), sections=()),
         writer_from(solver),
@@ -175,15 +187,56 @@ def test_the_documented_writer_shape_drives_the_real_loop(tmp_path):
     assert "report.no_numeric_literals_in_results" in {
         c.id for c in outcome.reports[0].report.failed_checks()
     }
-    assert solver.notes, "the rejection never reached the writer"
-    assert "0.97" in solver.notes[0]
+    assert "0.97" in solver.prompts[-1], "the rejection never reached the writer"
+
+
+def test_a_fix_the_reward_model_ranks_lower_still_reaches_the_gate(tmp_path):
+    """The host replaces its best draft only on a higher reward. A recipe that
+    returns the best draft resubmits the rejected one when the fix scores lower,
+    and Gate 3 raises with a correct revision in hand."""
+    solver = FakeSolver([(TYPED, 0.9), (BOUND, 0.5)])
+    outcome = report_loop(
+        make_report_context(research_dir=str(tmp_path), sections=()),
+        writer_from(solver),
+        registry=REGISTRY,
+    )
+    assert outcome.outcome == "pass"
+    assert [r.passed for r in outcome.reports] == [False, True]
+
+
+def test_a_solver_step_that_scores_nothing_stops_the_loop(tmp_path):
+    """Resubmitting the rejected draft would spend a turn to hear the same thing."""
+    solver = FakeSolver([(TYPED, 0.9)])
+    outcome = report_loop(
+        make_report_context(research_dir=str(tmp_path), sections=()),
+        writer_from(solver),
+        registry=REGISTRY,
+    )
+    assert outcome.outcome == "no_pass"
+    assert len(outcome.reports) == 1
+
+
+def test_the_rejection_reaches_the_prompt_as_written(tmp_path):
+    """Hosts interpolate notes into the prompt. A list renders as its repr, which
+    doubles every backslash in the \\result{} instruction and flattens the
+    rejection onto one line."""
+    solver = FakeSolver([(TYPED, 0.9), (BOUND, 0.5)], notes=REPORT_GATE_INSTRUCTIONS)
+    outcome = report_loop(
+        make_report_context(research_dir=str(tmp_path), sections=()),
+        writer_from(solver),
+        registry=REGISTRY,
+    )
+    prompt = solver.prompts[-1]
+    assert "\\result{<key>}" in prompt
+    assert "\\\\result" not in prompt
+    assert outcome.reports[0].feedback in prompt
 
 
 def test_the_retrieval_recipe_reads_both_host_formats(tmp_path):
     """``retrieved_arxiv_ids(lit_review, section_related_work)`` is what the skill
     tells an installer to pass. It has to cope with the writer's search-result
     text and the student's dicts, including one of them being absent."""
-    solver = FakeSolver([BOUND])
+    solver = FakeSolver([(BOUND, 0.9)])
     solver.initial_solve()
     from_writer = retrieved_arxiv_ids(None, solver.section_related_work)
     assert from_writer == {"1902.07153v2", "2410.21676v4"}

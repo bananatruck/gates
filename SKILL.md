@@ -130,7 +130,20 @@ Call sites in `ai_lab_repo.py`, as built:
 | running experiments | `running_experiments` | `make_context`, then `gated_execute` on the winning code, then `review_loop(..., first=final)` if that run passed. `reviser_from_mle_solver` is the `revise` callback. |
 | report writing | `report_writing` | Refuses if Gate 1 left no citable registry. Then `report_loop` with `arxiv_lookup`, `writer_from_paper_solver`, and `retrieved_arxiv_ids(self.phd.lit_review, solver.section_related_work)`. |
 
-For the writing phase the `write` callback wraps the host's solver: the first call runs `solver.initial_solve()` and returns `"\n".join(solver.best_report[0][0])`, and each later call feeds the feedback in as a note, runs `solver.solve()`, and returns the new best report.
+The host's two callbacks as built (`1966e17`) predate the rules below: they return the reward-best entry, keep notes as a list, and hand the writer the pre-review code. Those are open host items, recorded in `progress.md` as F13-F15, not properties of this recipe.
+
+For the writing phase the `write` callback wraps the host's solver.
+The first call runs `solver.initial_solve()`, then the host's usual number of `solver.solve()` steps, and returns `"\n".join(solver.best_report[0][0])`.
+Keeping the host's own effort matters for any gated-versus-ungated comparison: a first draft Gate 3 admits must not get fewer improvement steps than the ungated writer.
+Each later call does three things:
+
+1. **Voids the rejected draft's reward score**, setting it to `float("-inf")`. The solver keeps one best draft and replaces it only on a higher score, so without this a fix the reward model likes less is discarded and the rejected draft is resubmitted until the budget raises.
+2. **Appends the feedback to `solver.notes` as text**, `f"{solver.notes}\n{feedback}"`. The host interpolates notes straight into its prompt, and a list renders as its repr: every `\result{}` gains a second backslash and the rejection collapses onto one line.
+3. **Runs one `solver.solve()` and returns the draft it produced**, or `None` if the draft still scores `-inf`, since nothing new was written and resubmitting would spend a turn to hear the same rejection.
+
+`tests/test_install_skill.py` drives this recipe through the real `report_loop` against a solver that ranks the way the host does.
+`revise` for Gate 2 follows the same three rules against `solver.best_codes`, tracking the entry it last returned, since the experiment solver keeps two.
+After the loop, hand the writer `ReviewOutcome.run.code` and `ReviewOutcome.run.evidence_bundle`, not the code the phase started with: once a revision is reviewed, the registry the writer cites came from that run.
 Retrieval is `lambda: retrieved_arxiv_ids(self.phd.lit_review, solver.section_related_work)`, which reads the host's two formats: `lit_review` entries keyed `arxiv_id`, and per-section arXiv search results as text carrying `arXiv paper ID:` lines.
 
 What this host cannot support, and why that is fine to report:
