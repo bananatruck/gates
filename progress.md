@@ -15,7 +15,7 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: feature/gate2-feedback-loop
-head: 82c06bb
+head: c4cbe2d
 head_date: 2026-09-16
 tests_total: 624
 tests_gate1: 98
@@ -245,6 +245,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `513b082` | Gate 3 step 10 (docs): `PLAN.md` §5.1/§5.2 brought down to as-built (D43) - the two unbuildable citation checks removed with the reason, §5.2's citation row is detected-and-measured, and the numeric row now says construction is a property of the pipeline with G3-M4 beside it. G3-M4's figure deliberately not recorded there, pending D37. `CLAUDE.md` §6 narrowed (D44). README Gate 3 row and description. Enforcement cells filled for D27, D33, D38-D41, D43, D44. 600 tests. |
 | 09-16 | `46ddc85` | Gate 3 step 11: review of `5ab0bf3..HEAD` found two real bugs, both fixed red-test-first. (1) **Duty 1**: `_check_identifiers_resolve` returned on the first resolver exception, discarding identifiers already known unresolved, so a paper citing one fabricated and one unreachable id could PASS. Now every id is asked about and an outage degrades only when nothing was found unresolved (D50). (2) A corrupt cache row raised out of `arxiv_lookup` and reached the gate as an outage; `_as_record` returns `None` and the row is refetched, and an unreadable cache file no longer takes the resolver down. 603 tests. |
 | 09-16 | `82c06bb` | **D37 closed: Kesh reviewed and accepted the G3-M4 labels.** Figure published in `PLAN.md` §5.2 (full table, causes, and both scoping notes) and the README Gate 3 paragraph. 603 tests. |
-| 09-16 | *this* | **F11 closed: `SKILL.md`**, the install path as a skill (`CLAUDE.md` §3, D45). Five steps: check the scaffold can be gated at all, write the adapter, place three call sites, budget in agent turns, prove it is wired. Carries the D42 connect spec with verified host line numbers (`running_experiments` 349, `make_context` 360, `gated_execute` 388, `report_writing` 279, `PaperSolver` 294, `best_report` 301) and states what this host cannot support. `tests/test_install_skill.py` (21) keeps it true: every entry point, file and number it names is checked, and the documented `write` recipe drives the real `report_loop` through a reject-fix-accept cycle against a fake solver of the host's shape. 624 tests. |
+| 09-16 | `c4cbe2d` | **F11 closed: `SKILL.md`**, the install path as a skill (`CLAUDE.md` §3, D45). Five steps: check the scaffold can be gated at all, write the adapter, place three call sites, budget in agent turns, prove it is wired. Carries the D42 connect spec with verified host line numbers (`running_experiments` 349, `make_context` 360, `gated_execute` 388, `report_writing` 279, `PaperSolver` 294, `best_report` 301) and states what this host cannot support. `tests/test_install_skill.py` (21) keeps it true: every entry point, file and number it names is checked, and the documented `write` recipe drives the real `report_loop` through a reject-fix-accept cycle against a fake solver of the host's shape. 624 tests. |
+| 09-16 | *this* | Session log closed; branch merged to `main` with `--no-ff`, matching `f8af469` and `d738e49`. Gate 3 is code-complete: nine checks, the loop, the model layer, G3-M4 published, and the install skill. 624 tests. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.
