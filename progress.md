@@ -15,7 +15,7 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: main
-head: edc41e3
+head: 5f7636e
 head_date: 2026-09-16
 tests_total: 636
 tests_gate1: 105
@@ -96,21 +96,22 @@ Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adap
 
 | ID | Missing | Evidence | Needs |
 |---|---|---|---|
-| F2 | Nobody declares `plan_fields` or `relations` in a real run, so tier B never activates and tier A checks ranges only. | D13; the host plan is free text | a declaration source |
+| F2 | Nobody declares `plan_fields` or `relations` in a real run, so tier B never activates and tier A checks ranges only. | D13; the host plan is free text | **source decided (D55)**: a model extracts them in the host adapter. Not built; severity policy for model-authored fields still open |
 | F5 | Setup budgets reach nothing. **Host side only**: both context builders take `max_attempts` and their defaults match `setup.defaults()`. | `gates/setup.py:121` prints JSON only | host passes the chosen budget (out of scope 09-14) |
 | F8 | M6 wallclock overhead is not measured. | spec §4 M6 | paired timing, with F9 |
-| F9 | E1 not run: MLR-Bench's 10 tasks, gated vs ungated, paired. | spec §5 E1 | F1, F2, model spend |
+| F9 | E1 not run: MLR-Bench's 10 tasks, gated vs ungated, paired. Two arms, every gate off vs every gate on (D53). Pilot first: 1 task, both arms, 1 seed. | `docs/PLAN.md` §8.2 | F2, the 10 task configs, model spend |
 | ~~F11~~ | **Closed 09-16.** `SKILL.md` + `tests/test_install_skill.py`. | — | — |
 
-**Host items, found by review 09-16, not fixed.** The host fork is out of scope for now (Kesh, 09-16). Each blocks a trustworthy D42 live run.
+**Host items, found by review 09-16.** Scope reopened 09-19 for these five only (Kesh). All fixed on `AgentLaboratory-Gemini` `feat/gates-d42-connect`, pushed to `agent-researcher`; 85 host tests pass.
 
 | ID | Missing | Evidence | Needs |
 |---|---|---|---|
-| F13 | Host `revise`/`write` return the reward-best entry, so a fix the reward model ranks lower is discarded and the rejected artifact is resubmitted. Gate 2 then always proceeds; Gate 3 raises. | `ai_lab_repo.py:44`, `:65` on `1966e17`; `papersolver.py` keeps 1 draft, replaced on a strictly higher score | the `SKILL.md` recipe (D52) |
-| F14 | Host notes are a list interpolated into the prompt: `\\result{<key>}` reaches the model with two backslashes, and 23 newlines as literal `\n`. | `ai_lab_repo.py:353`; `papersolver.py:560` | notes kept as text (D52) |
-| F15 | After `review_loop`, the host saves the pre-review `code` and `exp_results`, while the writer cites the reviewed run's registry. | `ai_lab_repo.py:487-489` | `ReviewOutcome.run` (D52) |
-| F16 | `GATES_GATE1=off` now crashes: `review_loop` raises `GateError` when Gate 1 is off, and `report_writing` refuses without a review. The full-workflow control arm cannot run, and the writer skips its `papersolver_max_steps` steps when gated. | `gates/adapters/agentlab.py` `review_loop`; `ai_lab_repo.py:347`, `:357` | host skips Gates 2 and 3 when off; writer effort per D52 |
-| F17 | Host `requirements.txt` names `gates-validity-layer`, which is not on PyPI, so a fresh install fails; `tools_ablation.py:32` hardcodes `/home/kesh/gates`. | `pip index versions` 09-16: no match | `-e ../gates` |
+| ~~F13~~ | **Closed 09-19**, `1245dea`. Both callbacks void the rejected entry's reward score before the next solver step, and return `None` when the step wrote nothing new. The host fakes now rank the way the real solvers do, which is why the suite had never seen this. | — | — |
+| ~~F14~~ | **Closed 09-19**, `1245dea`. Notes are text, so a rejection reaches the prompt as written. | — | — |
+| ~~F15~~ | **Closed 09-19**, `1245dea`. The phase saves `ReviewOutcome.run.code` and `.evidence_bundle`, the run whose registry the writer cites. | — | — |
+| ~~F16~~ | **Closed 09-19**, `1245dea`. `GATES_GATE1=off` stands the whole layer down (D53): no review loop, no report loop, no gate instructions in the writer's notes, and upstream's own writing phase. Both arms make the same first write, so writing effort is not a confound. | — | — |
+| ~~F17~~ | **Closed 09-19**, `7e3d145`. `requirements.txt` names `-e ../gates`; `tools_ablation.py` falls back to the sibling checkout with `GATES_REPO` as the override. | — | — |
+| F18 | Gate 3 has no adversarial evaluation. The spec holds BadScientist for exactly this and nothing tracked it. | `docs/PLAN.md` §8.3 | out of E1; needs its own design |
 
 ## blockers
 
@@ -139,7 +140,14 @@ Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adap
    Approved 09-16 (second round, D37-D45): all recommendations accepted as written.
 2. ~~Connect~~ done on `AgentLaboratory-Gemini` `feat/gates-d42-connect`. Live gated run still budgeted (D42, D45).
 3. ~~`env.parent_proc_guard` INFO check (B3)~~ done (D51).
-4. ~~F11~~ done (D45). F13-F17 before the D42 live run; host out of scope until Kesh reopens it. F9 + F8 next, with model spend. F2 waits on declared `plan_fields`. F5 waits on the host passing the chosen budget.
+4. ~~F11~~ done (D45). ~~F13-F17~~ done 09-19 on the host branch, pushed.
+5. E1 (F9), in this order. Nothing here has run yet.
+   1. Decide the severity policy for model-authored `plan_fields` (D55, open question), then build the extractor in the host adapter. Until then tier B stays silent in a live run.
+   2. Pull MLR-Bench's ten experimentation tasks from its release and write one host config per task (D56).
+   3. Pilot: one task, both arms, one seed, all three gates. It sets cost per run and the wallclock overhead M6 needs (F8).
+   4. Choose the number of seeds from the pilot, then run the campaign.
+   5. M2's labels come from a model judge (D54); the paper says so.
+   F5 still waits on the host passing the chosen budget. F18 (Gate 3 adversarial) is out of E1 and undesigned.
 
 ## decision log
 
@@ -199,6 +207,11 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-13 | D21 | **Gate 3's retrieval registry is Agent Laboratory's `lit_review`, `ADD_PAPER` entries only.** A paper read with `FULL_TEXT` but never added does not count as retrieved. Identifier is the host's `arxiv_id`. Decided by Kesh. | `retrieved_arxiv_ids` (amended by D25) |
 | 09-16 | D51 | **B3 is closed by reporting, not by enforcing.** `_hide_parent_process_from_child` yields `active`, `bypassable` (the child will hold CAP_SYS_PTRACE: bounding set under euid 0, ambient set otherwise), `failed` or `unsupported`; `ExecutionRecord.parent_guard` keeps it; Gate 1 emits `env.parent_proc_guard` INFO, never a verdict, because the host, not the code under test, chose to run as root. `None` (a hand-built record) emits nothing. Rejected: refusing to run as root, which would stop honest work over a host setting the report can state; and `euid == 0` alone, which is wrong in a container that drops CAP_SYS_PTRACE. Ceiling in the `ponytail:` comment: securebits, no_new_privs and file capabilities are ignored. | `test_the_report_says_whether_the_parent_process_was_hidden`, `test_experiment_child_cannot_read_parent_proc_environment` |
 | 09-16 | D52 | **The install recipe puts the gate above the reward model.** A `write`/`revise` callback voids the rejected entry's reward score (`-inf`), appends feedback to notes as text, runs one solver step, and returns the entry that step produced, or `None` if nothing scored. The first `write` keeps the host's usual solver steps, so gating does not cut writing effort. `ReviewOutcome.run` names the Gate 1 run the cited registry came from, so a host never re-derives it from `executions`. Rejected: documenting that derivation (every host re-implements loop order), and changing the host solvers' ranking (host code, out of scope). The old fake solver always adopted the next draft, which is why the suite never saw F13. | `test_a_fix_the_reward_model_ranks_lower_still_reaches_the_gate`, `test_the_rejection_reaches_the_prompt_as_written`, `test_the_outcome_names_the_run_it_reviewed` |
+| 09-19 | D53 | **`GATES_GATE1=off` stands the whole layer down, and E1 has two arms.** Gate 2 reviews Gate 1's registry and Gate 3 judges a manuscript against it, so with Gate 1 off neither has an input: the host skips both rather than raising. E1 compares every gate off against every gate on; per-gate arms are a later experiment and cost about four times as much. Rejected: a second env var, which would strand the published Gate 1 evidence and the ablation runner that produced it. Decided by Kesh. | `test_the_control_arm_runs_neither_gate_2_nor_gate_3` (host) |
+| 09-19 | D54 | **M2's ground-truth labels are written by a model judge.** Which defect types a run actually contains is labelled by a model rather than by hand, so a campaign runs unattended. Rejected: hand labelling, the G3-M4 precedent (D37), which does not scale to a repeated campaign. Cost: judged labels and judged detection share a failure mode, so the paper must say the labels were model-written. Decided by Kesh, autonomy over hand declaration. | pending: no campaign has run |
+| 09-19 | D55 | **`plan_fields` are extracted from the host's plan by a model, in the host adapter.** This reopens D19 and D23, which rejected a model upstream of a Gate 2 check. What holds: `gates/` still reads no plan, holds no default, and no model decides a verdict. What weakens: the *input* a deterministic check compares against is model-authored, so a divergence may be an extraction error. Open, asked 09-19: whether model-authored fields are capped at WARN and labelled in the report. Decided by Kesh, autonomy over hand declaration. | pending: not built |
+| 09-19 | D56 | **E1's runner is the host's `tools_full_gate1_ablation.py`, and the tasks come from MLR-Bench's release.** The runner already does the comparison, so extending it beats a rewrite, and it must live in the host because `rig/` never opens a socket or calls a model (D41). Tasks are taken from the published release rather than retyped from the PDF, which is a fidelity risk a reviewer would catch. The runner was untracked until 09-19, so the 08-15 evidence had no runner in version control. Decided by Kesh. | `1ab459b` (host) |
+| 09-19 | D57 | **The spec's metrics and protocol live in `docs/PLAN.md` §8.** Every reference to "spec §5" pointed outside the repository, so a checkout could not state its own experiment. Rejected: vendoring the whole spec, which would duplicate the tier sections that `PLAN.md` §4 already covers as built. Decided by Kesh. | `docs/PLAN.md` §8 |
 
 ## session log
 
@@ -265,6 +278,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `fbc583a` | **D52.** `SKILL.md` recipe rewritten (three rules, host effort kept, `ReviewOutcome.run`); worked example says the host callbacks predate it (F13-F15). `FakeSolver` now ranks, prompts and fills retrieval like `PaperSolver`. Red first: each defect shown alone (ranking: `no_pass`; list notes: doubled backslash). `ReviewOutcome.run` red first (`AttributeError`). F13-F17 recorded from the host review. 636 tests (635 pass, 1 skipped). |
 | 09-16 | `ea3bdb6` | Cleanup from the 09-16 review: `reports/status.zip` (a generated 09-07 status bundle swept in by `85af14c`) untracked and ignored, file kept on disk. Branch deletion approved but blocked by the session's permission rules, so **still pending**: remote `feat/gate1-feedback-loop`, `feature/gate2-feedback-loop`, `fix/gate1-limitations`, `gate2-gate3`, `research/gate2-gate3-readout` (all 0 commits ahead of `main`), and local `feature/gate2-feedback-loop`, `fix/b3-and-skill-recipe`. Kept: `origin/feature/verification-layer` (4 unmerged commits), `backup/local-main-f1b9fe2` (B5), `reports/finalized-report-and-results.zip`, `rig/report_accuracy.py` (a standalone measurement CLI, not dead code), `docs/GATE1_*.md` (dated closure records). 636 tests. |
 | 09-16 | `2102abe` | Session log closed; `fix/b3-and-skill-recipe` merged to `main` with `--no-ff`, matching `dc31079`. B3 closed, D51-D52, F13-F17 open on the host. 636 tests. |
-| 09-16 | *this* | Merged at `edc41e3` and pushed. Corrected the `ea3bdb6` row: the branch deletions did not run. |
+| 09-16 | `5f7636e` | Merged at `edc41e3` and pushed. Corrected the `ea3bdb6` row: the branch deletions did not run. |
+| 09-19 | *this* | Host scope reopened for F13-F17 only; all five fixed and pushed to `agent-researcher` (`b4a653a`, `a869cb0`, `1ab459b`, `1245dea`, `7e3d145`), 85 host tests pass. Here: `gate1_enabled()` documented as the whole-layer switch, `PLAN.md` §8 (metrics M1-M6, protocol E1-E3, ground-truth sources), Gate 3 build-order row corrected, D53-D57, F18 opened. No gates test changed: 636. Branch cleanup still pending. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.

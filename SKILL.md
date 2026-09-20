@@ -130,7 +130,7 @@ Call sites in `ai_lab_repo.py`, as built:
 | running experiments | `running_experiments` | `make_context`, then `gated_execute` on the winning code, then `review_loop(..., first=final)` if that run passed. `reviser_from_mle_solver` is the `revise` callback. |
 | report writing | `report_writing` | Refuses if Gate 1 left no citable registry. Then `report_loop` with `arxiv_lookup`, `writer_from_paper_solver`, and `retrieved_arxiv_ids(self.phd.lit_review, solver.section_related_work)`. |
 
-The host's two callbacks as built (`1966e17`) predate the rules below: they return the reward-best entry, keep notes as a list, and hand the writer the pre-review code. Those are open host items, recorded in `progress.md` as F13-F15, not properties of this recipe.
+The host's callbacks as first built (`1966e17`) broke all three rules below: they returned the reward-best entry, kept notes as a list, and handed the writer the pre-review code. Fixed in `1245dea` (F13-F15 in `progress.md`). The fakes that tested them adopted whatever the next solver step produced, which is why the suite never saw it: a fake that does not rank the way the host ranks cannot fail this way.
 
 For the writing phase the `write` callback wraps the host's solver.
 The first call runs `solver.initial_solve()`, then the host's usual number of `solver.solve()` steps, and returns `"\n".join(solver.best_report[0][0])`.

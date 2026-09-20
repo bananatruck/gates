@@ -582,6 +582,13 @@ def gate1_enabled() -> bool:
     nothing else. Checking out the pre-Gate-1 branch instead would also change
     the model plumbing, the rate-limit backoff and the prompts, and any
     difference in the papers could then be attributed to those.
+
+    The name says Gate 1 because Gate 1 shipped first, but a host reads it as
+    the whole layer's switch: Gate 2 reviews Gate 1's registry and Gate 3
+    judges a manuscript against it, so neither has an input with Gate 1 off.
+    Agent Laboratory skips both when this returns ``False`` (D53). Renaming it
+    would strand the published Gate 1 evidence and the ablation runner that
+    produced it, which is a worse trade than one paragraph.
     """
     return os.environ.get("GATES_GATE1", "on").strip().lower() not in {
         "off", "0", "false", "no"

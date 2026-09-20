@@ -688,7 +688,7 @@ An adapter is responsible for exactly four things:
 | 4 | Fix `run_experiments.py --yaml-location`; re-run the archive for a real n | **CLI fixed**; runs pending |
 | 5 | The channel-fidelity experiment: fabrication rate vs. `MAX_LEN` | detector arm instrumented; writer arm pending |
 | 6 | Gate 2 | **built**: tiers A and B, loop (tier C) through Gate 1; campaign (E1) pending |
-| 7 | Gate 3 | pending |
+| 7 | Gate 3 | **built**: `report.*`, `source.*`, `style.*`, the loop and the model layer; campaign pending |
 | 8 | Evaluate on a CORE-Bench subset and PaperBench Code-Dev | pending |
 
 Steps 4 and 5 produce a result either way. If widening the channel changes the numbers, that is
@@ -720,3 +720,76 @@ Worth stating carefully, because the honest version is narrower than the temptin
 - So the claim to make is *"Gate 1 rejects this run"*, not *"Gate 1's static tier catches this
   file"*. Different checks fire on different artifacts of the same run, and the paper should say
   which.
+
+---
+
+## 8. Metrics and evaluation protocol
+
+Brought in from `GATE2_implementation_spec.md` §4 and §5 so this repository can state its own
+experiment. The spec lives outside the repository, and every reference to "spec §5" in
+`progress.md` used to be unresolvable from a checkout (D57).
+
+### 8.1 The six metrics
+
+| ID | What it reports | Rule |
+|---|---|---|
+| M1 | construction-level exclusions | report what **cannot** happen, never a rate. A perplexity below 1.0, an accuracy outside [0,1] and an arithmetic contradiction among declared relations cannot survive tier A. No interval: a rate here understates a guarantee |
+| M2 | per-type detection rate | `tasks_where_gate_flagged / tasks_where_type_present`, against MLR-Bench's published baselines. Wilson interval on our two columns only. Their published numbers get no interval: we did not measure them |
+| M3 | conformance outcomes | three counts over declared fields, never collapsed: conforming, divergent, unverifiable. "The run did something else" and "nobody can tell" are different failures |
+| M4 | false positives on legitimate runs | `clean_runs_flagged / clean_runs`, with a Wilson interval. Without it the gate looks free, and it is not: a range that rejects a genuine outlier costs a real result |
+| M5 | loop behaviour | resolution rate, mean attempts to resolution, and runs that exhausted the budget and proceeded with a caveat. The last is a feature, and the text must say so or a reviewer reads it as a failure |
+| M6 | cost | Gate 2 makes zero model calls, so report wallclock overhead per gated run against ungated. MLR-Judge needs a model per evaluation; Gate 2 needs none |
+
+### 8.2 E1, the positive set
+
+MLR-Bench's ten experimentation tasks, run gated and ungated, same seeds, same model, paired.
+Report per-task differences, not only aggregates.
+
+Two arms, not four: every gate off against every gate on (D53).
+Per-gate arms are a later experiment, and the tier comparison that needs no model already exists
+in `rig/gate2_tier_comparison.py`.
+`GATES_GATE1=off` is the switch for the whole layer, and the host skips Gates 2 and 3 when it is
+set, because neither has an input without Gate 1's registry.
+
+The first run is a pilot: one task, both arms, one seed, all three gates.
+It sets the cost and the wallclock per run, which is also M6, and only then is the number of
+seeds chosen.
+Ten tasks at one seed put a result of 8/10 inside [0.49, 0.94]; thirty runs at 24/30 narrow that
+to [0.63, 0.90].
+
+The tasks come from MLR-Bench's own release rather than retyped from the paper.
+The runner is the host's `tools_full_gate1_ablation.py`: one parsed config, two arms in isolated
+working directories, a manifest per run.
+It stays in the host because `rig/` never opens a socket (D41) and never calls a model.
+
+### 8.3 E2, the negative set
+
+BadScientist cannot serve here: its strategies manipulate how a paper presents itself, so it
+tests Gate 3, and fabrication happens before a paper exists.
+It is held for Gate 3's adversarial evaluation, which is not built (F18).
+
+Gate 2's negatives are synthesized instead, one registry per defect class, each asserting the
+specific check id that fires.
+A fixture that fails for the wrong reason is a passing test hiding a broken check.
+Six of the seven live as cases in `rig/gate2_tier_a_eval.py` and `rig/gate2_tier_b_eval.py`; the
+seventh, a random binary baseline at 0.65, was dropped with its reason (D20).
+
+### 8.4 E3, the reporting rule
+
+Every rate carries a Wilson interval and its denominator.
+A number without both is a construction-level claim and must be phrased as one, never as a
+measured frequency.
+
+### 8.5 Where the ground truth comes from
+
+Two inputs are neither measured nor deterministic, and both are now model-authored so a campaign
+can run unattended (D54, D55).
+
+- **M2's labels**: which defect types are present in a run. A model judge labels them.
+- **Gate 2 tier B's `plan_fields`**: what the plan declared. A model extracts them from the
+  host's free-text plan, in the host adapter, before the run.
+
+`gates/` still reads no plan and still holds no default, and a model still cannot decide a
+verdict.
+What changes is that the *input* to a deterministic check can be model-authored, which is weaker
+than a human declaration and must be labelled as such wherever it is reported.
