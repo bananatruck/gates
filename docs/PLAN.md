@@ -793,3 +793,12 @@ can run unattended (D54, D55).
 verdict.
 What changes is that the *input* to a deterministic check can be model-authored, which is weaker
 than a human declaration and must be labelled as such wherever it is reported.
+
+Two rules keep that honest:
+
+- **A model-authored field cannot fail a run.** A divergence on one is capped at WARN and the
+  report says the field was model-authored. A human-declared field still FAILs, and a set holding
+  both FAILs on the human field. "A model call can never block" stays literally true.
+- **The judge is not the model under test.** Labels and plan fields come from a separate
+  predefined agent. One model writing the plan, extracting the declaration and judging the defect
+  would mostly measure its own self-consistency.
