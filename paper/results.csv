@@ -1,0 +1,49 @@
+benchmark,system,arm,metric,value,ci_low,ci_high,n,status,no_input,source
+CORE-Bench,Agent Lab,L0,integrity,31.1,19.5,45.7,45,dummy,0,
+CORE-Bench,Agent Lab,L0,task,17.8,9.3,31.3,45,dummy,0,
+CORE-Bench,Agent Lab,L1,integrity,2.2,0.4,11.6,45,dummy,0,
+CORE-Bench,Agent Lab,L1,task,15.6,7.7,28.8,45,dummy,0,
+CORE-Bench,Agent Lab,L2,integrity,2.2,0.4,11.6,45,dummy,0,
+CORE-Bench,Agent Lab,L2,task,15.6,7.7,28.8,45,dummy,0,
+CORE-Bench,Agent Lab,L3,integrity,2.2,0.4,11.6,45,dummy,1,
+CORE-Bench,Agent Lab,L3,task,15.6,7.7,28.8,45,dummy,1,
+CORE-Bench,AI Scientist v2,L0,integrity,40.0,27.0,54.5,45,dummy,0,
+CORE-Bench,AI Scientist v2,L0,task,6.7,2.3,17.9,45,dummy,0,
+CORE-Bench,AI Scientist v2,L3,integrity,2.2,0.4,11.6,45,dummy,0,
+CORE-Bench,AI Scientist v2,L3,task,6.7,2.3,17.9,45,dummy,0,
+CORE-Bench,ScientistOne,L0,integrity,,,,,not_reported,0,no published number; run in phase 8
+CORE-Bench,ScientistOne,L0,task,,,,,not_reported,0,no published number; run in phase 8
+CORE-Bench,CORE-Agent + GPT-4o,ref,task,21.48,,,,published,0,"CORE-Bench Table 5 p.9, Hard, pass@1"
+MLR-Bench,Agent Lab,L0,integrity,70.0,39.7,89.2,10,dummy,0,
+MLR-Bench,Agent Lab,L0,task,4.6,,,10,dummy,0,
+MLR-Bench,Agent Lab,L1,integrity,30.0,10.8,60.3,10,dummy,0,
+MLR-Bench,Agent Lab,L1,task,4.5,,,10,dummy,0,
+MLR-Bench,Agent Lab,L2,integrity,20.0,5.7,51.0,10,dummy,0,
+MLR-Bench,Agent Lab,L2,task,4.5,,,10,dummy,0,
+MLR-Bench,Agent Lab,L3,integrity,10.0,1.8,40.4,10,dummy,0,
+MLR-Bench,Agent Lab,L3,task,4.4,,,10,dummy,0,
+MLR-Bench,AI Scientist v2,L0,integrity,100.0,,,10,published,0,"MLR-Bench Fig. 6 p.22, faked experimental results"
+MLR-Bench,AI Scientist v2,L0,task,4.0,,,10,dummy,0,
+MLR-Bench,AI Scientist v2,L3,integrity,10.0,1.8,40.4,10,dummy,0,
+MLR-Bench,AI Scientist v2,L3,task,3.9,,,10,dummy,0,
+MLR-Bench,ScientistOne,L0,integrity,,,,,not_reported,0,no published number; run in phase 8
+MLR-Bench,ScientistOne,L0,task,,,,,not_reported,0,no published number; run in phase 8
+BadScientist,Agent Lab,L0,integrity,65.0,49.5,77.9,40,dummy,0,
+BadScientist,Agent Lab,L0,task,100.0,91.2,100.0,40,dummy,0,
+BadScientist,Agent Lab,L1,integrity,60.0,44.6,73.7,40,dummy,0,
+BadScientist,Agent Lab,L1,task,100.0,91.2,100.0,40,dummy,0,
+BadScientist,Agent Lab,L2,integrity,55.0,39.8,69.3,40,dummy,0,
+BadScientist,Agent Lab,L2,task,95.0,83.5,98.6,40,dummy,0,
+BadScientist,Agent Lab,L3,integrity,5.0,1.4,16.5,40,dummy,0,
+BadScientist,Agent Lab,L3,task,85.0,70.9,92.9,40,dummy,0,
+BadScientist,AI Scientist v2,L0,integrity,70.0,54.6,81.9,40,dummy,0,
+BadScientist,AI Scientist v2,L0,task,100.0,91.2,100.0,40,dummy,0,
+BadScientist,AI Scientist v2,L3,integrity,5.0,1.4,16.5,40,dummy,0,
+BadScientist,AI Scientist v2,L3,task,85.0,70.9,92.9,40,dummy,0,
+BadScientist,ScientistOne,L0,integrity,,,,,not_reported,0,no published number; run in phase 8
+BadScientist,ScientistOne,L0,task,,,,,not_reported,0,no published number; run in phase 8
+BadScientist,"LLM reviewers, fabricated papers",ref,integrity,69.0,,,,published,0,"BadScientist Table 1 p.7, All strategies, tau_0.5"
+Audit,AI Scientist v2,audit,integrity,30.0,10.8,60.3,10,dummy,0,
+Audit,Agent Lab,audit,integrity,20.0,5.7,51.0,10,dummy,0,
+Audit,ScientistOne,audit,integrity,0.0,0.0,20.4,15,dummy,0,
+Audit,AI Scientist v2,ref,integrity,30.0,,,,published,0,"MLR-Bench Fig. 6 p.22, incorrect citations"

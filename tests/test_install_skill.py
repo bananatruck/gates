@@ -1,12 +1,14 @@
-"""`SKILL.md` is the portability claim made executable, so it is tested.
+"""The install skills are the portability claim made executable, so they are tested.
 
-Two kinds of test here, and the second is the point.
+`skills/` holds a router, ``install-gates``, and one skill per gate, packaged as
+a Claude Code plugin by `.claude-plugin/`. Two kinds of test here, and the second
+is the point.
 
-The first kind checks the file does not lie about this repo: the entry points,
-tests and rigs it tells an installing agent to use all exist under those names.
+The first kind checks the skills do not lie about this repo: the entry points,
+tests and rigs they tell an installing agent to use all exist under those names.
 A skill naming a function that was renamed sends the next agent down a dead end.
 
-The second kind executes the install recipe. `SKILL.md` describes the ``write``
+The second kind executes the install recipe. The skills describe the ``write``
 callback for the reference host as wrapping a solver whose first call runs
 ``initial_solve()`` and whose later calls feed feedback in and run ``solve()``.
 That description is worth nothing as prose. Here a fake solver with exactly that
@@ -16,6 +18,7 @@ the suite says so rather than the next installer finding out.
 
 from __future__ import annotations
 
+import json
 import pathlib
 import re
 
@@ -29,14 +32,46 @@ from gates.adapters.agentlab import (
 )
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
-SKILL = (REPO / "SKILL.md").read_text(encoding="utf-8")
+SKILLS = REPO / "skills"
+GATE_SKILLS = ("gate1-execution", "gate2-coherence", "gate3-report")
+ROUTER = (SKILLS / "install-gates" / "SKILL.md").read_text(encoding="utf-8")
+#: Every file an installing agent can reach from the router, read as one text.
+SKILL = "\n".join(
+    path.read_text(encoding="utf-8") for path in sorted(SKILLS.rglob("*.md"))
+)
 
 
-def test_the_skill_exists_and_declares_itself():
-    """CLAUDE.md section 3: the install path ships as a skill."""
-    assert SKILL.startswith("---\n")
-    front = SKILL.split("---")[1]
-    assert "name:" in front and "description:" in front
+def _front(text):
+    assert text.startswith("---\n")
+    return dict(
+        line.split(": ", 1) for line in text.split("---")[1].strip().splitlines()
+    )
+
+
+@pytest.mark.parametrize("folder", ("install-gates",) + GATE_SKILLS)
+def test_each_skill_exists_and_declares_itself(folder):
+    """CLAUDE.md section 3: the install path ships as skills. A skill whose name
+    is not its folder's is one the agent cannot invoke by the name it sees."""
+    front = _front((SKILLS / folder / "SKILL.md").read_text(encoding="utf-8"))
+    assert front["name"] == folder
+    assert front["description"]
+
+
+def test_the_router_sends_the_agent_through_every_gate_in_order():
+    positions = [ROUTER.index(f"`{name}`") for name in GATE_SKILLS]
+    assert positions == sorted(positions)
+
+
+def test_the_plugin_ships_exactly_the_skills_in_the_repo():
+    """`/plugin install gates@gates` installs what plugin.json lists, so a skill
+    left off the list exists in the repo and nowhere a user can reach it."""
+    plugin = json.loads((REPO / ".claude-plugin" / "plugin.json").read_text())
+    market = json.loads((REPO / ".claude-plugin" / "marketplace.json").read_text())
+    listed = {pathlib.PurePosixPath(p).name for p in plugin["skills"]}
+    on_disk = {p.parent.name for p in SKILLS.glob("*/SKILL.md")}
+    assert listed == on_disk
+    assert [p["name"] for p in market["plugins"]] == [plugin["name"]]
+    assert market["plugins"][0]["source"] == "./"
 
 
 @pytest.mark.parametrize(
@@ -49,21 +84,37 @@ def test_the_skill_exists_and_declares_itself():
         "review_loop",
         "report_loop",
         "retrieved_arxiv_ids",
+        "arxiv_lookup",
+        "gate_level",
+        "require_gate",
+        "record_divergence",
+        "build_registry",
+        "MLE_GATE_INSTRUCTIONS",
         "REPORT_GATE_INSTRUCTIONS",
     ],
 )
 def test_every_entry_point_the_skill_names_is_importable(name):
+    import gates
+    from gates import pipeline
     from gates.adapters import agentlab
 
-    assert name in SKILL, f"{name} is no longer mentioned in SKILL.md"
-    assert hasattr(agentlab, name), f"SKILL.md names {name}, which does not exist"
+    assert name in SKILL, f"{name} is no longer mentioned in the skills"
+    assert any(
+        hasattr(module, name) for module in (gates, pipeline, agentlab)
+    ), f"the skills name {name}, which does not exist"
 
 
 @pytest.mark.parametrize(
     "path",
     [
+        "rig/gate1_loop.py",
         "rig/gate3_loop.py",
         "tests/test_key_leak.py",
+        "tests/test_gate2.py",
+        "tests/test_gate3.py",
+        "tests/test_install_skill.py",
+        "gates/pipeline.py",
+        "gates/adapters/arxiv.py",
         "gates/adapters/agentlab.py",
         "gates/setup.py",
         "docs/PLAN.md",
@@ -72,16 +123,18 @@ def test_every_entry_point_the_skill_names_is_importable(name):
     ],
 )
 def test_every_file_the_skill_points_at_exists(path):
-    assert path in SKILL, f"{path} is no longer mentioned in SKILL.md"
-    assert (REPO / path).exists(), f"SKILL.md points at {path}, which is missing"
+    assert path in SKILL, f"{path} is no longer mentioned in the skills"
+    assert (REPO / path).exists(), f"the skills point at {path}, which is missing"
 
 
-def test_the_scenario_count_the_skill_quotes_is_current():
-    """The one number in the file. A stale count is how a doc starts lying."""
-    from rig.gate3_scenarios import SCENARIOS
+@pytest.mark.parametrize("module", ["rig.gate2_scenarios", "rig.gate3_scenarios"])
+def test_the_scenario_counts_the_skills_quote_are_current(module):
+    """The numbers in the files. A stale count is how a doc starts lying."""
+    import importlib
 
-    words = {1: "one", 6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
-    assert f"drives {words[len(SCENARIOS)]} scenarios" in SKILL
+    count = len(importlib.import_module(module).SCENARIOS)
+    words = {1: "one", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
+    assert f"drives {words[count]} scenarios" in SKILL
 
 
 def test_the_named_reachability_tests_exist():
@@ -91,7 +144,7 @@ def test_the_named_reachability_tests_exist():
         found = any(
             name in p.read_text(encoding="utf-8") for p in (REPO / "tests").glob("*.py")
         )
-        assert found, f"SKILL.md names {name}, which no test defines"
+        assert found, f"the skills name {name}, which no test defines"
 
 
 # --------------------------------------------------------------------------- #
@@ -140,7 +193,7 @@ class FakeSolver:
 
 
 def writer_from(solver):
-    """The ``write`` callback exactly as SKILL.md describes it."""
+    """The ``write`` callback exactly as the skills describe it."""
 
     def write(feedback):
         if feedback is None:

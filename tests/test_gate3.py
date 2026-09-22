@@ -18,11 +18,11 @@ import pytest
 
 from gates.adapters.agentlab import (
     WRITER_SECTIONS,
-    gated_report,
     make_report_context,
     make_review_context,
     report_loop,
 )
+from gates.pipeline import gated_report
 from gates.errors import GateError, GateFailure
 from gates.gate3 import (
     GATE_NAME,

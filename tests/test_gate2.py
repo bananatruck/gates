@@ -15,12 +15,8 @@ import pathlib
 import pytest
 
 import gates.gate2
-from gates.adapters.agentlab import (
-    GateContext,
-    declared_limitations,
-    gated_review,
-    make_review_context,
-)
+from gates.adapters.agentlab import make_review_context
+from gates.pipeline import GateContext, declared_limitations, gated_review
 from gates.errors import GateError, GateFailure
 from gates.gate2 import (
     GATE_NAME,

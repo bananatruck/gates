@@ -15,9 +15,9 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: main
-head: 5f7636e
-head_date: 2026-09-16
-tests_total: 636
+head: dcc4492
+head_date: 2026-09-19
+tests_total: 675
 tests_gate1: 105
 tests_gate2: 92
 tests_gate3: 84
@@ -99,7 +99,7 @@ Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adap
 | F2 | Nobody declares `plan_fields` or `relations` in a real run, so tier B never activates and tier A checks ranges only. | D13; the host plan is free text | **source decided (D55)**: a model extracts them in the host adapter. Not built; severity policy for model-authored fields still open |
 | F5 | Setup budgets reach nothing. **Host side only**: both context builders take `max_attempts` and their defaults match `setup.defaults()`. | `gates/setup.py:121` prints JSON only | host passes the chosen budget (out of scope 09-14) |
 | F8 | M6 wallclock overhead is not measured. | spec §4 M6 | paired timing, with F9 |
-| F9 | E1 not run: MLR-Bench's 10 tasks, gated vs ungated, paired. Two arms, every gate off vs every gate on (D53). Pilot first: 1 task, both arms, 1 seed. | `docs/PLAN.md` §8.2 | F2, the 10 task configs, model spend |
+| F9 | The evaluation has not run. Superseded 09-21: three benchmarks at the four `GATES_LEVEL`s (D60), not E1's two arms. Pilot first: MLR-Bench, 1 task, 4 levels, 1 seed. | `paper/PLAN.md` §5, phases 1-6 | F2, the level runner (phase 1), model spend |
 | ~~F11~~ | **Closed 09-16.** `SKILL.md` + `tests/test_install_skill.py`. | — | — |
 
 **Host items, found by review 09-16.** Scope reopened 09-19 for these five only (Kesh). All fixed on `AgentLaboratory-Gemini` `feat/gates-d42-connect`, pushed to `agent-researcher`; 85 host tests pass.
@@ -111,7 +111,7 @@ Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adap
 | ~~F15~~ | **Closed 09-19**, `1245dea`. The phase saves `ReviewOutcome.run.code` and `.evidence_bundle`, the run whose registry the writer cites. | — | — |
 | ~~F16~~ | **Closed 09-19**, `1245dea`. `GATES_GATE1=off` stands the whole layer down (D53): no review loop, no report loop, no gate instructions in the writer's notes, and upstream's own writing phase. Both arms make the same first write, so writing effort is not a confound. | — | — |
 | ~~F17~~ | **Closed 09-19**, `7e3d145`. `requirements.txt` names `-e ../gates`; `tools_ablation.py` falls back to the sibling checkout with `GATES_REPO` as the override. | — | — |
-| F18 | Gate 3 has no adversarial evaluation. The spec holds BadScientist for exactly this and nothing tracked it. | `docs/PLAN.md` §8.3 | out of E1; needs its own design |
+| F18 | Gate 3 has no adversarial evaluation. **Designed 09-21 (D60)**: BadScientist at every level, on real runs with manipulated write-ups. Not run. | `paper/PLAN.md` §5, phase 4 | phase 3's MLR-Bench runs |
 
 ## blockers
 
@@ -141,13 +141,12 @@ Tiers A and B run as one call (`run_gate2`). Tier C is `review_loop` in the adap
 2. ~~Connect~~ done on `AgentLaboratory-Gemini` `feat/gates-d42-connect`. Live gated run still budgeted (D42, D45).
 3. ~~`env.parent_proc_guard` INFO check (B3)~~ done (D51).
 4. ~~F11~~ done (D45). ~~F13-F17~~ done 09-19 on the host branch, pushed.
-5. E1 (F9), in this order. Nothing here has run yet.
-   1. Decide the severity policy for model-authored `plan_fields` (D55, open question), then build the extractor in the host adapter. Until then tier B stays silent in a live run.
-   2. Pull MLR-Bench's ten experimentation tasks from its release and write one host config per task (D56).
-   3. Pilot: one task, both arms, one seed, all three gates. It sets cost per run and the wallclock overhead M6 needs (F8).
-   4. Choose the number of seeds from the pilot, then run the campaign.
-   5. M2's labels come from a model judge (D54); the paper says so.
-   F5 still waits on the host passing the chosen budget. F18 (Gate 3 adversarial) is out of E1 and undesigned.
+5. The evaluation (F9, D60): `paper/PLAN.md` §5, phases 1-9. Nothing has run yet.
+   1. Phase 1, the level runner: generalise the host's `tools_full_gate1_ablation.py` to set `GATES_LEVEL` 0-3, plus `paper/collect.py`. Host change, needs Kesh's say-so.
+   2. Before phase 2: the severity policy for model-authored `plan_fields` (D55), then the extractor in the host adapter. Until then tier B stays silent in a live run.
+   3. Phase 2, MLR-Bench pilot: 1 task, 4 levels, 1 seed. Sets cost per run and M6 (F8), which choose the seed count.
+   4. Phases 3-6: MLR-Bench, BadScientist (F18), CORE-Bench (new harness), post-hoc audit. Phase 7, the AI Scientist v2 adapter, is late stage.
+   F5 still waits on the host passing the chosen budget.
 
 ## decision log
 
@@ -162,7 +161,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-10 | D5 | Gate 3 reuses Gate 1's structure and loop; only check contents differ | `rig/loop.py` reuse |
 | 09-10 | D6 | Claim entailment (MiniCheck) deferred past this paper | scope |
 | 09-10 | D7 | Tiers are Gate 2 only. Gate 3 has a flat check list, like Gate 1. | `gates/gate3.py` |
-| 09-11 | D8 | **Benchmark is MLR-Bench** (arXiv 2505.19955). CORE-Bench rejected: only 17 of its 181 task questions have stochastic answers. | `GATE2_implementation_spec.md` |
+| 09-11 | D8 | **Benchmark is MLR-Bench** (arXiv 2505.19955). CORE-Bench rejected: only 17 of its 181 task questions have stochastic answers. | `GATE2_implementation_spec.md`. **Superseded 09-21 by D60.** |
 | 09-11 | D9 | **Tier B is methodology conformance**, not literature tolerance. `SourceClaim`/`Band`/`band_for` stay in the tree, unwired. | `GATE2_implementation_spec.md` §2 |
 | 09-11 | D10 | **The speedup ceiling is gated on provenance, not magnitude.** A speedup a declared `Relation` derives is exempt at any size; SAGE reports a real 4,700x. Separate check `coherence.plausibility`, so `range_valid` stays provable. | `gates/gate2.py` `_check_plausibility` |
 | 09-11 | D11 | **`IMPLAUSIBLE_SPEEDUP = 500.0`**, not 1000, to keep it clear of `MAX_LEN = 1000`, the stdout truncation this project diagnosed. Declared, not derived; reaches the report as `ceiling_origin`. | `gates/gate2.py` |
@@ -207,11 +206,14 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-13 | D21 | **Gate 3's retrieval registry is Agent Laboratory's `lit_review`, `ADD_PAPER` entries only.** A paper read with `FULL_TEXT` but never added does not count as retrieved. Identifier is the host's `arxiv_id`. Decided by Kesh. | `retrieved_arxiv_ids` (amended by D25) |
 | 09-16 | D51 | **B3 is closed by reporting, not by enforcing.** `_hide_parent_process_from_child` yields `active`, `bypassable` (the child will hold CAP_SYS_PTRACE: bounding set under euid 0, ambient set otherwise), `failed` or `unsupported`; `ExecutionRecord.parent_guard` keeps it; Gate 1 emits `env.parent_proc_guard` INFO, never a verdict, because the host, not the code under test, chose to run as root. `None` (a hand-built record) emits nothing. Rejected: refusing to run as root, which would stop honest work over a host setting the report can state; and `euid == 0` alone, which is wrong in a container that drops CAP_SYS_PTRACE. Ceiling in the `ponytail:` comment: securebits, no_new_privs and file capabilities are ignored. | `test_the_report_says_whether_the_parent_process_was_hidden`, `test_experiment_child_cannot_read_parent_proc_environment` |
 | 09-16 | D52 | **The install recipe puts the gate above the reward model.** A `write`/`revise` callback voids the rejected entry's reward score (`-inf`), appends feedback to notes as text, runs one solver step, and returns the entry that step produced, or `None` if nothing scored. The first `write` keeps the host's usual solver steps, so gating does not cut writing effort. `ReviewOutcome.run` names the Gate 1 run the cited registry came from, so a host never re-derives it from `executions`. Rejected: documenting that derivation (every host re-implements loop order), and changing the host solvers' ranking (host code, out of scope). The old fake solver always adopted the next draft, which is why the suite never saw F13. | `test_a_fix_the_reward_model_ranks_lower_still_reaches_the_gate`, `test_the_rejection_reaches_the_prompt_as_written`, `test_the_outcome_names_the_run_it_reviewed` |
-| 09-19 | D53 | **`GATES_GATE1=off` stands the whole layer down, and E1 has two arms.** Gate 2 reviews Gate 1's registry and Gate 3 judges a manuscript against it, so with Gate 1 off neither has an input: the host skips both rather than raising. E1 compares every gate off against every gate on; per-gate arms are a later experiment and cost about four times as much. Rejected: a second env var, which would strand the published Gate 1 evidence and the ablation runner that produced it. Decided by Kesh. | `test_the_control_arm_runs_neither_gate_2_nor_gate_3` (host) |
+| 09-19 | D53 | **`GATES_GATE1=off` stands the whole layer down, and E1 has two arms.** Gate 2 reviews Gate 1's registry and Gate 3 judges a manuscript against it, so with Gate 1 off neither has an input: the host skips both rather than raising. E1 compares every gate off against every gate on; per-gate arms are a later experiment and cost about four times as much. Rejected: a second env var, which would strand the published Gate 1 evidence and the ablation runner that produced it. Decided by Kesh. | `test_the_control_arm_runs_neither_gate_2_nor_gate_3` (host) **Superseded 09-21 by D58 and D60.** |
 | 09-19 | D54 | **M2's ground-truth labels are written by a model judge.** Which defect types a run actually contains is labelled by a model rather than by hand, so a campaign runs unattended. Rejected: hand labelling, the G3-M4 precedent (D37), which does not scale to a repeated campaign. Cost: judged labels and judged detection share a failure mode, so the paper must say the labels were model-written. **The judge is a separate predefined agent** (Kesh, 09-19), not the model under test: one model writing the plan, extracting the declaration and judging the defect measures its self-consistency. Same rule for D55's extractor. Decided by Kesh, autonomy over hand declaration. | pending: no campaign has run |
 | 09-19 | D55 | **`plan_fields` are extracted from the host's plan by a model, in the host adapter.** This reopens D19 and D23, which rejected a model upstream of a Gate 2 check. What holds: `gates/` still reads no plan, holds no default, and no model decides a verdict. What weakens: the *input* a deterministic check compares against is model-authored, so a divergence may be an extraction error. **Capped at WARN** (Kesh, 09-19): a divergence on a model-authored field cannot FAIL a run, and the report labels the field as model-authored. A human-declared field still FAILs, and a mixed set FAILs on the human field. That keeps "a model call can never block" literally true. Decided by Kesh, autonomy over hand declaration. | pending: not built |
 | 09-19 | D56 | **E1's runner is the host's `tools_full_gate1_ablation.py`, and the tasks come from MLR-Bench's release.** The runner already does the comparison, so extending it beats a rewrite, and it must live in the host because `rig/` never opens a socket or calls a model (D41). Tasks are taken from the published release rather than retyped from the PDF, which is a fidelity risk a reviewer would catch. The runner was untracked until 09-19, so the 08-15 evidence had no runner in version control. Decided by Kesh. | `1ab459b` (host) |
 | 09-19 | D57 | **The spec's metrics and protocol live in `docs/PLAN.md` §8.** Every reference to "spec §5" pointed outside the repository, so a checkout could not state its own experiment. Rejected: vendoring the whole spec, which would duplicate the tier sections that `PLAN.md` §4 already covers as built. Decided by Kesh. | `docs/PLAN.md` §8 |
+| 09-21 | D58 | **`GATES_LEVEL` is a cumulative switch: 0 all off, 1 Gate 1, 2 Gates 1+2, 3 all on.** Every gate entry point in `gates/pipeline.py` calls `require_gate()`, so a closed gate raises before it spends an agent turn and no level runs Gate 2 or 3 without the gates below it. `GATES_GATE1=off` still means 0, so the frozen Gate 1 evidence and its runner still reproduce; setting both raises, as does a level that is not 0-3. The host records `gate1_passed`, because at level 1 no Gate 2 review exists to say the run was verified, and below level 3 it writes with its own writer from the verified evidence. Supersedes D53's two arms. Rejected: one switch per gate, which can ask for Gate 2 without Gate 1. Decided by Kesh. | `tests/test_levels.py`; host `test_a_level_below_3_*` |
+| 09-21 | D59 | **The loops every host shares live in `gates/pipeline.py`; the adapter holds host knowledge only; the install path is four skills and a plugin.** `adapters/agentlab.py` went from 1044 to about 330 lines and re-exports what the host imports, so the host did not change for the move. `arxiv_lookup` moved to `adapters/arxiv.py`, because `gates/` never opens a socket (D41). Skills: `skills/install-gates` (router) and `gate1-execution`, `gate2-coherence`, `gate3-report`, each naming its input from the gate before it; `.claude-plugin/` makes them `/plugin install gates@gates`. The AI Scientist v2 adapter is a late-stage phase, after testing. Rejected: `SKILL.md`'s "copy the adapter", which makes every loop fix once per host. Decided by Kesh. | `tests/test_install_skill.py` (plugin lists exactly the skills on disk; names match folders) |
+| 09-21 | D60 | **The evaluation is three benchmarks at the four levels, each reported as one integrity metric and one task score.** CORE-Bench, MLR-Bench and BadScientist; host alone against host + GATES; a post-hoc citation audit of released papers; other systems (ScientistOne) later. BadScientist runs on real runs with manipulated write-ups, because papers with no experiment never pass Gate 1 and would read 0% at every level. `paper/PLAN.md` is the single source; every figure is drawn by `paper/figures.py` from `paper/results.csv`, and a figure holding a dummy row is stamped PLACEHOLDER. `rig/` results move to the paper's "Mechanism evidence" appendix; `AI Research/result_testing_1` is archived unchanged. Supersedes D8, D53's two arms, and `PLAN.md` §8's E1/E2. Decided by Kesh. | `paper/figures.py` asserts every CSV row reaches a figure |
 
 ## session log
 
@@ -280,5 +282,6 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `2102abe` | Session log closed; `fix/b3-and-skill-recipe` merged to `main` with `--no-ff`, matching `dc31079`. B3 closed, D51-D52, F13-F17 open on the host. 636 tests. |
 | 09-16 | `5f7636e` | Merged at `edc41e3` and pushed. Corrected the `ea3bdb6` row: the branch deletions did not run. |
 | 09-19 | `e0fa328` | Host scope reopened for F13-F17 only; all five fixed and pushed to `agent-researcher` (`b4a653a`, `a869cb0`, `1ab459b`, `1245dea`, `7e3d145`), 85 host tests pass. Here: `gate1_enabled()` documented as the whole-layer switch, `PLAN.md` §8 (metrics M1-M6, protocol E1-E3, ground-truth sources), Gate 3 build-order row corrected, D53-D57, F18 opened. No gates test changed: 636. Branch cleanup still pending. |
+| 09-21 | uncommitted | **D58-D60.** `GATES_LEVEL` switch (red first: `test_levels.py`, 20 cases; host 4 cases, the Gate 1 refusal guard broken and restored to prove it bites). Loops moved to `gates/pipeline.py`, every moved definition checked byte-identical except the seven changed on purpose. Skills split into a router and three per-gate skills with a plugin manifest; the plugin guard broken and restored. `paper/`: `PLAN.md`, `results.csv` (48 rows, 38 dummy), `figures.py` (7 figures), `draft/main.tex` (builds, 7 pages). `PLAN.md` §8 protocol replaced, M1-M6 kept as the appendix metrics. 675 tests (674 pass, 1 skipped); host 89 pass. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.
