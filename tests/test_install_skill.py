@@ -84,6 +84,7 @@ def test_the_plugin_ships_exactly_the_skills_in_the_repo():
         "review_loop",
         "report_loop",
         "retrieved_arxiv_ids",
+        "extract_plan_fields",
         "arxiv_lookup",
         "gate_level",
         "require_gate",

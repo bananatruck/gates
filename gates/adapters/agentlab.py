@@ -15,6 +15,7 @@ the host has one module to import from.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from pathlib import Path
@@ -23,6 +24,7 @@ from typing import Any, Callable
 from .. import pipeline
 from ..errors import GateError
 from ..gate2 import IMPLAUSIBLE_SPEEDUP, PlanField, Range, Relation, SourceClaim
+from ..llm import ModelFn, ModelLayer
 from ..schema import PaperRecord
 from .. import Gate1Config, Gate2Config, Gate3Config, Ledger, run_experiment
 from ..pipeline import (  # noqa: F401 - the host imports these from here
@@ -148,6 +150,81 @@ def make_review_context(
         phase=phase,
         reward_model=reward_model,
     )
+
+
+#: What an extracted field may be called: a setting, never a result, so a field
+#: a model read from the plan cannot collide with a number the paper reports.
+_PLAN_KEY = re.compile(r"config\.[a-z][a-z0-9_]*")
+
+PLAN_EXTRACTION_PROMPT = """You read a machine-learning research plan and list the concrete
+settings it commits to: numbers, choices and names the experiment must use,
+such as epochs, learning rate, batch size, optimizer, dataset or model.
+
+Answer with a JSON array and nothing else. One object per setting:
+  {"key": "config.<snake_case_name>", "declared": <the value>, "quote": "<the plan's exact words>"}
+
+"declared" is a number, a string or true/false. "quote" is copied word for word
+from the plan. List only what the plan states outright; if it states nothing
+concrete, answer []."""
+
+
+def extract_plan_fields(plan: str, model: ModelFn | None) -> tuple[PlanField, ...]:
+    """Tier B's input, read from this host's free-text plan by a model (F2, D55).
+
+    Agent Laboratory's plan is prose, so nobody declared ``plan_fields`` and
+    tier B never ran. ``model`` is the judge, which must not be the model under
+    test (D54). Every field returned is ``model_authored``, so a divergence on
+    it warns and cannot fail the run.
+
+    What the model says is checked before it is kept: a key must be a
+    ``config.*`` setting, a value must be a number, string or bool, and the
+    quote must appear in the plan, or the field was invented. A model that
+    fails or answers nonsense returns nothing, and tier B stays silent.
+    """
+    call = ModelLayer(model).ask(f"PLAN:\n{plan}", PLAN_EXTRACTION_PROMPT)
+    if not call.ok:
+        return ()
+    try:
+        items = json.loads(call.text[call.text.index("["):call.text.rindex("]") + 1])
+    except ValueError:
+        return ()
+    words = " ".join(plan.split())
+    fields: list[PlanField] = []
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        key, declared, quote = item.get("key"), item.get("declared"), item.get("quote")
+        if (
+            not isinstance(key, str)
+            or not _PLAN_KEY.fullmatch(key)
+            or key in {f.key for f in fields}
+            or not isinstance(declared, (bool, int, float, str))
+            or not isinstance(quote, str)
+            or not quote.strip()
+            or " ".join(quote.split()) not in words
+        ):
+            continue
+        fields.append(PlanField(key, declared, f'plan: "{" ".join(quote.split())}"', model_authored=True))
+    return tuple(fields)
+
+
+def plan_field_instructions(fields: tuple[PlanField, ...]) -> str:
+    """The engineer's half of tier B: record each setting the plan committed to.
+
+    A field the run never records is unverifiable, so the engineer is asked for
+    every one. Not added to Gate 1's expected keys, because then a field a model
+    authored could fail a run, which D55 forbids.
+    """
+    if not fields:
+        return ""
+    lines = [
+        "============= PLAN SETTINGS (RECORD THESE) =============",
+        "The plan commits to these settings. Record the value your code actually",
+        "uses for each, passing the variable that holds it:",
+        "",
+    ]
+    lines += [f'    record_result("{f.key}", <variable>)   # plan: {f.declared!r}' for f in fields]
+    return "\n".join(lines) + "\n"
 
 
 #: The sections this host's paper writer is told to produce

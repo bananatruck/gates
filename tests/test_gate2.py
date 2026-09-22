@@ -430,6 +430,91 @@ def test_a_run_that_used_a_different_value_is_a_divergence(tmp_path):
     assert check.evidence["divergent"][0]["recorded"] == 0.01
 
 
+def test_a_model_authored_divergence_warns_and_cannot_fail_the_run(tmp_path):
+    """D55: a model read this field from free-text plan prose, so a divergence
+    on it may be the model's misreading. It warns, says so, and the run passes."""
+    lr = PlanField(key="config.lr", declared=0.001, model_authored=True)
+    report = run_gate2(plan_registry({"config.lr": (0.01, None)}), config(tmp_path, plan_fields=(lr,)))
+    check = conformance(report)
+    assert report.passed
+    assert not check.passed and check.severity is Severity.WARN
+    assert "model-authored" in check.message
+    assert "model-authored" in check.evidence["discrepancies"][0]
+
+
+def test_a_human_field_still_fails_beside_a_model_authored_one(tmp_path):
+    """D55: a set holding both fails on the human field. The model's field
+    cannot soften the human declaration next to it."""
+    human = PlanField(key="config.lr", declared=0.001)
+    model = PlanField(key="config.epochs", declared=10, model_authored=True)
+    reg = plan_registry({"config.lr": (0.01, None), "config.epochs": (20, None)})
+    report = run_gate2(reg, config(tmp_path, plan_fields=(human, model)))
+    check = conformance(report)
+    assert not report.passed and check.severity is Severity.FAIL
+    assert "config.lr" in check.message
+    assert any("model-authored" in d for d in check.evidence["discrepancies"])
+
+
+PLAN = "We train for 10 epochs with a learning rate of 0.001 using Adam."
+
+
+def replying(text):
+    return lambda prompt, system: text
+
+
+def test_the_extractor_reads_what_the_plan_states_and_marks_it_model_authored():
+    """F2: nobody declared plan_fields, so tier B never ran. A model now reads
+    them from the host's free-text plan, and every one is labelled as such."""
+    from gates.adapters.agentlab import extract_plan_fields
+
+    fields = extract_plan_fields(PLAN, replying(
+        '```json\n[{"key": "config.epochs", "declared": 10, "quote": "10 epochs"},'
+        ' {"key": "config.lr", "declared": 0.001, "quote": "learning rate of 0.001"}]\n```'
+    ))
+    assert [(f.key, f.declared) for f in fields] == [("config.epochs", 10), ("config.lr", 0.001)]
+    assert all(f.model_authored for f in fields)
+    assert "learning rate of 0.001" in fields[1].source_span
+
+
+def test_the_extractor_keeps_only_what_the_plan_actually_says():
+    """A field whose quote is not in the plan was invented by the model, and a
+    key outside config.* could collide with a result the paper reports."""
+    from gates.adapters.agentlab import extract_plan_fields
+
+    fields = extract_plan_fields(PLAN, replying(
+        '[{"key": "config.batch_size", "declared": 64, "quote": "batch size 64"},'
+        ' {"key": "exp1.acc", "declared": 0.9, "quote": "10 epochs"},'
+        ' {"key": "config.optimizer", "declared": {"name": "adam"}, "quote": "Adam"},'
+        ' {"key": "config.optimizer", "declared": "adam", "quote": "using  Adam"},'
+        ' {"key": "config.optimizer", "declared": "sgd", "quote": "Adam"}]'
+    ))
+    assert [(f.key, f.declared) for f in fields] == [("config.optimizer", "adam")]
+
+
+@pytest.mark.parametrize("model", [
+    None,
+    replying("Sure! The plan uses Adam."),
+    replying("[not json]"),
+    lambda prompt, system: (_ for _ in ()).throw(RuntimeError("provider down")),
+])
+def test_an_extractor_that_cannot_answer_leaves_tier_b_silent(model):
+    """The model layer never raises into a run. No fields means tier B emits
+    nothing, which is where F2 left it, not a failure."""
+    from gates.adapters.agentlab import extract_plan_fields
+
+    assert extract_plan_fields(PLAN, model) == ()
+
+
+def test_the_engineer_is_told_to_record_every_extracted_setting():
+    """A field the run never records is unverifiable, so the engineer has to be
+    asked for it; no fields, no instruction."""
+    from gates.adapters.agentlab import plan_field_instructions
+
+    fields = (PlanField("config.epochs", 10, model_authored=True),)
+    assert 'record_result("config.epochs"' in plan_field_instructions(fields)
+    assert plan_field_instructions(()) == ""
+
+
 def test_a_field_the_run_never_recorded_is_unverifiable_not_conforming(tmp_path):
     """The shape of hallucinated methodology: a claim nobody can check.
 

@@ -12,7 +12,10 @@ import pytest
 from gates.gate1 import Gate1Config
 from gates.gate2 import Gate2Config
 from gates.gate3 import Gate3Config
-from gates.setup import WARNING, Budgets, defaults, prompt_budgets
+import json
+
+from gates import GateError
+from gates.setup import WARNING, Budgets, defaults, parse_budgets, prompt_budgets
 
 
 def answering(*replies):
@@ -74,3 +77,30 @@ def test_end_of_input_accepts_the_defaults_rather_than_crashing():
 
 def test_the_warning_names_every_gate():
     assert "gates 1, 2 and 3" in WARNING
+
+
+# --------------------------------------------------------------------------- #
+# the host reading the answer back (F5)
+# --------------------------------------------------------------------------- #
+
+
+def test_the_host_reads_back_exactly_what_setup_printed():
+    """F5: setup printed a budget and nothing read it, so every run used ours."""
+    chosen = Budgets(gate1=5, gate2=1, gate3=4)
+    assert parse_budgets(json.dumps(chosen.to_dict(), indent=2)) == chosen
+
+
+def test_a_gate_the_answer_leaves_out_keeps_our_default():
+    fallback = defaults()
+    assert parse_budgets('{"gate2": 7}') == Budgets(fallback.gate1, 7, fallback.gate3)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ['{"gate4": 2}', '{"gate1": 0}', '{"gate1": "3"}', '{"gate1": 2.5}',
+     '{"gate1": true}', "[3, 2, 3]", "not json"],
+)
+def test_a_budget_that_is_not_one_is_refused(text):
+    """A typo must not quietly run the gates on a budget nobody chose."""
+    with pytest.raises(GateError, match="budget"):
+        parse_budgets(text)

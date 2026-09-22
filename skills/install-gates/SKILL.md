@@ -87,6 +87,7 @@ State that asymmetry wherever you document the install, or it reads as an incons
 
 `gates/setup.py` owns the warning text and takes one integer per gate.
 An empty answer accepts the default.
+It prints the budgets as JSON, and your host reads them back with `parse_budgets()` and passes each as its context's `max_attempts`; Agent Laboratory takes them as `--gate-budgets`.
 Defaults live in the code and are tuned for completion and accuracy rather than for cost.
 
 Budget state lives in your adapter, never in a gate.

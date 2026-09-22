@@ -22,6 +22,7 @@ import json
 from dataclasses import asdict, dataclass
 from typing import Callable
 
+from .errors import GateError
 from .gate1 import Gate1Config
 from .gate2 import Gate2Config
 from .gate3 import Gate3Config
@@ -115,6 +116,29 @@ def _read_one(
             show(f"  A gate needs at least one attempt. Leave empty for {default}.")
             continue
         return value
+
+
+def parse_budgets(text: str) -> Budgets:
+    """Read back the JSON :func:`main` prints, for the host to pass on (F5).
+
+    A gate the text leaves out keeps our default. Anything that is not one of
+    the three gates with a whole number of at least one raises: a budget nobody
+    chose must not quietly configure a run.
+    """
+    try:
+        chosen = json.loads(text)
+    except ValueError as exc:
+        raise GateError(f"gate budgets are not JSON: {exc}") from None
+    if not isinstance(chosen, dict):
+        raise GateError("gate budgets must be a JSON object of gate1, gate2, gate3")
+    unknown = sorted(set(chosen) - set(_LABELS))
+    if unknown:
+        raise GateError(f"unknown gate budget(s): {', '.join(unknown)}")
+    for name, value in chosen.items():
+        # bool is an int in Python, and "true" is not an attempt count.
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise GateError(f"{name} budget must be a whole number of at least 1, not {value!r}")
+    return Budgets(**{**defaults().to_dict(), **chosen})
 
 
 def main() -> int:
