@@ -18,7 +18,7 @@ Install `gate1-execution` first: every revision runs under Gate 1 before Gate 2 
 | Declaration | Feeds | Why the host must say |
 |---|---|---|
 | `ranges`, `relations` | tier A | a metric's name never implies its range |
-| `plan_fields` | tier B | never parsed from plan prose; `gates/` never reads a plan |
+| `plan_fields` | tier B | `gates/` never reads a plan; a human declares them, or a judge model extracts them (`model_authored=True`, which only warns) |
 | `sources` with `lit_review` | reference bands | a band may only come from a paper the host fetched |
 
 A tier with no declaration does not run, and the report carries no row for it.

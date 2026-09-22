@@ -767,6 +767,8 @@ can run unattended (D54, D55).
 - **M2's labels**: which defect types are present in a run. A model judge labels them.
 - **Gate 2 tier B's `plan_fields`**: what the plan declared. A model extracts them from the
   host's free-text plan, in the host adapter, before the run.
+  Built 09-21 (F2): `extract_plan_fields` in `gates/adapters/agentlab.py`, run by the host's
+  `--judge-backend` model from level 2; it keeps only fields whose quote is in the plan.
 
 `gates/` still reads no plan and still holds no default, and a model still cannot decide a
 verdict.

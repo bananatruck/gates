@@ -30,5 +30,5 @@ Retrieval reads the host's two formats: `lit_review` entries keyed `arxiv_id`, a
 ## What this host cannot support, and why that is fine to report
 
 - **No bibliography.** It cites inline as `(arXiv 2308.11483v1)`, so `source.citations_parse` and `source.metadata_agrees` have no input and emit nothing. Do not synthesise one to make a check run.
-- **Free-text plans.** Nothing extracts `plan_fields`, so Gate 2 tier B only activates if a host declares them at wiring time.
+- **Free-text plans.** `extract_plan_fields` has a judge model read them when the host runs with `--judge-backend`, a different model from the one under test. Each field is model-authored, so a divergence warns and cannot fail the run; without a judge, tier B stays silent.
 - **No DOIs.** The canonical identifier is the arXiv id, compared version-stripped.

@@ -15,6 +15,7 @@ checks run is decided by **what the caller supplies**, not by a flag:
        coherence.internal_consistency  FAIL   always
        coherence.plausibility          FAIL   iff a value has unit `speedup`
     B  coherence.method_conformance    FAIL   iff `plan_fields` were supplied
+                                       WARN   ...and every divergent one is model-authored
        coherence.method_traceable      WARN   ""
        coherence.reference_interval    WARN   iff `sources` were supplied
                                        FAIL   ...and `strict_reference` is set
@@ -196,6 +197,10 @@ class PlanField:
     #: Where in the plan it was declared. Quoted in the feedback so the engineer
     #: can find it without searching.
     source_span: str = ""
+    #: A model read this field out of free-text plan prose, rather than a human
+    #: declaring it. A divergence on it may be the model's misreading, so it
+    #: warns, labelled, and cannot fail the run (D55). A human field still fails.
+    model_authored: bool = False
 
 
 @dataclass(frozen=True)
@@ -759,16 +764,26 @@ def _check_method_conformance(
                     "declared": plan_field.declared,
                     "recorded": recorded,
                     "source_span": plan_field.source_span,
+                    "model_authored": plan_field.model_authored,
                 }
             )
 
+    # D55: only a human-declared field can fail the run. A set holding both
+    # fails, and names the human field first.
+    human = [d for d in divergent if not d["model_authored"]]
+    model_only = bool(divergent) and not human
     if divergent:
-        first = divergent[0]
+        first = (human or divergent)[0]
         message = (
             f"{len(divergent)} declared field(s) the run did not use, "
             f"e.g. {first['key']}: plan declared {first['declared']!r}, "
             f"run recorded {first['recorded']!r}"
         )
+        if model_only:
+            message += (
+                "; every one is model-authored, read from the plan by a model, "
+                "so this warns and cannot fail the run"
+            )
     else:
         message = (
             f"{len(conforming)} declared field(s) match what the run recorded; "
@@ -778,7 +793,7 @@ def _check_method_conformance(
     return CheckResult(
         id="coherence.method_conformance",
         passed=not divergent,
-        severity=Severity.FAIL,
+        severity=Severity.WARN if model_only else Severity.FAIL,
         message=message,
         evidence={
             "divergent": divergent,
@@ -788,6 +803,7 @@ def _check_method_conformance(
                 f"{d['key']}: the plan declared {d['declared']!r} and the run "
                 f"recorded {d['recorded']!r}"
                 + (f" ({d['source_span']})" if d["source_span"] else "")
+                + (" [model-authored plan field]" if d["model_authored"] else "")
                 for d in divergent
             ],
         },
