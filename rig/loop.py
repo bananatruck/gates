@@ -18,13 +18,8 @@ from pathlib import Path
 from typing import Any, Callable, Protocol, Sequence
 
 from gates import GateFailure, GateReport
-from gates.adapters.agentlab import (
-    GateContext,
-    build_evidence_bundle,
-    gated_execute,
-    make_context,
-    record_divergence,
-)
+from gates.adapters.agentlab import gated_execute, make_context
+from gates.pipeline import GateContext, build_evidence_bundle, record_divergence
 
 from . import reward as legacy
 from .scenarios import Scenario, Step

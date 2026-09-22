@@ -284,20 +284,32 @@ this run?* — and these are outside it by design rather than by omission:
 
 ## Porting to another scaffold
 
-`gates/` imports nothing from any host system. Porting means writing one adapter
-next to `gates/adapters/agentlab.py`, which is the reference implementation
-against Agent Laboratory's MLE solver. An adapter is responsible for:
+`gates/` imports nothing from any host system.
+The loops every host shares are in `gates/pipeline.py`; porting means writing one small adapter that builds their contexts, next to `gates/adapters/agentlab.py`, the reference against Agent Laboratory.
 
-1. building a `Gate1Config` and a `GateContext` for the phase,
-2. calling `gated_execute` where the scaffold used to call its `exec` helper,
-3. charging one rewrite per *agent turn* (not per execution — automated repair
-   loops must not eat the agent's budget),
-4. handing `render_feedback(report)` back to the agent on rejection,
-5. after the experiment phase, calling `review_loop` with a `revise` callback
-   that returns the engineer's next version of the code. Every version runs
-   under Gate 1 before Gate 2 reviews the registry it wrote, so a fix cannot
-   reach Gate 2 without running. The outcome carries the registry the writer
-   cites and the limitations it must declare.
+The install path ships as agent skills: a router, `install-gates`, and one skill per gate.
+In Claude Code:
+
+```
+/plugin marketplace add bananatruck/gates
+/plugin install gates@gates
+```
+
+Any other agent can read `skills/install-gates/SKILL.md` and follow it from there.
+
+### Choosing which gates run
+
+`GATES_LEVEL` picks the arm, and the levels are cumulative because each gate reads what the one before it produced:
+
+| `GATES_LEVEL` | Gates open |
+|---|---|
+| `0` | none: the host exactly as shipped |
+| `1` | Gate 1 |
+| `2` | Gates 1 and 2 |
+| `3` | all three (the default) |
+
+A closed gate raises before it spends an agent turn, so no setting runs Gate 2 or Gate 3 without the gates below it.
+`GATES_GATE1=off` still means level 0; setting both raises.
 
 ## Artifacts
 

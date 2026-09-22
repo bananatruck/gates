@@ -273,7 +273,7 @@ def test_the_writer_receives_the_warning_evidence_not_just_the_count(config):
     warning it can see the count of but not the content is an instruction to
     guess -- this layer's own failure mode, reproduced at its exit."""
     import re
-    from gates.adapters.agentlab import build_evidence_bundle
+    from gates.pipeline import build_evidence_bundle
 
     def smart(prompt, system):
         if "JSON array" in system:
@@ -298,7 +298,7 @@ def test_the_writer_receives_the_warning_evidence_not_just_the_count(config):
 
 
 def test_deterministic_log_findings_also_reach_the_writer(config):
-    from gates.adapters.agentlab import build_evidence_bundle
+    from gates.pipeline import build_evidence_bundle
 
     src = (
         "print('RuntimeWarning: invalid value encountered in true_divide')\n"

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "gates",
+  "description": "G.A.T.E.S. validity layer install skills.",
+  "owner": {
+    "name": "bananatruck",
+    "url": "https://github.com/bananatruck"
+  },
+  "plugins": [
+    {
+      "name": "gates",
+      "description": "Install G.A.T.E.S. into a research scaffold: a router skill plus one skill per gate.",
+      "source": "./",
+      "category": "development"
+    }
+  ]
+}

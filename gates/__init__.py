@@ -5,18 +5,21 @@ grip on evidence:
 
 * **Gate 1 — execution validity.** Did the code actually run, and were the
   reported numbers produced by this run? Deterministic; no model consulted.
-* **Gate 2 — source ↔ result coherence.** Are the measured results consistent
-  with what the cited literature reports? Three tiers, each activated by what
-  the caller supplies: range and internal consistency always, reference
-  intervals with a source corpus, semantic checks with a model.
+* **Gate 2 — source ↔ result coherence.** Is a verified run consistent with
+  what its plan declared? Each tier runs only on what the host declares: tier A
+  checks declared ranges and relations, tier B checks declared methodology
+  fields, and tier C is the feedback loop. No model reaches a verdict (D19).
 * **Gate 3 — report validity.** Does every number in the manuscript trace to
-  something that was measured? The writer emits ``\\result{key}`` tokens and the
-  renderer, not the model, writes the digits. Citation binding pending a
-  registry of fetched papers.
+  something that was measured, and does every citation resolve to a paper the
+  run retrieved? The writer emits ``\\result{key}`` tokens and the renderer, not
+  the model, writes the digits.
 
-Nothing in this package imports a host scaffold. Porting to a new one means
-writing a single adapter — see ``adapters/agentlab.py`` for the reference
-implementation against Agent-Researcher / Agent Laboratory.
+``GATES_LEVEL`` (0 to 3) picks how many gates run, cumulatively; see
+``pipeline.gate_level``.
+
+Nothing in this package imports a host scaffold. The loops every host shares
+are in ``pipeline.py``; porting to a new host means writing one small adapter,
+with ``adapters/agentlab.py`` as the reference against Agent Laboratory.
 """
 
 from .errors import GateError, GateFailure, HarnessError

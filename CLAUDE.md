@@ -64,8 +64,9 @@ Changing one invalidates a published claim, so do not change one without saying 
   Setup shows the cost warning and takes one integer per gate; an empty field accepts our default.
   The decision is made at wiring time with the tradeoff on screen, rather than sleepwalked past.
   `gates/setup.py` owns the warning text and the prompt; no gate compares its own attempt against the budget.
-- **The install path ships as a skill.**
-  A `SKILL.md` that walks any coding agent through adding G.A.T.E.S. to an existing research scaffold: write the adapter, place the call sites, budget in agent turns.
+- **The install path ships as skills.**
+  `skills/install-gates` routes any coding agent through adding G.A.T.E.S. to an existing research scaffold, and `skills/gate1-execution`, `gate2-coherence` and `gate3-report` install one gate each.
+  `.claude-plugin/` packages them for `/plugin install`, and `tests/test_install_skill.py` holds them to the code.
   Portability is the paper's central claim, so the install process is the claim made executable.
 
 ## 4. Per-gate policy on exhaustion
@@ -84,7 +85,7 @@ No gate compares its own `attempt` against `max_attempts`.
 ## 5. Build conventions
 
 - Tests run with the repo venv: `.venv/bin/python -m pytest`.
-  All of them, every time. 635 pass today; the live arXiv test is skipped unless `GATES_LIVE_ARXIV=1`.
+  All of them, every time. 674 pass today; the live arXiv test is skipped unless `GATES_LIVE_ARXIV=1`.
 - Bug fixes start with a failing test that reproduces the bug.
 - Cache and build output live under `.cache/`. Nothing else belongs in the repo root.
 - Do not commit scratch notes, TODO dumps, or generated summary docs unless asked.
