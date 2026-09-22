@@ -15,7 +15,7 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: main
-head: 3ce44ba
+head: aebb3a0
 head_date: 2026-09-21
 tests_total: 694
 tests_gate1: 105
@@ -283,6 +283,6 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-16 | `5f7636e` | Merged at `edc41e3` and pushed. Corrected the `ea3bdb6` row: the branch deletions did not run. |
 | 09-19 | `e0fa328` | Host scope reopened for F13-F17 only; all five fixed and pushed to `agent-researcher` (`b4a653a`, `a869cb0`, `1ab459b`, `1245dea`, `7e3d145`), 85 host tests pass. Here: `gate1_enabled()` documented as the whole-layer switch, `PLAN.md` §8 (metrics M1-M6, protocol E1-E3, ground-truth sources), Gate 3 build-order row corrected, D53-D57, F18 opened. No gates test changed: 636. Branch cleanup still pending. |
 | 09-21 | `8a7e805`, `faf6eb7` | **D58-D60.** `GATES_LEVEL` switch (red first: `test_levels.py`, 20 cases; host 4 cases, the Gate 1 refusal guard broken and restored to prove it bites). Loops moved to `gates/pipeline.py`, every moved definition checked byte-identical except the seven changed on purpose. Skills split into a router and three per-gate skills with a plugin manifest; the plugin guard broken and restored. `paper/`: `PLAN.md`, `results.csv` (48 rows, 38 dummy), `figures.py` (7 figures), `draft/main.tex` (builds, 7 pages). `PLAN.md` §8 protocol replaced, M1-M6 kept as the appendix metrics. 675 tests (674 pass, 1 skipped); host 89 pass. Each commit green alone in a worktree; merged `--no-ff` at `3ce44ba` and pushed. Host `611a780` pushed to `agent-researcher` `feat/gates-d42-connect`. |
-| 09-21 | this branch | **F5 and F2 closed**, red first each. F5: `parse_budgets` (9 cases), host flag and YAML pass-through (2). F2: `PlanField.model_authored`, WARN cap (2), `extract_plan_fields` and `plan_field_instructions` (7), host judge wiring (4). Guards broken and restored: the WARN cap, and the judge-is-not-the-model check. 694 tests (693 pass, 1 skipped); host 95 pass. |
+| 09-21 | `84c1d17` | **F5 and F2 closed**, red first each. F5: `parse_budgets` (9 cases), host flag and YAML pass-through (2). F2: `PlanField.model_authored`, WARN cap (2), `extract_plan_fields` and `plan_field_instructions` (7), host judge wiring (4). Guards broken and restored: the WARN cap, and the judge-is-not-the-model check. 694 tests (693 pass, 1 skipped); host 95 pass. Merged `--no-ff` at `aebb3a0` and pushed; host `6845375` pushed to `agent-researcher` `feat/gates-d42-connect`. |
 
 Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 → 415, each green alone.
