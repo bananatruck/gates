@@ -20,3 +20,6 @@ reports/status.zip
 
 # Never commit a credential file, wherever it is copied from.
 *.env
+
+# The draft's build output. `tectonic paper/draft/main.tex` rebuilds it.
+paper/draft/main.pdf

@@ -645,8 +645,12 @@ gates/                        (standalone repo, pip-installable, zero runtime de
     registry.py               the citable value registry and its provenance chains
     report.py                 feedback report rendering (text + JSON)
     ledger.py                 divergence.jsonl
+    pipeline.py               the loops every host shares, and the GATES_LEVEL switch (D58)
     adapters/
-      agentlab.py             reference adapter — Agent Laboratory / Agent-Researcher
+      agentlab.py             reference adapter - Agent Laboratory's defaults and paths only
+      arxiv.py                arXiv resolver for Gate 3; a socket, so not in gates/ (D41)
+  skills/                     install-gates router + one skill per gate (D59)
+  .claude-plugin/             packages skills/ for /plugin install
   tests/
     test_gate1.py             gate behaviour, independent of any scaffold
 ```
@@ -729,7 +733,16 @@ Brought in from `GATE2_implementation_spec.md` §4 and §5 so this repository ca
 experiment. The spec lives outside the repository, and every reference to "spec §5" in
 `progress.md` used to be unresolvable from a checkout (D57).
 
-### 8.1 The six metrics
+### 8.1 The protocol
+
+Superseded on 09-21 by D58-D60 in `progress.md`: three benchmarks (CORE-Bench, MLR-Bench, BadScientist), each run at the four cumulative `GATES_LEVEL`s, each reported as one integrity metric and one task score.
+The protocol, the figures and the steps to run it live in `paper/PLAN.md`, which is the single source.
+What follows here is what still applies to it.
+
+### 8.2 The mechanism metrics
+
+These measure how the gates behave rather than what they change on a benchmark, and report in the paper's appendix, "Mechanism evidence", next to the `rig/` results.
+M2 is the exception: it became the MLR-Bench integrity panel in `paper/PLAN.md`.
 
 | ID | What it reports | Rule |
 |---|---|---|
@@ -740,47 +753,13 @@ experiment. The spec lives outside the repository, and every reference to "spec 
 | M5 | loop behaviour | resolution rate, mean attempts to resolution, and runs that exhausted the budget and proceeded with a caveat. The last is a feature, and the text must say so or a reviewer reads it as a failure |
 | M6 | cost | Gate 2 makes zero model calls, so report wallclock overhead per gated run against ungated. MLR-Judge needs a model per evaluation; Gate 2 needs none |
 
-### 8.2 E1, the positive set
-
-MLR-Bench's ten experimentation tasks, run gated and ungated, same seeds, same model, paired.
-Report per-task differences, not only aggregates.
-
-Two arms, not four: every gate off against every gate on (D53).
-Per-gate arms are a later experiment, and the tier comparison that needs no model already exists
-in `rig/gate2_tier_comparison.py`.
-`GATES_GATE1=off` is the switch for the whole layer, and the host skips Gates 2 and 3 when it is
-set, because neither has an input without Gate 1's registry.
-
-The first run is a pilot: one task, both arms, one seed, all three gates.
-It sets the cost and the wallclock per run, which is also M6, and only then is the number of
-seeds chosen.
-Ten tasks at one seed put a result of 8/10 inside [0.49, 0.94]; thirty runs at 24/30 narrow that
-to [0.63, 0.90].
-
-The tasks come from MLR-Bench's own release rather than retyped from the paper.
-The runner is the host's `tools_full_gate1_ablation.py`: one parsed config, two arms in isolated
-working directories, a manifest per run.
-It stays in the host because `rig/` never opens a socket (D41) and never calls a model.
-
-### 8.3 E2, the negative set
-
-BadScientist cannot serve here: its strategies manipulate how a paper presents itself, so it
-tests Gate 3, and fabrication happens before a paper exists.
-It is held for Gate 3's adversarial evaluation, which is not built (F18).
-
-Gate 2's negatives are synthesized instead, one registry per defect class, each asserting the
-specific check id that fires.
-A fixture that fails for the wrong reason is a passing test hiding a broken check.
-Six of the seven live as cases in `rig/gate2_tier_a_eval.py` and `rig/gate2_tier_b_eval.py`; the
-seventh, a random binary baseline at 0.65, was dropped with its reason (D20).
-
-### 8.4 E3, the reporting rule
+### 8.3 The reporting rule
 
 Every rate carries a Wilson interval and its denominator.
 A number without both is a construction-level claim and must be phrased as one, never as a
 measured frequency.
 
-### 8.5 Where the ground truth comes from
+### 8.4 Where the ground truth comes from
 
 Two inputs are neither measured nor deterministic, and both are now model-authored so a campaign
 can run unattended (D54, D55).
