@@ -124,8 +124,10 @@ Each phase ends on a done-criterion, and each fills named rows of `results.csv`.
 
 **Phase 1 - the level runner.**
 Generalise the host's `tools_full_gate1_ablation.py` from two arms to the four levels: it sets `GATES_LEVEL` per arm instead of `GATES_GATE1`, and writes the run layout in section 6.
-Add `paper/collect.py`, which reads the run folders and rewrites the matching CSV rows as `measured`.
-Done when one fake task runs at all four levels and `collect.py` turns its four rows from `dummy` to `measured`.
+`paper/collect.py` is built (09-26): it reads the run folders, rewrites each cell's two CSV rows as `measured`, and writes each cell's measured cost and wallclock to `paper/costs.csv`.
+`tests/test_collect.py` holds the done-criterion on a fake tree: one task at four levels turns eight rows from `dummy` to `measured`.
+What remains is the runner in the host.
+Done when one real task runs at all four levels and `collect.py` measures its rows.
 
 **Phase 2 - MLR-Bench pilot.**
 One task, four levels, one seed, with tasks taken from MLR-Bench's release rather than retyped.
@@ -173,7 +175,8 @@ One folder per run, outside the repository because runs are large, so a papers-a
 
 ```
 runs/<benchmark>/<task>/<system>/L<level>/seed<k>/
-  manifest.json        config SHA-256, GATES_LEVEL, model, both repos' commit SHAs, cost, wallclock
+  manifest.json        benchmark, task, system, level, seed, model, config SHA-256, both repos' commit SHAs, cost_usd, wallclock_s
+  metrics.json         integrity_event and task_score, written once the judge has labelled the run
   paper/               the manuscript the system emitted, or reason.txt saying why none was
   code/                the experiment code that produced the registry
   agent_log.txt
