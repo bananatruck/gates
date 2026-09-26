@@ -1,29 +1,28 @@
 # Gate 2 / Gate 3 literature readout
 
-Status: draft for the Thursday readout. Not merged.
+Status: draft for the Thursday readout.
+Not merged.
 Scope: what the cited literature actually says, and the six design questions it bears on.
 
-Every number below was read off a PDF in the `Sources/` folder or off the arXiv source, and
-the page or table it came from is named. Where I could not verify a number, it says so.
+Every number below was read off a PDF in the `Sources/` folder or off the arXiv source, and the page or table it came from is named.
+Where I could not verify a number, it says so.
 Nothing here is a measurement of our own system.
 
-The two frozen constraints held: `reports/finalized-report-and-results/` was not touched,
-and nothing here treats `gates/retrieval.py` as a paper registry (it is BM25 over the
-log-line exemplar bank in `gates/exemplars.py`).
+The two frozen constraints held: `reports/finalized-report-and-results/` was not touched, and nothing here treats `gates/retrieval.py` as a paper registry (it is BM25 over the log-line exemplar bank in `gates/exemplars.py`).
 
 ---
 
 ## 0. Correction: the 42% is real, and I had it wrong first time round
 
-My first pass through this searched **AutoResearchClaw** (`2605.20025`) for the 42% in the
-brief, did not find it, and reported the brief as mistaken. That was my error. The number
-is real. It is in **ScientistOne** (`2605.26340`, Google Cloud AI Research), which is also
-sitting in `Sources/Relative Results/` and which the brief did not name. The two arXiv ids
-are adjacent, which is how I looked in the wrong one.
+My first pass through this searched **AutoResearchClaw** (`2605.20025`) for the 42% in the brief, did not find it, and reported the brief as mistaken.
+That was my error.
+The number is real.
+It is in **ScientistOne** (`2605.26340`, Google Cloud AI Research), which is also sitting in `Sources/Relative Results/` and which the brief did not name.
+The two arXiv ids are adjacent, which is how I looked in the wrong one.
 
-ScientistOne's contribution is a **CoE Integrity Audit**: four checks applied uniformly to
-five systems, 15 papers each, 75 papers total. The checks are score verification,
-specification violation, reference verification, and method-code alignment. Table 1:
+ScientistOne's contribution is a **CoE Integrity Audit**: four checks applied uniformly to five systems, 15 papers each, 75 papers total.
+The checks are score verification, specification violation, reference verification, and method-code alignment.
+Table 1:
 
 | System | Score Verif. (up) | Spec. Violation (down) | Ref. Verif. (down) | Method-Code (up) |
 |---|---|---|---|---|
@@ -33,37 +32,25 @@ specification violation, reference verification, and method-code alignment. Tabl
 | AI-Researcher | 9/12 | 1/15 | 21/222 | 12/15 |
 | ScientistOne | 12/12 | 0/15 | 0/337 | 14/15 |
 
-So "AutoResearchClaw has grounding, still 42% on audit" is exactly right, and the precise
-form of it is sharper than the brief: AutoResearchClaw ships a verified numeric registry
-and a four-layer citation pipeline, reports zero fabrication in its own ablation, and then
-**scores 5/12 on score verification and 3/15 on method-code alignment when a third party
-audits it.** Its own paper is not wrong about its registry; the registry simply does not
-check the thing that fails.
+So "AutoResearchClaw has grounding, still 42% on audit" is exactly right, and the precise form of it is sharper than the brief: AutoResearchClaw ships a verified numeric registry and a four-layer citation pipeline, reports zero fabrication in its own ablation, and then **scores 5/12 on score verification and 3/15 on method-code alignment when a third party audits it.**
+Its own paper is not wrong about its registry; the registry simply does not check the thing that fails.
 
-That is the opening, and ScientistOne states the mechanism for us: the gap is largest on
-"reference integrity and method-code alignment -- the two checks that test evidence
-provenance rather than score reproduction." AutoResearchClaw's own §4 says the same thing
-from the inside: *"verification is necessary but not sufficient... the gate cannot tell
-whether those measurements answer the research question."* SAGE independently names it
-**method-provenance grounding** and declares it open in itself and its baselines.
+That is the opening, and ScientistOne states the mechanism for us: the gap is largest on "reference integrity and method-code alignment -- the two checks that test evidence provenance rather than score reproduction."
+AutoResearchClaw's own §4 says the same thing from the inside: *"verification is necessary but not sufficient... the gate cannot tell whether those measurements answer the research question."*
+SAGE independently names it **method-provenance grounding** and declares it open in itself and its baselines.
 
-Three papers, three vocabularies, one gap: **score reproduction is solved and evidence
-provenance is not.** Gate 2 tier B and Gate 3 citation binding are aimed at it, and both
-are blocked on the same missing object (§4).
+Three papers, three vocabularies, one gap: **score reproduction is solved and evidence provenance is not.**
+Gate 2 tier B and Gate 3 citation binding are aimed at it, and both are blocked on the same missing object (§4).
 
-Note for the writeup: ScientistOne's method-code alignment check (I4) is model-judged
-("I4 judgments were validated on a sampled basis", against I1-I3 which were manually
-verified). So the 3/15 is not a deterministic measurement, and we should cite it as an
-audited rate rather than a proven one -- the same honesty boundary we impose on our own
-tier C.
+Note for the writeup: ScientistOne's method-code alignment check (I4) is model-judged ("I4 judgments were validated on a sampled basis", against I1-I3 which were manually verified).
+So the 3/15 is not a deterministic measurement, and we should cite it as an audited rate rather than a proven one -- the same honesty boundary we impose on our own tier C.
 
 ## 1. Five SourceClaim entries, hand-pulled (the Friday unblock)
 
-Chosen from all nine PDFs in `Sources/`, not just the ones the brief named. Two carry a
-reported interval (and deliberately two *different kinds* of interval, which is §2); three
-are point estimates with exact denominators, which is §3. All five construct and run
-through the real `gates.gate2.band_for()`, and all five bind to a fetched `PaperRecord`
-(§4). Output verified below, not asserted.
+Chosen from all nine PDFs in `Sources/`, not just the ones the brief named.
+Two carry a reported interval (and deliberately two *different kinds* of interval, which is §2); three are point estimates with exact denominators, which is §3.
+All five construct and run through the real `gates.gate2.band_for()`, and all five bind to a fetched `PaperRecord` (§4).
+Output verified below, not asserted.
 
 ```python
 CLAIMS = (
@@ -118,8 +105,7 @@ CLAIMS = (
 )
 ```
 
-Run through `band_for(claim, default_rel_tol=0.05)`, with each `source_id` resolved
-against a `PaperRecord` fetched live from the arXiv API and hashed against the local PDF:
+Run through `band_for(claim, default_rel_tol=0.05)`, with each `source_id` resolved against a `PaperRecord` fetched live from the arXiv API and hashed against the local PDF:
 
 | bound | key | value | band | origin |
 |---|---|---|---|---|
@@ -131,9 +117,9 @@ against a `PaperRecord` fetched live from the arXiv API and hashed against the l
 
 `All claims bound: True   registry size: 4`
 
-Two defects fall straight out of that table. The two `reported_interval` rows are not the
-same kind of interval (§2). The three `default_relative` rows are between 3.7x and **19x
-too narrow** (§3).
+Two defects fall straight out of that table.
+The two `reported_interval` rows are not the same kind of interval (§2).
+The three `default_relative` rows are between 3.7x and **19x too narrow** (§3).
 
 ### Also pulled, not in the five
 
@@ -146,34 +132,32 @@ too narrow** (§3).
 
 ### One set of numbers in `Sources/` that must never become a SourceClaim
 
-`Jr.AI Scientist.pdf` App B.3 prints four 95% confidence intervals (iNaturalist
-`[2.7%, 3.1%]`, SUN `[2.1%, 2.6%]`, Places365 `[1.6%, 2.0%]`, Texture `[1.2%, 1.6%]`)
-which the authors annotate as **fabricated** -- the experiment ran once. They are in the
-folder, they look exactly like every other interval in this document, and nothing about
-their shape distinguishes them. Whatever populates `sources` needs a human in the loop or
-a provenance rule; a scraper pointed at the folder would ingest them. See §2b.
+`Jr.AI Scientist.pdf` App B.3 prints four 95% confidence intervals (iNaturalist `[2.7%, 3.1%]`, SUN `[2.1%, 2.6%]`, Places365 `[1.6%, 2.0%]`, Texture `[1.2%, 1.6%]`) which the authors annotate as **fabricated** -- the experiment ran once.
+They are in the folder, they look exactly like every other interval in this document, and nothing about their shape distinguishes them.
+Whatever populates `sources` needs a human in the loop or a provenance rule; a scraper pointed at the folder would ingest them.
+See §2b.
 
 ---
 
 ## 2. Headline finding: `SourceClaim.interval` has no kind, and it needs one
 
-`interval` is `tuple[float, float] | None`, and `Band.origin` records
-`reported_interval` when it is present. Look at rows 1 and 4 above. Both say
-`reported_interval`. They are not the same object:
+`interval` is `tuple[float, float] | None`, and `Band.origin` records `reported_interval` when it is present.
+Look at rows 1 and 4 above.
+Both say `reported_interval`.
+They are not the same object:
 
 - CORE-Bench row: a **95% confidence interval** over a mean, n=3.
 - PaperBench row: **one standard error of the mean**, n=3. Roughly 68% coverage.
 
-We currently widen a claim by a 68%-coverage band and a 95%-coverage band through the
-same code path, label both `reported_interval`, and publish that as the principled option.
-That is the overclaim our own duty 3 forbids, committed by us, inside the field whose
-entire purpose is to record where a band came from.
+We currently widen a claim by a 68%-coverage band and a 95%-coverage band through the same code path, label both `reported_interval`, and publish that as the principled option.
+That is the overclaim our own duty 3 forbids, committed by us, inside the field whose entire purpose is to record where a band came from.
 
-Worse, rows differ in kind again: CORE-Bench uses a **95% prediction interval** for
-grading task answers and a **95% confidence interval** for reporting agent accuracy. Those
-answer different questions (section 8). Both would land in `interval` today.
+Worse, rows differ in kind again: CORE-Bench uses a **95% prediction interval** for grading task answers and a **95% confidence interval** for reporting agent accuracy.
+Those answer different questions (section 8).
+Both would land in `interval` today.
 
-**Proposed change.** `interval` becomes a small frozen record, not a tuple:
+**Proposed change.**
+`interval` becomes a small frozen record, not a tuple:
 
 ```python
 @dataclass(frozen=True)
@@ -185,13 +169,10 @@ class ReportedInterval:
     n: int | None            # runs the interval was computed from
 ```
 
-and `Band.origin` becomes `reported_ci_95`, `reported_sem`, ... rather than one flat
-`reported_interval`. This is a strictly deterministic change, stays in tier A/B, costs no
-model call, and it is the difference between "within tolerance" and "within *whose*
-tolerance".
+and `Band.origin` becomes `reported_ci_95`, `reported_sem`, ... rather than one flat `reported_interval`.
+This is a strictly deterministic change, stays in tier A/B, costs no model call, and it is the difference between "within tolerance" and "within *whose* tolerance".
 
-Cheap and worth doing before Friday, because all five entries above are already typed
-wrong.
+Cheap and worth doing before Friday, because all five entries above are already typed wrong.
 
 ### 2b. The fabricated interval
 
@@ -203,57 +184,57 @@ wrong.
 > improvements: iNaturalist [2.7%, 3.1%], SUN [2.1%, 2.6%], Places365 [1.6%, 2.0%],
 > and Texture [1.2%, 1.6%]."
 
-with the authors' margin annotation: **"This is a hallucination, as the experiment was in
-fact executed only once."**
+with the authors' margin annotation: **"This is a hallucination, as the experiment was in fact executed only once."**
 
 An agent will invent a confidence interval, a seed count, and a p-value in one paragraph.
-This gives Gate 3 a new check that is *deterministic and provable*, so it sits on the right
-side of the honesty boundary:
+This gives Gate 3 a new check that is *deterministic and provable*, so it sits on the right side of the honesty boundary:
 
-> **`report.dispersion_supported`** — if the manuscript states a CI, a `±`, an SD, a SEM,
+> **`report.dispersion_supported`**: if the manuscript states a CI, a `±`, an SD, a SEM,
 > or a p-value for a key, the registry must record n >= 2 runs for that key. A single-run
 > registry cannot license a dispersion claim.
 
-No model needed, no literature needed, FAIL severity, and it catches the exact artifact
-above. I think this is the strongest single check in this document.
+No model needed, no literature needed, FAIL severity, and it catches the exact artifact above.
+I think this is the strongest single check in this document.
 
 ---
 
 ## 3. Where does tolerance come from when a paper gives only a point estimate?
 
-Ranked, most defensible first. The first option is the one we do not currently have.
+Ranked, most defensible first.
+The first option is the one we do not currently have.
 
-**(a) The precision the source itself wrote down.** A paper that prints `60.60` has
-asserted two decimal places; the value it measured lies in `[60.595, 60.605)`. That
-half-unit-in-the-last-place band is *derivable from the point estimate alone*, requires no
-assumption, and is the only band the source actually licenses. It is deterministic, so it
-belongs in tier B beside `reported_interval`. Proposed `origin="reported_precision"`.
+**(a) The precision the source itself wrote down.**
+A paper that prints `60.60` has asserted two decimal places; the value it measured lies in `[60.595, 60.605)`.
+That half-unit-in-the-last-place band is *derivable from the point estimate alone*, requires no assumption, and is the only band the source actually licenses.
+It is deterministic, so it belongs in tier B beside `reported_interval`.
+Proposed `origin="reported_precision"`.
 
-Caveat, and it is a real one: last-place precision measures *how the number was written*,
-not how much it would move on a rerun. For `21.48` it gives a band of ±0.005 against a
-true 95% CI of ±2.60 — 520x too narrow. So it is a **floor, not a substitute**: it is
-sound as a bound on transcription and rounding error, and unsound as a bound on run-to-run
-variance. It should never be used to claim agreement with a rerun.
+Caveat, and it is a real one: last-place precision measures *how the number was written*, not how much it would move on a rerun.
+For `21.48` it gives a band of ±0.005 against a true 95% CI of ±2.60, 520x too narrow.
+So it is a **floor, not a substitute**: it is sound as a bound on transcription and rounding error, and unsound as a bound on run-to-run variance.
+It should never be used to claim agreement with a rerun.
 
-**(b) A declared relative tolerance** (`rel_tol`), recorded as `declared_relative`. What
-we have. Honest because it is labelled.
+**(b) A declared relative tolerance** (`rel_tol`), recorded as `declared_relative`.
+What we have.
+Honest because it is labelled.
 
-**(c) The default** (`default_rel_tol = 0.05`), recorded as `default_relative`. Also
-honest because it is labelled, but see below — the number is wrong.
+**(c) The default** (`default_rel_tol = 0.05`), recorded as `default_relative`.
+Also honest because it is labelled.
+But see below: the number is wrong.
 
-**(d) Not available: deriving an interval ourselves.** For a proportion like SAGE's 11/12
-we *could* compute a Wilson interval. We should not put it in `interval`, because the
-source did not report it and `reported_interval` would then be a lie. If we compute one it
-must carry its own origin (`derived_wilson`) and say so in the report.
+**(d) Not available: deriving an interval ourselves.**
+For a proportion like SAGE's 11/12 we *could* compute a Wilson interval.
+We should not put it in `interval`, because the source did not report it and `reported_interval` would then be a lie.
+If we compute one it must carry its own origin (`derived_wilson`) and say so in the report.
 
-**What the literature does.** SAGE's sanitizer allows **1% relative tolerance** for
-rounding when matching a drafted table cell against its measured registry. That is the
-closest published analogue to our `default_rel_tol`, and it is 5x tighter than ours —
-but note it is doing a *different job*: matching a number to its own measurement, not to a
-rerun. Our 5% is in the wrong place for both jobs.
+**What the literature does.**
+SAGE's sanitizer allows **1% relative tolerance** for rounding when matching a drafted table cell against its measured registry.
+That is the closest published analogue to our `default_rel_tol`, and it is 5x tighter than ours.
+But it does a *different job*: matching a number to its own measurement, not to a rerun.
+Our 5% is in the wrong place for both jobs.
 
-**Our default is falsely confident, and by more than I expected.** Measured on the three
-point-estimate claims from §1:
+**Our default is falsely confident, and by more than I expected.**
+Measured on the three point-estimate claims from §1:
 
 | claim | k/n | `default_relative` | Wilson 95% | too narrow by |
 |---|---|---|---|---|
@@ -261,24 +242,20 @@ point-estimate claims from §1:
 | method_code_alignment_rate | 3/15 | [19.00, 21.00] w=2.00 | [7.05, 45.19] w=38.14 | **19.1x** |
 | metrics_bearing_rate | 11/12 | [87.09, 96.25] w=9.17 | [64.61, 98.51] w=33.90 | 3.7x |
 
-A relative tolerance is the wrong instrument for a proportion, and the error compounds
-exactly where it hurts: the *smaller* the measured rate, the tighter the relative band gets
-and the wider the true interval is. At 3/15 we would declare a real disagreement over any
-value outside [19.0, 21.0] when the honest interval runs from 7% to 45%.
+A relative tolerance is the wrong instrument for a proportion, and the error compounds exactly where it hurts: the *smaller* the measured rate, the tighter the relative band gets and the wider the true interval is.
+At 3/15 we would declare a real disagreement over any value outside [19.0, 21.0] when the honest interval runs from 7% to 45%.
 
-Recommend: do not apply a relative tolerance to a proportion at all. Route proportions to a
-Wilson interval carrying `origin="derived_wilson"`, and reserve `rel_tol` for continuous
-metrics. This needs `SourceClaim` to know a claim *is* a proportion -- either a `k`/`n`
-pair alongside `value`, or a unit of `proportion`/`percent` plus a denominator.
+Recommend: do not apply a relative tolerance to a proportion at all.
+Route proportions to a Wilson interval carrying `origin="derived_wilson"`, and reserve `rel_tol` for continuous metrics.
+This needs `SourceClaim` to know a claim *is* a proportion -- either a `k`/`n` pair alongside `value`, or a unit of `proportion`/`percent` plus a denominator.
 
 ---
 
 ## 4. `PaperRecord`, and the four APIs measured against it
 
-CLAUDE.md §6 is right that this does not exist and that both Gate 2 tier B and Gate 3
-citation binding need it. `SourceClaim.source_id` already promises "Gate 3 requires this to
-be in the retrieval registry, so a band can never come from a paper nobody fetched" --
-today nothing enforces that promise. This is the object that would.
+CLAUDE.md §6 is right that this does not exist and that both Gate 2 tier B and Gate 3 citation binding need it.
+`SourceClaim.source_id` already promises "Gate 3 requires this to be in the retrieval registry, so a band can never come from a paper nobody fetched" -- today nothing enforces that promise.
+This is the object that would.
 
 ```python
 @dataclass(frozen=True)
@@ -317,8 +294,8 @@ class PaperRecord:
         """The form SourceClaim.source_id uses: 'arXiv:2409.11363', version-stripped."""
 ```
 
-Built for real against the four papers behind the five claims: fetched from the arXiv API,
-hashed against the local PDF, and every `source_id` resolved. Sample record:
+Built for real against the four papers behind the five claims: fetched from the arXiv API, hashed against the local PDF, and every `source_id` resolved.
+Sample record:
 
 ```
 arxiv_id         2605.26340v1
@@ -336,19 +313,16 @@ version          v1
 
 ### Where it must live
 
-Not in `gates/`, and this is not a style preference. A gate that makes a network call can
-block, time out and rate-limit, which breaks *"deterministic checks decide the verdict"*
-exactly as a model call would -- and §4b below shows one of these four APIs returning
-HTTP 429 on the first call of a burst. `PaperRecord` is data; the *fetching* belongs in the
-adapter, and records arrive injected the way `ModelFn` does. That also keeps the `rig/`
-scenario loop runnable with no network and no key, which is the existing half-two
-requirement. The dataclass itself is stdlib-only and can sit in `gates/`; the `urllib`
-calls cannot.
+Not in `gates/`, and this is not a style preference.
+A gate that makes a network call can block, time out and rate-limit, which breaks *"deterministic checks decide the verdict"* exactly as a model call would -- and §4b below shows one of these four APIs returning HTTP 429 on the first call of a burst.
+`PaperRecord` is data; the *fetching* belongs in the adapter, and records arrive injected the way `ModelFn` does.
+That also keeps the `rig/` scenario loop runnable with no network and no key, which is the existing half-two requirement.
+The dataclass itself is stdlib-only and can sit in `gates/`; the `urllib` calls cannot.
 
 ### 4b. The four resolvers, probed rather than recalled
 
-All four queried with stdlib `urllib` for CORE-Bench (`2409.11363`), plus a second round
-for the cases that failed. Measured, not remembered:
+All four queried with stdlib `urllib` for CORE-Bench (`2409.11363`), plus a second round for the cases that failed.
+Measured, not remembered:
 
 | | arXiv API | OpenAlex | Semantic Scholar | Crossref |
 |---|---|---|---|---|
@@ -384,44 +358,38 @@ Four findings that changed my recommendation from the first draft:
 
 ### Recommendation
 
-**arXiv API as the identity spine**, because `source_id` is already an arXiv id in every
-one of our five claims, it is the only version-authoritative source, it is the fastest, and
-it needs no key. **Crossref for published venue** once a paper leaves preprint. **OpenAlex
-as the fallback linker** for anything non-arXiv without a DOI. **DataCite only if** we ever
-need to resolve an arXiv DOI rather than an arXiv id, which on current design we do not.
+**arXiv API as the identity spine**, because `source_id` is already an arXiv id in every one of our five claims, it is the only version-authoritative source, it is the fastest, and it needs no key.
+**Crossref for published venue** once a paper leaves preprint.
+**OpenAlex as the fallback linker** for anything non-arXiv without a DOI.
+**DataCite only if** we ever need to resolve an arXiv DOI rather than an arXiv id, which on current design we do not.
 
-**Semantic Scholar: worth it only with a key.** Unauthenticated it is not usable in an
-automated path -- 429 on the first call of a burst. With a key it is the highest-quality
-answer of the four and the only one that would let a `PaperRecord` carry a real venue
-instead of "arXiv". This is the one open decision in §4; see the note at the end of this
-document.
+**Semantic Scholar: worth it only with a key.**
+Unauthenticated it is not usable in an automated path -- 429 on the first call of a burst.
+With a key it is the highest-quality answer of the four and the only one that would let a `PaperRecord` carry a real venue instead of "arXiv".
+This is the one open decision in §4; see the note at the end of this document.
 
-Note that none of this needs a key to *ship*. The identity spine, the hashing, and the
-binding all work on keyless APIs today, as demonstrated above.
+Note that none of this needs a key to *ship*.
+The identity spine, the hashing, and the binding all work on keyless APIs today, as demonstrated above.
 
 ---
 
-## 5. `gate2.py` bounds speedup below but not above — hard block or literature question?
+## 5. `gate2.py` bounds speedup below but not above: hard block or literature question?
 
-**Picking: literature question.** Leave `UNIT_RANGES["speedup"]` unbounded above.
+**Picking: literature question.**
+Leave `UNIT_RANGES["speedup"]` unbounded above.
 
-The reason is not caution, it is the tier boundary. Tier A is
-elimination-by-construction: facts about the numbers alone. "A speedup above N is
-implausible" is not a fact about the numbers, it is an empirical prior about what
-speedups occur — which is precisely what tier B's reference intervals are *for*. Putting a
-prior in tier A would let us claim a provable elimination we cannot prove.
+The reason is not caution, it is the tier boundary.
+Tier A is elimination-by-construction: facts about the numbers alone.
+"A speedup above N is implausible" is not a fact about the numbers, it is an empirical prior about what speedups occur, which is precisely what tier B's reference intervals are *for*.
+Putting a prior in tier A would let us claim a provable elimination we cannot prove.
 
-There is also a counterexample in our own Sources folder. SAGE's B07 case study reports an
-FVA runtime of 4.74 s, *"about 4,700x FBA."* A hard ceiling anywhere near a plausible
-value would have falsely rejected a real, measured, published ratio. `UNIT_RANGES`'
-existing comment already commits us to this posture: a false rejection "costs the engineer
-a rewrite for nothing."
+There is also a counterexample in our own Sources folder.
+SAGE's B07 case study reports an FVA runtime of 4.74 s, *"about 4,700x FBA."*
+A hard ceiling anywhere near a plausible value would have falsely rejected a real, measured, published ratio.
+`UNIT_RANGES`' existing comment already commits us to this posture: a false rejection "costs the engineer a rewrite for nothing."
 
-The right home for the concern is the relation check, which is exact and already exists:
-`OPS["ratio"]` verifies a declared speedup against the two recorded times with no prior at
-all. Suggested follow-up, deterministic and cheap: **warn when a key with unit `speedup`
-has no declared `Relation`** — not because the value is too big, but because an
-undeclared speedup is an unverifiable one.
+The right home for the concern is the relation check, which is exact and already exists: `OPS["ratio"]` verifies a declared speedup against the two recorded times with no prior at all.
+Suggested follow-up, deterministic and cheap: **warn when a key with unit `speedup` has no declared `Relation`**, not because the value is too big, but because an undeclared speedup is an unverifiable one.
 
 ### 5b. But there is a real bug next door, and it is the reason the question came up
 
@@ -431,32 +399,24 @@ speedup admits(inf)  = True
 accuracy admits(nan) = False
 ```
 
-`Range.admits` returns `True` for NaN and `+inf` on every unbounded-above unit —
-`speedup`, `loss`, `count`, `s`, `ms`, `sec`, `secs`, `seconds`, `wallclock_s`. The
-comparison `value <= high` is what rejects NaN, so bounded units are accidentally safe and
-unbounded ones are not.
+`Range.admits` returns `True` for NaN and `+inf` on every unbounded-above unit: `speedup`, `loss`, `count`, `s`, `ms`, `sec`, `secs`, `seconds`, `wallclock_s`.
+The comparison `value <= high` is what rejects NaN, so bounded units are accidentally safe and unbounded ones are not.
 
-This matters because `OPS["ratio"]` returns `math.nan` when the denominator is zero, and a
-zero denominator is exactly the unmeasured-wallclock case the `low_open` flag was written
-to catch: *"a wallclock of exactly 0.0 is not a fast run, it is an unmeasured one."* We
-catch the zero time and then let the NaN speedup derived from it pass tier A.
-`_check_internal_consistency` does guard `math.isnan(expected)`, but only for a relation
-someone declared; with no relation declared, nothing catches it.
+This matters because `OPS["ratio"]` returns `math.nan` when the denominator is zero, and a zero denominator is exactly the unmeasured-wallclock case the `low_open` flag was written to catch: *"a wallclock of exactly 0.0 is not a fast run, it is an unmeasured one."*
+We catch the zero time and then let the NaN speedup derived from it pass tier A. `_check_internal_consistency` does guard `math.isnan(expected)`, but only for a relation someone declared; with no relation declared, nothing catches it.
 
-Fix is two lines in `admits`, is a fact about the numbers alone, and belongs in tier A:
-reject non-finite values for every unit. Per CLAUDE.md §5 this starts with a failing test
-that reproduces it.
+Fix is two lines in `admits`, is a fact about the numbers alone, and belongs in tier A: reject non-finite values for every unit.
+Per CLAUDE.md §5 this starts with a failing test that reproduces it.
 
-Note this also answers the framing: an upper bound on speedup *would* have caught the NaN,
-but for the wrong reason, and at the cost of false rejections. Fix the finiteness hole;
-leave the ceiling alone.
+Note this also answers the framing: an upper bound on speedup *would* have caught the NaN, but for the wrong reason, and at the cost of false rejections.
+Fix the finiteness hole; leave the ceiling alone.
 
 ---
 
 ## 6. The scanner: what else slips through
 
-`NUMBER = re.compile(r"(\d+\.\d+|\d{2,})")` plus `is_claim()` (needs a decimal point, or
-4+ digits and not a year). Probed against the real `extract_claims()`:
+`NUMBER = re.compile(r"(\d+\.\d+|\d{2,})")` plus `is_claim()` (needs a decimal point, or 4+ digits and not a year).
+Probed against the real `extract_claims()`:
 
 | Probe (inside a `## Results` section) | Claims found | Class |
 |---|---|---|
@@ -476,52 +436,48 @@ leave the ceiling alone.
 
 Three classes, and they are not equally bad:
 
-1. **Misses.** "9 points" is the one in the brief, but `87 percent` is the bigger hole —
+1. **Misses.** "9 points" is the one in the brief, but `87 percent` is the bigger hole:
    any 2- or 3-digit integer result is invisible, and integer percentages are everywhere.
    `5/12` and `11 of 12` matter specifically because that is how SAGE and MLR-Bench state
    their headline results, so we cannot currently scan the papers we are comparing to.
 2. **Wrong values**, which are worse than misses because they produce a confident
-   mismatch rather than a gap. `-0.42` is recorded as `+0.42` (sign dropped — a sign flip
+   mismatch rather than a gap. `-0.42` is recorded as `+0.42` (sign dropped, a sign flip
    is a coherence failure, not a rounding one). `1.2e-3` is recorded as `1.2`, off by
    1000x. Either could make a *correct* manuscript fail Gate 3, or let a wrong one pass.
 3. **Silent line drop.** `SKIP_LINE` matches `\cite`, so a results sentence carrying an
    inline citation loses *every* number on it, reports nothing, and looks clean. This is
    the same failure shape as the `\section{}` heading bug already documented in
-   `prose.py`'s docstring — a scanner reporting zero findings because it could not read
+   `prose.py`'s docstring, a scanner reporting zero findings because it could not read
    the input. `claim_sections()` was added to make that visible for headings; nothing
    makes it visible for skipped lines.
 
-Note the docstring's constraint: the published Gate 1 traceability number came from this
-scanner reading `.tex`, so the LaTeX path cannot be altered without restating a measured
-result. Any fix needs to be additive and measured on both paths.
+Note the docstring's constraint: the published Gate 1 traceability number came from this scanner reading `.tex`, so the LaTeX path cannot be altered without restating a measured result.
+Any fix needs to be additive and measured on both paths.
 
-**AxCell is the reason to be humble here.** Extracting `(task, dataset, metric)` from ML
-papers scores 61.9 micro-F1. Adding the *score* to the tuple drops it to **25.8 micro-F1 /
-19.7 macro-F1** (Table 1, NLP-TDMS Exp; prior SOTA was 7.5). Getting the number right is
-where the task falls apart, and that is exactly our task. A regex will not close that gap;
-what saves us is that we are matching against our *own* registry, not extracting
-open-domain — which is an argument for making the registry rich (rounded variants,
-percentage variants, as both SAGE and AutoResearchClaw do) rather than making the scanner
-clever.
+**AxCell is the reason to be humble here.**
+Extracting `(task, dataset, metric)` from ML papers scores 61.9 micro-F1.
+Adding the *score* to the tuple drops it to **25.8 micro-F1 / 19.7 macro-F1** (Table 1, NLP-TDMS Exp; prior SOTA was 7.5).
+Getting the number right is where the task falls apart, and that is exactly our task.
+A regex will not close that gap; what saves us is that we are matching against our *own* registry, not extracting open-domain, which is an argument for making the registry rich (rounded variants, percentage variants, as both SAGE and AutoResearchClaw do) rather than making the scanner clever.
 
 ---
 
 ## 7. MiniCheck is PyTorch; `gates/` is stdlib-only. Where does it live?
 
-**It cannot live in `gates/`, and it does not need to.** MiniCheck-FT5 is 770M parameters
-and claims GPT-4-level fact-checking at ~400x lower cost on LLM-AggreFact. Attractive, and
-still structurally confined.
+**It cannot live in `gates/`, and it does not need to.**
+MiniCheck-FT5 is 770M parameters and claims GPT-4-level fact-checking at ~400x lower cost on LLM-AggreFact.
+Attractive, and still structurally confined.
 
-The rule that decides this is already written: a model call can never block, fail, or
-change a verdict, and `model_warning()` hardcodes `Severity.WARN` with no severity
-argument. MiniCheck is a model. However good it is, it can only ever produce a WARN. So
-the question "where does it live" has a cheap answer:
+The rule that decides this is already written: a model call can never block, fail, or change a verdict, and `model_warning()` hardcodes `Severity.WARN` with no severity argument.
+MiniCheck is a model.
+However good it is, it can only ever produce a WARN.
+So the question "where does it live" has a cheap answer:
 
-- **Not in `gates/`** — that would break the zero-dependency invariant for a component
+- **Not in `gates/`.** That would break the zero-dependency invariant for a component
   that cannot change a verdict anyway. Worst trade in the repo.
 - **Behind the existing `ModelFn` injection point**, wrapped by an adapter, if anyone
   wants it in tier C. No new seam, no new invariant. `gates/` never learns it exists.
-- **In `rig/`, as an instrument rather than a checker** — this is the use I would argue
+- **In `rig/`, as an instrument rather than a checker.** This is the use I would argue
   for. `rig/` is where we measure how well tier C does. MiniCheck is a cheap
   sentence-level entailment scorer, which makes it a reasonable *yardstick* for tier C's
   rate-with-an-interval claim, and `rig/` is already outside the packaged surface
@@ -529,8 +485,7 @@ the question "where does it live" has a cheap answer:
   published claim nothing.
 
 **Recommendation: punt for Gate 2/3 shipping; keep it as a `rig/` evaluation option.**
-The supporting numbers say the tier-C ceiling is low enough that a better tier-C model is
-not where the win is:
+The supporting numbers say the tier-C ceiling is low enough that a better tier-C model is not where the win is:
 
 - **BadScientist**: fabricated papers reach acceptance rates up to **82.0%**; mitigation
   detectors barely beat chance (DetOnly best accuracy **56%** vs 50% random; ReD **67.0%**
@@ -541,38 +496,29 @@ not where the win is:
   exceeds **21.1% recall or 6.1% precision**, and across eight runs models rarely
   rediscover the same error.
 
-That last clause is the argument. A verifier that finds different errors on each run
-cannot be a gate; it can only be a warning. Which is what our architecture already says.
-The Gate 2 docstring's existing note — that tier C "carries BadScientist's near-chance
-detection rate, which is why C must never decide anything" — is well supported, and SPOT
-strengthens it.
+That last clause is the argument.
+A verifier that finds different errors on each run cannot be a gate; it can only be a warning.
+Which is what our architecture already says.
+The Gate 2 docstring's existing note, that tier C "carries BadScientist's near-chance detection rate, which is why C must never decide anything", is well supported, and SPOT strengthens it.
 
 ---
 
 ## 8. Statistics, one line each
 
-**Prediction vs confidence interval.** A confidence interval bounds where the *mean* lies;
-a prediction interval bounds where the *next single observation* lies, so it is always
-wider — and CORE-Bench uses both, a 95% PI from three manual runs to grade whether an
-agent's reported answer is acceptable, and a 95% CI over three benchmark runs to report
-agent accuracy. Gate 2 comparing one of our runs against a literature number wants a
-**prediction** interval; we currently take whatever the paper printed, which is usually a
-CI.
+**Prediction vs confidence interval.**
+A confidence interval bounds where the *mean* lies; a prediction interval bounds where the *next single observation* lies, so it is always wider.
+CORE-Bench uses both: a 95% PI from three manual runs to grade whether an agent's reported answer is acceptable, and a 95% CI over three benchmark runs to report agent accuracy.
+Gate 2 comparing one of our runs against a literature number wants a **prediction** interval; we currently take whatever the paper printed, which is usually a CI.
 
-**TOST (two one-sided tests).** Equivalence testing: instead of failing to reject "they
-differ", you declare a tolerance band and reject "they differ by more than the band" from
-both sides — which is the correct frame for Gate 2, because *we want to affirm agreement*,
-and an ordinary non-significant t-test never licenses that.
+**TOST (two one-sided tests).**
+Equivalence testing: instead of failing to reject "they differ", you declare a tolerance band and reject "they differ by more than the band" from both sides, which is the correct frame for Gate 2, because *we want to affirm agreement*, and an ordinary non-significant t-test never licenses that.
 
-**Wilson score interval.** The small-n binomial interval that stays inside [0,1] and does
-not collapse at the extremes the way the normal approximation does — mandatory here
-because the autonomous-research literature reports 11/12, 8/10, 3/10, and at those n the
-normal approximation is unusable.
+**Wilson score interval.**
+The small-n binomial interval that stays inside [0,1] and does not collapse at the extremes the way the normal approximation does.
+It is mandatory here because the autonomous-research literature reports 11/12, 8/10, 3/10, and at those n the normal approximation is unusable.
 
-**Cohen's kappa.** Inter-rater agreement corrected for agreement by chance; relevant to
-MLR-Judge's human-agreement validation and AutoResearchClaw's two-reviewer adjudication,
-and worth flagging that kappa is depressed by skewed prevalence, so a low kappa on a
-corpus that is 80% fabricated does not by itself mean the raters disagree.
+**Cohen's kappa.**
+Inter-rater agreement corrected for agreement by chance; relevant to MLR-Judge's human-agreement validation and AutoResearchClaw's two-reviewer adjudication, and worth flagging that kappa is depressed by skewed prevalence, so a low kappa on a corpus that is 80% fabricated does not by itself mean the raters disagree.
 
 ### Wilson intervals on the proportions we are citing
 
@@ -586,41 +532,32 @@ corpus that is 80% fabricated does not by itself mean the raters disagree.
 | ARClaw accept, w/o verification | 5/10 | 50.0% | [23.7%, 76.3%] | 52.7% |
 | CORE-Bench stochastic questions | 17/181 | 9.4% | [5.9%, 14.5%] | 8.6% |
 
-**SAGE's headline 42% → 92% has overlapping 95% intervals** (11/12 lower bound 64.6%
-vs 5/12 upper bound 68.0%). The effect is probably real — it is a paired within-topic
-comparison, which a two-proportion interval ignores, and McNemar on the paired table would
-be the right test — but the *unpaired* reading we would naturally quote in a related-work
-sentence is not supported at n=12. If we cite "42 to 92%" we should cite it as 5/12 to
-11/12 and say the comparison is paired.
+**SAGE's headline 42% → 92% has overlapping 95% intervals** (11/12 lower bound 64.6% vs 5/12 upper bound 68.0%).
+The effect is probably real.
+It is a paired within-topic comparison, which a two-proportion interval ignores, and McNemar on the paired table would be the right test.
+But the *unpaired* reading we would naturally quote in a related-work sentence is not supported at n=12.
+If we cite "42 to 92%" we should cite it as 5/12 to 11/12 and say the comparison is paired.
 
-This is also a warning shot for our own evaluation: at n=12 topics, nothing we measure
-will separate from a baseline on an unpaired test. Design the comparison paired, per
-topic, from the start.
+This is also a warning shot for our own evaluation: at n=12 topics, nothing we measure will separate from a baseline on an unpaired test.
+Design the comparison paired, per topic, from the start.
 
 ---
 
 ## 9. Two more things worth 60 seconds on Thursday
 
-**CORE-Bench's prediction interval covers less than it sounds like.** The 95% PI from
-three manual runs applies to **17 of 181 task questions** — the ones with stochastic
-answers. For the other 164 the grading is effectively exact match. So "tolerance from 3
-runs into a 95% PI" is the right *method* and our best band, but in CORE-Bench it is
-load-bearing for under 10% of questions (Wilson [5.9%, 14.5%]). We should not cite it as
-though the whole benchmark rests on it.
+**CORE-Bench's prediction interval covers less than it sounds like.**
+The 95% PI from three manual runs applies to **17 of 181 task questions**, the ones with stochastic answers.
+For the other 164 the grading is effectively exact match.
+So "tolerance from 3 runs into a 95% PI" is the right *method* and our best band, but in CORE-Bench it is load-bearing for under 10% of questions (Wilson [5.9%, 14.5%]).
+We should not cite it as though the whole benchmark rests on it.
 
-**MLR-Bench's taxonomy, which we borrow, has four fact-based types**, chosen because they
-are objectively verifiable: *Faked Experimental Results*, *Hallucinated Methodology*,
-*Incorrect Citations*, *Mathematical Errors*. Mapping to us: type 1 is Gate 1 + Gate 3
-registry binding; type 3 is Gate 3 citation binding (blocked on `PaperRecord`, §4); type 4
-is Gate 2's `internal_consistency`; **type 2 — hallucinated methodology — is the one no
-gate of ours currently touches**, and it is the same thing SAGE calls the
-method-provenance gap and declares open. That convergence is worth a slide.
+**MLR-Bench's taxonomy, which we borrow, has four fact-based types**, chosen because they are objectively verifiable: *Faked Experimental Results*, *Hallucinated Methodology*, *Incorrect Citations*, *Mathematical Errors*.
+Mapping to us: type 1 is Gate 1 + Gate 3 registry binding; type 3 is Gate 3 citation binding (blocked on `PaperRecord`, §4); type 4 is Gate 2's `internal_consistency`; **type 2, hallucinated methodology, is the one no gate of ours currently touches**, and it is the same thing SAGE calls the method-provenance gap and declares open.
+That convergence is worth a slide.
 
-Reported frequencies: faked results and hallucinated methodology each appear in more than
-half of 10 tasks, with *"almost all papers generated by AI Scientist V2"* containing both;
-nonexistent citations appear in 50% of MLR-Agent tasks. The exact per-type bar values are
-in Figure 6, which is a figure — I did not read numbers off it, so those three statements
-are the text's, not mine.
+Reported frequencies: faked results and hallucinated methodology each appear in more than half of 10 tasks, with *"almost all papers generated by AI Scientist V2"* containing both; nonexistent citations appear in 50% of MLR-Agent tasks.
+The exact per-type bar values are in Figure 6, which is a figure.
+I did not read numbers off it, so those three statements are the text's, not mine.
 
 ---
 
@@ -628,15 +565,12 @@ are the text's, not mine.
 
 ### Do not rank incompatible headline percentages
 
-CORE-Bench task accuracy, BadScientist fabricated-paper acceptance, MLR-Bench fabrication
-frequency, and SPOT verifier recall do not share a denominator or even a direction of
-goodness. Putting those raw percentages on one axis would create a comparison the papers
-do not support.
+CORE-Bench task accuracy, BadScientist fabricated-paper acceptance, MLR-Bench fabrication frequency, and SPOT verifier recall do not share a denominator or even a direction of goodness.
+Putting those raw percentages on one axis would create a comparison the papers do not support.
 
 The graph below instead scores direct coverage of the five things our evaluation needs.
-Each dimension receives 0 for no direct coverage, 1 for partial or indirect coverage, and
-2 for direct coverage. These are project-specific analytical judgments, not results
-reported by the benchmark authors.
+Each dimension receives 0 for no direct coverage, 1 for partial or indirect coverage, and 2 for direct coverage.
+These are project-specific analytical judgments, not results reported by the benchmark authors.
 
 ![Benchmark fit for evaluating G.A.T.E.S.](benchmark-fit.svg)
 
@@ -648,13 +582,12 @@ reported by the benchmark authors.
 | CORE-Bench | 2 | 1 | 1 | 0 | 1 | 5/10 |
 | SPOT | 0 | 0 | 0 | 2 | 0 | 2/10 |
 
-**Best primary benchmark: MLR-Bench.** It is the only candidate here that directly
-combines open-ended research tasks, experimentation, paper writing, and the four audited
-failure classes G.A.T.E.S. is meant to constrain: faked results, hallucinated methodology,
-incorrect citations, and mathematical errors. Those failures span all three gates, so it
-tests the complete information flow rather than one checker in isolation.
+**Best primary benchmark: MLR-Bench.**
+It is the only candidate here that directly combines open-ended research tasks, experimentation, paper writing, and the four audited failure classes G.A.T.E.S. is meant to constrain: faked results, hallucinated methodology, incorrect citations, and mathematical errors.
+Those failures span all three gates, so it tests the complete information flow rather than one checker in isolation.
 
-That does not make it sufficient by itself. The defensible portfolio is:
+That does not make it sufficient by itself.
+The defensible portfolio is:
 
 1. Run the same Agent Laboratory task, model, seed, budget, and environment with G.A.T.E.S.
    off and on over an MLR-Bench subset.
@@ -666,11 +599,10 @@ That does not make it sufficient by itself. The defensible portfolio is:
 
 ### G.A.T.E.S. is an overlay, not another AI researcher
 
-AI-Scientist-v2 and Agent Laboratory generate ideas, search literature, write code, run
-experiments, analyze results, and write a paper. G.A.T.E.S. does none of those jobs. It
-checks the artifacts at three boundaries and sends actionable evidence back to the host.
-The fair comparison is therefore the complexity G.A.T.E.S. *adds* to either system, not
-whether G.A.T.E.S. can replace one.
+AI-Scientist-v2 and Agent Laboratory generate ideas, search literature, write code, run experiments, analyze results, and write a paper.
+G.A.T.E.S. does none of those jobs.
+It checks the artifacts at three boundaries and sends actionable evidence back to the host.
+The fair comparison is therefore the complexity G.A.T.E.S. *adds* to either system, not whether G.A.T.E.S. can replace one.
 
 | Dimension | G.A.T.E.S. | AI-Scientist-v2 | Agent Laboratory |
 |---|---|---|---|
@@ -680,8 +612,8 @@ whether G.A.T.E.S. can replace one.
 | Verdict complexity | High: deterministic checks, evidence ledger, reports, retry feedback, and fail/WARN boundaries | Research quality is selected and reviewed inside the generation loop | Research quality is assessed throughout the staged agent loop |
 | Portability cost | One host-specific adapter; gate code must not import the host | The whole system is the host | The whole system is the host and our reference integration target |
 
-A reproducible snapshot gives scale, but not semantic complexity. On 11 September 2026,
-counting tracked production Python lines and excluding tests:
+A reproducible snapshot gives scale, but not semantic complexity.
+On 11 September 2026, counting tracked production Python lines and excluding tests:
 
 | Repository snapshot | Production Python files | Lines | Declared runtime requirement entries |
 |---|---:|---:|---:|
@@ -689,22 +621,18 @@ counting tracked production Python lines and excluding tests:
 | [AI-Scientist-v2 at `96bd516`](https://github.com/SakanaAI/AI-Scientist-v2/commit/96bd51617cfdbb494a9fc283af00fe090edfae48) | 36 | 13,213 | 26 non-comment entries in `requirements.txt` |
 | [Agent Laboratory at `d9017d9`](https://github.com/SamuelSchmidgall/AgentLaboratory/commit/d9017d90e329112d2a80b7712f37ee9094d2cd27) | 9 | 4,078 | 135 non-comment entries in `requirements.txt` |
 
-By this narrow measure, G.A.T.E.S. core is about **51% of AI-Scientist-v2's production
-Python size** and **1.66x Agent Laboratory's**, while having a much smaller operational
-role and zero packaged third-party dependencies. This is not a contradiction: validation
-is cross-cutting state, schema, reporting, evidence, and feedback-loop work. Raw lines also
-depend heavily on repository layout, generated files, and how much logic sits in external
-libraries, so these ratios are an engineering-size snapshot, not a quality ranking.
+By this narrow measure, G.A.T.E.S. core is about **51% of AI-Scientist-v2's production Python size** and **1.66x Agent Laboratory's**, while having a much smaller operational role and zero packaged third-party dependencies.
+This is not a contradiction: validation is cross-cutting state, schema, reporting, evidence, and feedback-loop work.
+Raw lines also depend heavily on repository layout, generated files, and how much logic sits in external libraries, so these ratios are an engineering-size snapshot, not a quality ranking.
 
-The practical conclusion is: **G.A.T.E.S. is much less complex to operate than either
-researcher, but non-trivial to prove correct.** Its research orchestration complexity is
-near zero because it delegates that work to the host. Its evidence and integration
-complexity is the actual product.
+The practical conclusion is: **G.A.T.E.S. is much less complex to operate than either researcher, but non-trivial to prove correct.**
+Its research orchestration complexity is near zero because it delegates that work to the host.
+Its evidence and integration complexity is the actual product.
 
 ### Gate 2 tiers as implemented today
 
-Gate 2 derives tiers from the inputs supplied. Missing input means no check is emitted;
-it never manufactures a green result for a tier that did not run.
+Gate 2 derives tiers from the inputs supplied.
+Missing input means no check is emitted; it never manufactures a green result for a tier that did not run.
 
 | Tier | Activation | Current checks | Verdict role | Honest claim |
 |---|---|---|---|---|
@@ -712,10 +640,9 @@ it never manufactures a green result for a tier that did not run.
 | B - literature comparison | Only when `sources` is non-empty | `coherence.reference_interval` | WARN by default; FAIL with `strict_reference` | The comparison is deterministic after the source record and tolerance are fixed; provenance and tolerance origin must be disclosed |
 | C - semantic coherence | Only when `consult_model` is supplied | `coherence.method_match`, `coherence.claim_supported` | WARN only | Report measured precision/recall with intervals; never claim elimination |
 
-The opening of `gate2.py` currently says both "Two tiers" and "Three tiers", and says the
-semantic tier is not built even though `gate2_semantic.py` exists and is invoked. That is
-a stale docstring, not a missing tier. This branch records the discrepancy and does not
-change implementation.
+The opening of `gate2.py` currently says both "Two tiers" and "Three tiers", and says the semantic tier is not built even though `gate2_semantic.py` exists and is invoked.
+That is a stale docstring, not a missing tier.
+This branch records the discrepancy and does not change implementation.
 
 ### Ten-minute Thursday readout
 
@@ -752,12 +679,11 @@ change implementation.
 | MiniCheck 2404.10774 | arXiv abstract only | 770M, 400x, LLM-AggreFact |
 | SPOT 2505.11855 | arXiv abstract only | 83 papers, 91 errors, 21.1%/6.1% |
 
-MiniCheck's specific balanced-accuracy figures are **not** verified — the abstract states
-GPT-4-level performance at 400x lower cost without giving the percentage, and I did not
-read the full paper. Do not quote a MiniCheck accuracy number on Thursday.
+MiniCheck's specific balanced-accuracy figures are **not** verified.
+The abstract states GPT-4-level performance at 400x lower cost without giving the percentage, and I did not read the full paper.
+Do not quote a MiniCheck accuracy number on Thursday.
 
-Text was extracted from the PDFs with a throwaway stdlib script under `.cache/`
-(gitignored); it is not part of the package and nothing in `gates/` gained a dependency.
+Text was extracted from the PDFs with a throwaway stdlib script under `.cache/` (gitignored); it is not part of the package and nothing in `gates/` gained a dependency.
 
 ---
 
@@ -770,18 +696,19 @@ Text was extracted from the PDFs with a throwaway stdlib script under `.cache/`
 5. `PaperRecord` + an arXiv-spine resolver **in the adapter**. Demonstrated working in §4; unblocks Gate 2 tier B provenance and Gate 3 citation binding. (§4)
 6. Scanner: negatives and scientific notation first (wrong values), then integer percentages, then make skipped lines visible the way `claim_sections()` made headings visible. (§6)
 
-Items 1-4 are all deterministic, all small, and none of them needs the registry or a
-network call.
+Items 1-4 are all deterministic, all small, and none of them needs the registry or a network call.
 
 ---
 
 ## One open decision
 
-**Do we want a Semantic Scholar API key?** Everything in §1 and §4 works today without one.
-S2 is the only resolver of the four that returns a real venue ("Trans. Mach. Learn. Res."
-rather than "arXiv") and a real reference count, and it is the natural source for Gate 3
-citation binding later. Unauthenticated it returned HTTP 429 on the first call of a
-six-call burst, so it cannot go in an automated path as-is. A key is free and the decision
-can wait until item 5.
+**Do we want a Semantic Scholar API key?**
+Everything in §1 and §4 works today without one.
+S2 is the only resolver of the four that returns a real venue ("Trans.
+Mach.
+Learn.
+Res." rather than "arXiv") and a real reference count, and it is the natural source for Gate 3 citation binding later.
+Unauthenticated it returned HTTP 429 on the first call of a six-call burst, so it cannot go in an automated path as-is.
+A key is free and the decision can wait until item 5.
 
 Nothing else is blocked on credentials.

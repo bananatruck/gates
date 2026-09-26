@@ -37,7 +37,7 @@ on Autonomous Agents and Multiagent Systems (AAMAS 2027)}{3--7 May 2027}{Hanoi, 
 \begin{abstract}
 Autonomous research agents publish numbers their experiments never produced.
 The usual explanation is that the model fabricates.
-In the scaffold we audited, the cause was mechanical: experiment output was truncated to 1,000 characters before any agent read it, so the writer could not see the real numbers and the failure detector could not see the crash.
+In the scaffold we audited, the cause was mechanical: the host cut experiment output to 1,000 characters before any agent read it, so the writer never saw the real numbers and the failure detector never saw the crash.
 We treat hallucinated results as an information-flow defect and close the channel at three points: execution validity, source-result coherence and report validity.
 The three gates are deterministic, need no model to reach a verdict, and install into an existing scaffold through one small adapter.
 A single switch runs them cumulatively, so each gate's contribution can be measured on its own.
@@ -59,10 +59,10 @@ We evaluate the layer on CORE-Bench, MLR-Bench and BadScientist at every level, 
 Research agents such as Agent Laboratory~\cite{schmidgall2025agentlab} and The AI Scientist-v2~\cite{yamada2025aiscientistv2} run experiments and write the papers that report them.
 Their papers regularly state results that no experiment produced: MLR-Bench found faked experimental results in every one of the ten papers AI Scientist-v2 wrote for its experimentation tasks~\cite{chen2025mlrbench}.
 
-In the Agent Laboratory scaffold we audited, the mechanism was mundane.
-Experiment output was truncated to 1,000 characters before the writing agent read it, and the crash marker was appended \emph{after} the program's own output, so it fell off the end of the same slice.
-A run that raised \texttt{NameError} on every attempt was scored 1.0 by the reward model and written up with a full results table.
-The model did not need to be dishonest; it was never shown the numbers.
+In the Agent Laboratory scaffold we audited, the mechanism was plain.
+The host cut experiment output to 1,000 characters before the writing agent read it, and it appended the crash marker \emph{after} the program's own output, so the same cut dropped the marker.
+A run that raised \texttt{NameError} on every attempt scored 1.0 from the reward model and went into the paper with a full results table.
+The model did not need to be dishonest; nothing ever showed it the numbers.
 
 That makes fabrication a property of the information flow, and so something a deterministic layer can stop.
 \gates{} places a gate at each point where a scaffold loses its grip on evidence:
@@ -90,7 +90,7 @@ The difference is where the check sits: \gates{} runs inside an existing scaffol
 \paragraph{Benchmarks.}
 MLR-Bench~\cite{chen2025mlrbench} evaluates agents on open-ended machine-learning research and labels the hallucinations in their papers.
 CORE-Bench~\cite{siegel2024corebench} asks agents to reproduce published code and answer questions about its outputs.
-BadScientist~\cite{jiang2025badscientist} shows that fabricated papers with no experiments are accepted by LLM reviewers at high rates under presentation-level manipulation.
+BadScientist~\cite{jiang2025badscientist} shows that LLM reviewers accept fabricated papers with no experiments at high rates under presentation-level manipulation.
 
 \section{The Validity Layer}
 
@@ -104,7 +104,7 @@ A gate never modifies what it judges; it writes its evidence beside it.
 \subsection{Exhaustion policy}
 
 Each gate runs a feedback loop with a budget counted in agent turns.
-The policies on a spent budget differ on purpose (Table~\ref{tab:exhaustion}): a genuine novel result must not be blocked forever by Gate 2, while an unverifiable experiment or manuscript must not be emitted.
+The policies on a spent budget differ on purpose (Table~\ref{tab:exhaustion}): Gate 2 must not block a genuinely new result forever, while an unverifiable experiment or manuscript must not be emitted.
 
 \begin{table}[t]
 \caption{What each gate does when its budget is spent.}
@@ -156,7 +156,15 @@ BadScientist (40 write-ups) & manipulated manuscripts emitted and accepted & hon
 
 For BadScientist we manipulate the write-ups of real runs rather than generating papers with no experiments.
 A paper with no experiment never passes Gate 1, so every level from 1 up would read zero and say nothing about Gates 2 and 3.
-The faked-result labels come from a judge that is not the model under test.
+The model under test is DeepSeek V4.1 Flash; DeepSeek V4 Pro repeats MLR-Bench at levels 0 and 3, to test whether the effect belongs to the information flow or to one model.
+The faked-result labels and the MLR-Judge scores come from Gemini Pro and Claude Sonnet, averaged as MLR-Judge does, so no judge is the model under test.
+Every run records its cost and wallclock, and we report both.
+
+\paragraph{Significance, fixed before the pilot.}
+Level 0 and level 3 run on the same task with the same seed, so each task-seed is a pair.
+Per benchmark, an exact McNemar test on the discordant pairs tests the integrity event, with Holm's correction across the three benchmarks at $\alpha = 0.05$.
+The task score must be non-inferior: the lower bound of a seeded 95\% paired-bootstrap interval of level 3 minus level 0 stays above $-0.5$ MLR-Judge points, $-5$ points of pass@1, and $-10$ points of honest admission.
+The pilot's discordance sets the seed count for 80\% power.
 
 \section{Results}
 
@@ -207,6 +215,8 @@ The faked-result labels come from a judge that is not the model under test.
 The gates deliver the evidence; they do not make the science good.
 In the Gate 1 campaign, reviewer scores were 3.735 gated and 3.765 ungated, and both papers were recommended for rejection.
 Gate 2's methodology checks read plan fields a model extracts from free-text plans, so a divergence on one is capped at a warning.
+The Gate 1 campaign ran on DeepSeek V4 Flash and the benchmark runs on V4.1 Flash, which DeepSeek now serves under the old name too, so the campaign is context for level 1, not a replication of it.
+Gate 3's citation checks see arXiv identifiers only; a paper that cites none is not checkable, and we count it as such rather than as clean.
 \todo{Whatever the runs show.}
 
 \section{Conclusion}
@@ -220,7 +230,8 @@ Gate 2's methodology checks read plan fields a model extracts from free-text pla
 
 \section{Mechanism Evidence}
 
-These results measure how the gates behave, and are already in the repository.
+These results measure how the gates behave, and the repository already holds them (Figure~\ref{fig:mechanism}).
+Gate 3 also writes each rendered claim's provenance chain, from task to command to log to value to claim, and reports the share that is unbroken.
 
 \begin{table}[h]
 \caption{Measured mechanism results.}
@@ -236,6 +247,12 @@ Gate & Result \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\begin{figure*}[t]
+\includegraphics[width=\textwidth]{../figures/fig8_mechanism.png}
+\caption{Mechanism evidence, measured: what each gate catches and what it wrongly flags, with Wilson 95\% intervals.}
+\label{fig:mechanism}
+\end{figure*}
 
 \begin{figure*}[t]
 \includegraphics[width=\textwidth]{../figures/fig4_corebench_compare.png}
