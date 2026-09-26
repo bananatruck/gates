@@ -15,12 +15,11 @@ engineer got stuck on. That last one is the diagnostic that drives tuning — a
 check whose feedback never converges is either badly explained or badly named,
 and the loop is what tells you which.
 
-**This needs a real model and an API key; nothing here is run by the test
-suite.** The harness, its prompts and its accounting are held by tests using
-stubs. The numbers are the user's to produce:
+**This needs a real model and an API key; the test suite drives it with a
+fake.** The harness, its prompts and its accounting are held by tests using
+stubs. The numbers come from a real run (D61):
 
-    from rig.tuning import compare_arms
-    print(compare_arms(my_model_fn, seeds=5))
+    python -m rig.tuning --backend deepseek-flash --key-file ~/keys.env --seeds 5
 
 No reviewed prior art reports a convergence rate for its own feedback path.
 AutoResearchClaw, SAGE and ScientistOne all gate the output; none measures
@@ -311,3 +310,35 @@ def render_comparison(template: ArmResult, generated: ArmResult) -> str:
         "",
     ]
     return "\n".join(rows)
+
+
+def main(argv: list[str] | None = None, *, model_fn: ModelFn | None = None) -> int:
+    """``python -m rig.tuning``: both feedback arms against a real engineer model.
+
+    ``model_fn`` is for tests; the command line builds the host's client.
+    """
+    import argparse
+
+    from rig.live import add_model_args, model_from_args
+
+    parser = argparse.ArgumentParser(prog="python -m rig.tuning", description=main.__doc__)
+    # The engineer writes whole programs, so it gets more room than a gate model.
+    add_model_args(parser, max_tokens=4096)
+    parser.add_argument("--workdir", type=Path, default=Path(".cache/tuning_runs"))
+    parser.add_argument("--seeds", type=int, default=3)
+    parser.add_argument("--max-attempts", type=int, default=3)
+    parser.add_argument("--out", type=Path, help="also write the table to this file")
+    args = parser.parse_args(argv)
+
+    model = model_fn if model_fn is not None else model_from_args(args)
+    text = compare_arms(
+        model, workdir=args.workdir, seeds=args.seeds, max_attempts=args.max_attempts
+    )
+    print(text)
+    if args.out is not None:
+        args.out.write_text(text + "\n", encoding="utf-8")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

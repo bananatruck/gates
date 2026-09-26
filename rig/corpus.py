@@ -259,15 +259,41 @@ def render(name: str, result: Score) -> str:
     )
 
 
-if __name__ == "__main__":
-    import sys
+def main(argv: list[str] | None = None, *, model_fn: Callable[[str, str], str] | None = None) -> int:
+    """``python -m rig.corpus``: the shipped scanner's score, offline.
 
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    With ``--backend`` it also scores the model prompt variants, one pass over
+    the corpus each (D61). ``model_fn`` is for tests; the command line builds
+    the host's client instead.
+    """
+    import argparse
+
+    from rig.live import add_model_args, model_from_args
+
+    parser = argparse.ArgumentParser(prog="python -m rig.corpus", description=main.__doc__)
+    add_model_args(parser, max_tokens=1024, required=False)
+    parser.add_argument("--out", type=Path, help="also write the table to this file")
+    args = parser.parse_args(argv)
+
     entries = load_corpus()
-    print(
+    lines = [
         f"corpus: {len(entries)} lines, "
         f"{sum(e.error_signal for e in entries)} signals, "
         f"{sum(e.is_recall_gap for e in entries)} of them outside the pattern set, "
         f"{sum(e.is_hard_negative for e in entries)} hard negatives\n"
-    )
-    print(render("deterministic (shipped pattern set)", score(deterministic_scanner)))
+    ]
+    if model_fn is None and args.backend:
+        model_fn = model_from_args(args)
+    if model_fn is None:
+        lines.append(render("deterministic (shipped pattern set)", score(deterministic_scanner)))
+    else:
+        lines.append(bench_variants(model_fn))
+    text = "\n".join(lines)
+    print(text)
+    if args.out is not None:
+        args.out.write_text(text + "\n", encoding="utf-8")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
