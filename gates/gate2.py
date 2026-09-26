@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Any
 
 from .errors import GateError
-from .schema import CheckResult, GateReport, Severity, Verdict, decide
+from .schema import CheckResult, GateReport, Severity, decide
 
 GATE_NAME = "GATE 2 — SOURCE ↔ RESULT COHERENCE"
 
@@ -67,9 +67,8 @@ class Range:
         # earlier. Neither is a measurement, so neither is in range.
         if not math.isfinite(value):
             return False
-        if self.low is not None:
-            if value < self.low or (self.low_open and value == self.low):
-                return False
+        if self.low is not None and (value < self.low or (self.low_open and value == self.low)):
+            return False
         return self.high is None or value <= self.high
 
     def describe(self) -> str:

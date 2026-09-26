@@ -15,11 +15,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Protocol, Sequence
+from typing import Any, Protocol
+from collections.abc import Callable, Sequence
 
 from gates import GateFailure, GateReport
 from gates.adapters.agentlab import gated_execute, make_context
-from gates.pipeline import GateContext, build_evidence_bundle, record_divergence
+from gates.pipeline import build_evidence_bundle, record_divergence
 
 from . import reward as legacy
 from .scenarios import Scenario, Step
@@ -362,8 +363,8 @@ def check_expectations(scenario: Scenario, outcome: LoopOutcome) -> list[str]:
             f"expected {scenario.expect_turns}"
         )
 
-    for turn, spec in zip(outcome.turns, scenario.turns):
-        for execution, step in zip(turn.executions, spec.steps):
+    for turn, spec in zip(outcome.turns, scenario.turns, strict=False):
+        for execution, step in zip(turn.executions, spec.steps, strict=False):
             where = f"turn {turn.index + 1} / {step.label!r}"
             if step.expect_pass and not execution.passed:
                 problems.append(

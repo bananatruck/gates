@@ -154,7 +154,7 @@ def run_gate2_loop(
     outcome.registry = reviewed.registry
     reviews = iter(reviewed.reviews)
     rejections = 0
-    for index, (turn, executed) in enumerate(zip(submitted, reviewed.executions)):
+    for index, (turn, executed) in enumerate(zip(submitted, reviewed.executions, strict=True)):
         gate = 2 if executed.passed else 1
         shown = next(reviews) if gate == 2 else executed
         if gate == 2:
@@ -191,7 +191,7 @@ def check_expectations(scenario: Scenario, outcome: LoopOutcome) -> list[str]:
             f"{scenario.max_attempts}"
         )
 
-    for turn, spec in zip(outcome.turns, scenario.turns):
+    for turn, spec in zip(outcome.turns, scenario.turns, strict=False):
         where = f"turn {turn.index + 1} / {spec.label!r}"
         failed = {c.id for c in turn.report.failed_checks()}
         warned = {c.id for c in turn.report.warnings()}

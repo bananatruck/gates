@@ -14,7 +14,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any
+from collections.abc import Callable, Iterable
 
 from .errors import GateError
 from .gate3 import RENDERED_FILENAME

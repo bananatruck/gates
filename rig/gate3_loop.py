@@ -166,7 +166,7 @@ def run_gate3_loop(
         # only the last report. The context kept all of them.
         outcome.outcome = "raised"
 
-    for index, (turn, report) in enumerate(zip(submitted, context.history)):
+    for index, (turn, report) in enumerate(zip(submitted, context.history, strict=True)):
         # The same text report_loop sent the writer: render_feedback is a pure
         # function of the report.
         outcome.turns.append(TurnOutcome(index, turn.label, report, render_feedback(report)))
@@ -192,7 +192,7 @@ def check_expectations(scenario: Scenario, outcome: LoopOutcome) -> list[str]:
             f"{'a' if outcome.manuscript is not None else 'no'} manuscript"
         )
 
-    for turn, spec in zip(outcome.turns, scenario.turns):
+    for turn, spec in zip(outcome.turns, scenario.turns, strict=False):
         where = f"turn {turn.index + 1} / {spec.label!r}"
         failed = {c.id for c in turn.report.failed_checks()}
         if spec.expect_pass != turn.passed:

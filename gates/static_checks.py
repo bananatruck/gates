@@ -97,7 +97,7 @@ def find_unbound_names(
     _collect_scopes(table, "<module>", scopes)
 
     # Pass 1 — everything that ends up bound in the module namespace.
-    for scope_name, scope in scopes:
+    for _scope_name, scope in scopes:
         is_module = scope.get_type() == "module"
         for sym in scope.get_symbols():
             binds = sym.is_assigned() or sym.is_imported()
@@ -325,9 +325,9 @@ def _first_reference_line(
         return 0
     best = 0
     for node in ast.walk(tree):
-        if isinstance(node, ast.Name) and node.id == name and isinstance(node.ctx, ast.Load):
-            if best == 0 or node.lineno < best:
-                best = node.lineno
+        if (isinstance(node, ast.Name) and node.id == name and isinstance(node.ctx, ast.Load)
+                and (best == 0 or node.lineno < best)):
+            best = node.lineno
     return best
 
 
@@ -409,9 +409,7 @@ def _constant_bindings(tree: ast.AST) -> dict[str, list[ast.expr]]:
                     values.setdefault(node.target.id, []).append(node.value)
         elif isinstance(node, ast.NamedExpr) and isinstance(node.target, ast.Name):
             values.setdefault(node.target.id, []).append(node.value)
-        elif isinstance(node, ast.AugAssign):
-            opaque.update(_stored_names(node.target))
-        elif isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
+        elif isinstance(node, (ast.AugAssign, ast.For, ast.AsyncFor, ast.comprehension)):
             opaque.update(_stored_names(node.target))
         elif isinstance(node, (ast.Import, ast.ImportFrom)):
             for alias in node.names:

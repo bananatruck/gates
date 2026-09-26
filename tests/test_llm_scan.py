@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from gates import Gate1Config, ModelLayer, Severity, run_gate1  # noqa: E402
 from gates.llm_scan import CHECK_ID, build_check, scan_with_model  # noqa: E402
-from gates.log_checks import LogFinding, scan_streams  # noqa: E402
+from gates.log_checks import scan_streams  # noqa: E402
 from gates.report import render_feedback  # noqa: E402
 
 STDOUT = "\n".join(

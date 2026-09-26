@@ -1269,7 +1269,7 @@ def test_tier_a_evaluation_still_reproduces_its_published_numbers():
 
     rows = [run(c) for c in CASES]
     assert Counter(r["outcome"] for r in rows) == Counter(TP=27, TN=18)
-    labelled = [r for c, r in zip(CASES, rows) if c.expect_check]
+    labelled = [r for c, r in zip(CASES, rows, strict=True) if c.expect_check]
     assert (sum(r["right_check"] for r in labelled), len(labelled)) == (27, 27)
 
 

@@ -13,7 +13,8 @@ import re
 import time
 import urllib.request
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 from xml.etree import ElementTree
 
 from ..schema import PaperRecord

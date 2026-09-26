@@ -26,7 +26,7 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable
+from collections.abc import Callable, Iterable
 
 CORPUS_PATH = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "log_corpus.jsonl"
 
@@ -57,7 +57,7 @@ class CorpusEntry:
 
 def load_corpus(path: Path | str = CORPUS_PATH) -> list[CorpusEntry]:
     entries: list[CorpusEntry] = []
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:

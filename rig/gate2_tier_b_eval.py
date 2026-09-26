@@ -25,7 +25,7 @@ from __future__ import annotations
 import math
 import tempfile
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from gates.gate2 import Gate2Config, PlanField, run_gate2

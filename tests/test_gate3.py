@@ -551,7 +551,7 @@ def test_a_fabricated_citation_still_fails_when_another_lookup_breaks(tmp_path):
 
     def lookup(identifier):
         if identifier == "2501.00001":
-            return None
+            return
         raise OSError("export.arxiv.org: connection refused")
 
     paper = (

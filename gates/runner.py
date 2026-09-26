@@ -90,7 +90,7 @@ def make_run_id(code_hash: str, started_at: str, artifact_dir: str) -> str:
 
 def make_trace_id(run_id: str, key: str, lineno: int | None) -> str:
     """Binds one recorded value to one run and one call site."""
-    return hashlib.sha256(f"{run_id}|{key}|{lineno}".encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(f"{run_id}|{key}|{lineno}".encode()).hexdigest()[:16]
 
 
 def run_experiment(
@@ -138,28 +138,31 @@ def run_experiment(
     started = time.monotonic()
     # Writing to files rather than PIPE: an experiment that outproduces the pipe
     # buffer would otherwise deadlock, which is exactly what a long run does.
-    with _hide_parent_process_from_child() as parent_guard:
-        with open(stdout_path, "wb") as out, open(stderr_path, "wb") as err:
-            popen_kwargs: dict[str, object] = {
-                "stdout": out,
-                "stderr": err,
-                "stdin": subprocess.DEVNULL,
-                "cwd": cwd,
-                "env": child_env,
-            }
-            if os.name == "posix":
-                popen_kwargs["start_new_session"] = True
-            try:
-                proc = subprocess.Popen(argv, **popen_kwargs)  # type: ignore[arg-type]
-            except OSError as exc:
-                raise HarnessError(f"could not start execution harness: {exc}") from exc
+    with (
+        _hide_parent_process_from_child() as parent_guard,
+        open(stdout_path, "wb") as out,
+        open(stderr_path, "wb") as err,
+    ):
+        popen_kwargs: dict[str, object] = {
+            "stdout": out,
+            "stderr": err,
+            "stdin": subprocess.DEVNULL,
+            "cwd": cwd,
+            "env": child_env,
+        }
+        if os.name == "posix":
+            popen_kwargs["start_new_session"] = True
+        try:
+            proc = subprocess.Popen(argv, **popen_kwargs)  # type: ignore[arg-type]
+        except OSError as exc:
+            raise HarnessError(f"could not start execution harness: {exc}") from exc
 
-            try:
-                exit_code = proc.wait(timeout=timeout_s)
-            except subprocess.TimeoutExpired:
-                timed_out = True
-                _kill_tree(proc)
-                exit_code = proc.wait()
+        try:
+            exit_code = proc.wait(timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            _kill_tree(proc)
+            exit_code = proc.wait()
 
     duration = time.monotonic() - started
 

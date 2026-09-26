@@ -92,7 +92,7 @@ def test_every_execution_lands_in_the_ledger(played):
         rows = Ledger(outcome.ledger_path).rows()
         assert len(rows) == len(outcome.executions), name
         assert {r["scenario"] for r in rows} == {name}
-        for row, execution in zip(rows, outcome.executions):
+        for row, execution in zip(rows, outcome.executions, strict=True):
             assert row["verdict"] == execution.report.verdict.value
             assert set(row["failed_checks"]) == execution.failed_check_ids
             assert set(row["warned_checks"]) == execution.warned_check_ids

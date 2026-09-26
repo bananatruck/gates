@@ -116,7 +116,7 @@ def select(query: str, *, k_each: int = 3) -> list[Exemplar]:
     # Interleave so neither class leads: models weight the first example more
     # than the last, and which class leads should not be an accident of order.
     out: list[Exemplar] = []
-    for pair in zip(signals, noise):
+    for pair in zip(signals, noise, strict=False):
         out.extend(pair)
     out.extend(signals[len(noise):])
     out.extend(noise[len(signals):])

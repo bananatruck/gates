@@ -58,7 +58,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any
+from collections.abc import Callable, Iterable
 
 from . import llm_claims, llm_report
 from .errors import GateError

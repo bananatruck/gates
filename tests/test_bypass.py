@@ -14,7 +14,6 @@ quietly hand the baseline a better channel than it has, and every measured gap
 would be understated. These tests pin the defect in place.
 """
 
-import os
 import sys
 from pathlib import Path
 

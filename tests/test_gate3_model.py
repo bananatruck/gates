@@ -148,7 +148,7 @@ def test_no_model_says_the_scan_did_not_run(tmp_path):
 def test_a_paper_with_no_findings_prose_costs_no_call(tmp_path):
     fake = model()
     paper = "\\section{Results}\nWe reach \\result{exp1.acc}.\n"
-    report = run_gate3(paper, REGISTRY, config(tmp_path, consult_model=fake))
+    run_gate3(paper, REGISTRY, config(tmp_path, consult_model=fake))
     # One line, and it holds a token and nothing else a model could flag, but it
     # is still prose: it goes. What costs nothing is a paper with no findings.
     assert len(fake.prompts) == 1

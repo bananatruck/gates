@@ -16,11 +16,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from gates import Gate1Config, ModelLayer, run_gate1  # noqa: E402
+from gates import Gate1Config, run_gate1  # noqa: E402
 from gates.llm_report import (  # noqa: E402
     build_vocabulary,
     check_grounding,
-    generate_fixes,
 )
 from gates.report import render_feedback  # noqa: E402
 

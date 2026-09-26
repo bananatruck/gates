@@ -97,7 +97,7 @@ class Transcript:
         )
 
     def _on_gate_failure(self, payload: dict[str, Any]) -> None:
-        print(f"\n  GateFailure raised — no paper is produced.")
+        print("\n  GateFailure raised — no paper is produced.")
         print(_indent(str(payload["error"]), "    | "))
 
 

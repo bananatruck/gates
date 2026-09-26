@@ -91,7 +91,7 @@ def loop() -> dict[str, int]:
     with tempfile.TemporaryDirectory() as root, contextlib.redirect_stdout(io.StringIO()):
         outcomes = [run_gate2_loop(s, workdir=Path(root) / s.name) for s in SCENARIOS.values()]
     reviewed = [[t for t in o.turns if t.gate == 2] for o in outcomes]
-    entering = [o for o, turns in zip(outcomes, reviewed) if not turns[0].passed]
+    entering = [o for o, turns in zip(outcomes, reviewed, strict=True) if not turns[0].passed]
     return {
         "runs": len(outcomes),
         "entering": len(entering),

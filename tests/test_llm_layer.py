@@ -65,7 +65,6 @@ def test_llm_module_code_never_names_severity_fail():
     free to *discuss* FAIL in its docstrings — which it must, to explain why it
     cannot emit one — while never referencing it in an expression.
     """
-    import ast
 
     tree = ast.parse(LLM_SOURCE)
     referenced = {

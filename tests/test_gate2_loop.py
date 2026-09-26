@@ -172,7 +172,7 @@ def test_loop_metrics_come_from_the_ledger_alone(tmp_path):
     """F7, spec M5. A run that passes its first review never entered the loop,
     so it counts in neither side of resolution_rate: counting it would inflate
     the rate with runs the loop did nothing for."""
-    for name, scenario in SCENARIOS.items():
+    for scenario in SCENARIOS.values():
         outcome = run_gate2_loop(scenario, workdir=tmp_path)
 
     summary = Ledger(outcome.ledger_path).loop_summary()
@@ -280,7 +280,7 @@ def test_the_run_the_solver_already_passed_is_reviewed_without_rerunning(tmp_pat
     from gates.adapters.agentlab import (
         gated_execute, make_context, make_review_context, review_loop,
     )
-    from rig.gate2_scenarios import CLEAN, OUT_OF_RANGE, SPEEDUP
+    from rig.gate2_scenarios import OUT_OF_RANGE, SPEEDUP
 
     gate1 = make_context(research_dir=str(tmp_path))
     passed = gated_execute(OUT_OF_RANGE.turns[0].code(), gate1)

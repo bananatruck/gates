@@ -51,7 +51,8 @@ METRICS = {
     },
 }
 
-ROWS = list(csv.DictReader(open(HERE / "results.csv", newline="")))
+with open(HERE / "results.csv", newline="") as _f:
+    ROWS = list(csv.DictReader(_f))
 drawn: set[int] = set()  # every figure, for the completeness check
 shown: set[int] = set()  # the figure being drawn, for its footer
 
@@ -140,7 +141,7 @@ def finish(fig, statuses, name, note=""):
 def level_figure(benchmark, name):
     fig, axes = plt.subplots(1, 2, figsize=(10, 3.8), facecolor=SURFACE)
     statuses = []
-    for ax, metric in zip(axes, ("integrity", "task")):
+    for ax, metric in zip(axes, ("integrity", "task"), strict=True):
         style(ax, benchmark, metric)
         for i, level in enumerate(LEVELS):
             statuses.append(bar(ax, i, find(benchmark, "Agent Lab", level, metric), LEVEL_RAMP[i]))
@@ -156,7 +157,7 @@ def level_figure(benchmark, name):
 def compare_figure(benchmark, name):
     fig, axes = plt.subplots(1, 2, figsize=(10, 3.8), facecolor=SURFACE)
     statuses = []
-    for ax, metric in zip(axes, ("integrity", "task")):
+    for ax, metric in zip(axes, ("integrity", "task"), strict=True):
         style(ax, benchmark, metric)
         for g, system in enumerate(SYSTEMS):
             gated = find(benchmark, system, "L3", metric)

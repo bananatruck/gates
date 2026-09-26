@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+from xml.etree.ElementTree import ParseError
 
 import pytest
 
@@ -134,7 +135,7 @@ def test_the_version_is_stripped_before_the_request(tmp_path):
 def test_malformed_xml_raises_rather_than_resolving(tmp_path):
     """A truncated response is a failed fetch, not an absent paper."""
     lookup = arxiv_lookup(cache_dir=str(tmp_path), fetch=fetcher("<feed><entry"))
-    with pytest.raises(Exception):
+    with pytest.raises(ParseError):
         lookup("2410.21676")
 
 

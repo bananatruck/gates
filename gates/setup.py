@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
-from typing import Callable
+from collections.abc import Callable
 
 from .errors import GateError
 from .gate1 import Gate1Config

@@ -36,8 +36,8 @@ SCHEMA_VERSION = "1.1"
 #: answerable.
 _MAX_OBSERVATIONS = 50
 
-_METRICS: "dict[str, dict]" = {}
-_METADATA: "dict[str, object]" = {}
+_METRICS: dict[str, dict] = {}
+_METADATA: dict[str, object] = {}
 _CODE_PATH = ""
 
 
@@ -150,7 +150,7 @@ def main(argv):
     os.makedirs(artifact_dir, exist_ok=True)
     results_path = os.path.join(artifact_dir, "results.json")
 
-    with open(_CODE_PATH, "r", encoding="utf-8") as f:
+    with open(_CODE_PATH, encoding="utf-8") as f:
         source = f.read()
     # Hashed here, by the process that actually executes it. The parent hashes
     # what it wrote; a mismatch means the file changed between write and run,

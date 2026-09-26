@@ -19,7 +19,8 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 from .. import pipeline
 from ..errors import GateError

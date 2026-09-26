@@ -243,7 +243,7 @@ def main() -> int:
     print("PER-CASE\n")
     print(f"{'case':{width}}  {'label':9}  {'outcome':7}  check")
     print("-" * (width + 46))
-    for case, row in zip(CASES, rows):
+    for case, row in zip(CASES, rows, strict=True):
         label = "defect" if case.defective else "legitimate"
         flag = "" if row["outcome"] in ("TP", "TN") else "   <-- WRONG"
         print(f"{row['case']:{width}}  {label:9}  {row['outcome']:7}  {row['by'] or '-'}{flag}")

@@ -11,7 +11,8 @@ import json
 import math
 from dataclasses import dataclass, field, asdict
 from enum import Enum
-from typing import Any, Iterable
+from typing import Any
+from collections.abc import Iterable
 
 SCHEMA_VERSION = "1.1"
 
@@ -326,7 +327,7 @@ def _read(path: str | None, limit: int | None) -> str:
     if not path:
         return ""
     try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             return f.read() if limit is None else f.read(limit)
     except OSError:
         return ""
