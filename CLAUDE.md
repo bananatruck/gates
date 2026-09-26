@@ -4,7 +4,7 @@ A portable, zero-dependency validity layer for autonomous research scaffolds.
 The thesis is that hallucinated results are an information-flow defect, not a model tendency.
 Every rule below exists to keep that claim true and provable.
 
-Read `docs/PLAN.md` for the design and `README.md` for what Gate 1 actually measured.
+Read `docs/PLAN.md` for the design, `README.md` for what has been measured, and `paper/PLAN.md` for the evaluation.
 This file is what to do; those two are why.
 
 ## 1. What a gate is for
@@ -49,7 +49,8 @@ Changing one invalidates a published claim, so do not change one without saying 
 
 - **Every gate ships a feedback loop, and both halves are tested.**
   Half one: an actionable report the agent can act on, rendered through `gates/report.py`.
-  Half two: a model-free scenario loop in `rig/` proving the reject-fix-accept cycle actually closes without an API key.
+  Half two: a model-free scenario loop in `rig/` proving the reject-fix-accept cycle closes without an API key.
+  `rig/` may also hold live tools that call a model, but the suite drives them with fakes and refuses every socket (D61).
   Gate 1 has both. A gate with only one is not finished.
 - **Every gate installs into an existing scaffold through one adapter and nothing else.**
   Agent Laboratory is the reference host and the comparison baseline.

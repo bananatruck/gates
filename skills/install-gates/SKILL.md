@@ -67,7 +67,7 @@ An adapter owes the host five things:
 - **A context builder per gate**: `make_context()`, `make_review_context()`, `make_report_context()`. Each returns a `GateContext` with its own budget and rejection counter, a `Ledger`, and the phase name the host itself uses.
 - **The model call** each gate's advisory layer uses, as a two-argument function. Import the host's client lazily, inside the function, or `pip install gates` breaks for everyone else.
 - **The level-0 path**: a `gated_execute` that runs the host's original execution when `gate_level()` is 0 and `gates.pipeline.gated_execute` otherwise.
-- **Retrieval**: the ids of the papers the host actually fetched, read from the host's own formats.
+- **Retrieval**: the ids of the papers the host fetched, read from the host's own formats.
 - **The host's declarations**, each described in the skill for the gate that reads it. `gates/` holds no defaults for these and must not learn any.
 
 ## Step 3: install the gates in order
@@ -93,7 +93,7 @@ Defaults live in the code and are tuned for completion and accuracy rather than 
 Budget state lives in your adapter, never in a gate.
 No gate compares its own `attempt` against `max_attempts`; if you find yourself adding that, you are putting policy in the wrong half.
 
-## Step 5: prove it is wired, not just imported
+## Step 5: prove the wiring runs
 
 Each gate skill names its own reachability test and model-free loop.
 Two proofs cover the whole install:
@@ -101,7 +101,7 @@ Two proofs cover the whole install:
 - **A level test per arm**: at each `GATES_LEVEL` the host runs, the closed gates never run and the open ones do.
 - **A key-leak test**, that no gate writes or transmits your provider credential. `tests/test_key_leak.py` plays all three gates with a sentinel key and fails if any written file or model prompt contains it.
 
-To prove a guard actually bites, break the code it guards, watch the test fail, restore it, and confirm `git diff` is empty.
+To prove a guard bites, break the code it guards, watch the test fail, restore it, and confirm `git diff` is empty.
 A guard nobody has seen fail is a guard you are trusting on faith.
 
 ## Worked example

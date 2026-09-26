@@ -13,6 +13,9 @@ Install `gate2-coherence` first: the writer cites the registry Gate 2 reviewed, 
 
 **Hands on:** `ReportOutcome.manuscript`, the render Gate 3 admitted. It is the only text the host should publish, and it is `None` unless Gate 3 passed it.
 
+Beside each attempt's report, Gate 3 writes `claims.json`: every rendered claim's chain back to its task, counted in the INFO row `report.claim_chains`.
+The task link resolves only if the host passed `task_ref` to Gate 1.
+
 ## Declare
 
 | Declaration | Feeds | Why the host must say |
@@ -23,7 +26,7 @@ Install `gate2-coherence` first: the writer cites the registry Gate 2 reviewed, 
 
 `retrieved` is a **callable**, read after each write, because a scaffold that searches while it writes has not finished retrieving when the first draft appears.
 `lookup` may raise; that is how it says the question could not be asked, and Gate 3 turns a raise into an INFO row rather than a rejection.
-Returning `None` means the paper does not exist, which is a very different answer, and collapsing the two lets a network outage launder a fabricated citation.
+Returning `None` means the paper does not exist, which is a different answer, and collapsing the two lets a network outage launder a fabricated citation.
 `arxiv_lookup(cache_dir=...)` in `gates/adapters/arxiv.py` is a ready `lookup` for arXiv ids.
 
 ## Wire it

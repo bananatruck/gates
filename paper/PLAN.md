@@ -1,7 +1,7 @@
 # G.A.T.E.S. evaluation plan
 
-Every figure below is a **dummy**: the expected shape of a run that has not happened, stamped PLACEHOLDER.
-Section 5 is how each one becomes real.
+Every figure in section 4 is a dummy, the expected shape of a run that has not happened, stamped PLACEHOLDER.
+Section 5 is how each one becomes real, and section 8's mechanism evidence is the part already measured.
 The paper's numbers come from `results.csv` and nowhere else, and `figures.py` draws every figure from it.
 
 The four main files:
@@ -131,7 +131,8 @@ Done when one real task runs at all four levels and `collect.py` measures its ro
 
 **Phase 2 - MLR-Bench pilot.**
 One task, four levels, one seed, with tasks taken from MLR-Bench's release rather than retyped.
-It measures cost and wallclock per run (M6), and those choose the seed count.
+It measures the discordance between levels 0 and 3, which sets the seed count by §9's power rule, and the cost and wallclock of every run (M6), which `paper/collect.py` totals in `costs.csv`.
+The pilot runs `deepseek-flash` with the two judges named in §7.
 Done when the pilot's cost per level is recorded and the seed count is written into this plan.
 
 **Phase 3 - MLR-Bench.**

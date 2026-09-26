@@ -1,11 +1,11 @@
 # Glossary
 
 The words this project uses with one meaning each.
-Decisions behind them are in `progress.md` (D58-D60).
+Decisions behind them are in `progress.md`, D58-D62.
 
 **Level** - the value of `GATES_LEVEL`: 0 all gates off, 1 Gate 1, 2 Gates 1 and 2, 3 all three.
 Levels are cumulative, because each gate reads what the one before it produced.
-_Avoid_: arm (an arm is one level of one experiment), mode.
+_Avoid_: arm, which is one level of one experiment, and mode.
 
 **Gate 0** - level 0 on a figure: the host exactly as shipped, the control.
 
@@ -29,3 +29,13 @@ The gate emits nothing, so the bar repeats the level below it, drawn hatched.
 
 **Dummy row** - a row of `paper/results.csv` holding the expected shape of a run that has not happened.
 Any figure that draws one is stamped PLACEHOLDER.
+
+**Claim chain** - a rendered number's provenance, link by link: task, command, log, value, claim.
+Gate 1 builds the first four in `CHAIN_LINKS` order, and Gate 3 adds the claim and writes every chain to `claims.json`.
+A broken link is counted in `report.claim_chains`, never fatal.
+
+**Mechanism evidence** - what the gates catch and wrongly flag, measured by the rigs and the signed campaign: `paper/mechanism.csv`, figure 8.
+It is not a benchmark result, and the figures never mix the two.
+
+**Live tool** - a module in `rig/` that needs a real model or network to measure anything: `tuning`, `corpus` with `--backend`, `posthoc_audit`.
+The suite runs each against a fake (D61).
