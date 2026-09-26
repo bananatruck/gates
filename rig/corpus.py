@@ -26,6 +26,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from collections.abc import Callable, Iterable
+
 from rig.stats import wilson
 
 CORPUS_PATH = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "log_corpus.jsonl"

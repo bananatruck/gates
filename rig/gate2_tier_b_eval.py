@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from gates.gate2 import Gate2Config, PlanField, run_gate2
+
 from rig.stats import wilson
 
 CONFORMANCE = "coherence.method_conformance"

@@ -163,6 +163,7 @@ def test_the_cache_file_is_readable_by_a_human(tmp_path):
     assert cached["2410.21676"]["title"].startswith("Simplifying")
 
 
+@pytest.mark.live
 @pytest.mark.skipif(
     not os.environ.get("GATES_LIVE_ARXIV"),
     reason="live arXiv call; set GATES_LIVE_ARXIV=1 to run",

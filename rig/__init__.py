@@ -1,9 +1,18 @@
 """Development rigs for the validity layer. Not part of the shipped package.
 
 ``pyproject.toml`` packages ``gates*`` only, so nothing here is installed with
-the library. These are the harnesses that let Gate 1 be exercised end to end —
-engineer turn, verdict, feedback report, rewrite — without spending an LLM call
-or a 45-minute training run.
+the library. Two kinds of module live here (D61):
+
+* **Loops and evaluations** drive a gate end to end - engineer turn, verdict,
+  feedback report, rewrite - with scripted agents, so they need no model, no
+  key and no network. CI runs every one.
+* **Live tools** measure something only a real model or source can answer:
+  ``tuning`` (does model feedback converge faster than the template?) and
+  ``corpus`` prompt variants. Each takes its model injected, has a CLI, and is
+  tested with a fake.
+
+``tests/conftest.py`` makes the suite refuse every socket, so a loop that
+starts reaching the network fails CI instead of quietly needing a key.
 """
 
 import os

@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+import socket
+
+import pytest
 
 from gates import harness, schema
 from gates.pipeline import upstream_view
@@ -57,3 +60,11 @@ def test_upstream_view_puts_the_marker_last_and_slices_it_away(tmp_path):
     assert execution.exception is not None
     assert upstream_view(execution) == "x" * 1000
     assert "[CODE EXECUTION ERROR]: " in upstream_view(execution, max_len=10_000)
+
+
+def test_the_suite_cannot_reach_the_network():
+    """D61's condition for live tools in rig/: the suite never opens a socket."""
+    with pytest.raises(RuntimeError, match="offline"):
+        socket.create_connection(("127.0.0.1", 9), timeout=1)
+    with pytest.raises(RuntimeError, match="offline"):
+        socket.getaddrinfo("arxiv.org", 443)

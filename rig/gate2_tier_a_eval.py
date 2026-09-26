@@ -31,6 +31,7 @@ from typing import Any
 
 from gates.gate2 import Gate2Config, Range, Relation, run_gate2
 from gates.schema import Severity
+
 from rig.stats import wilson
 
 DERIVES = Relation(key="a.speedup", op="ratio", left="a.slow_s", right="a.fast_s")

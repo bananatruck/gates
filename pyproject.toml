@@ -19,6 +19,7 @@ include = ["gates*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["live: reaches the network; skipped unless its environment variable is set (D61)"]
 cache_dir = ".cache/pytest"
 
 [tool.ruff]
