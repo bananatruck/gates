@@ -40,6 +40,27 @@ jobs:
       - name: Run the test suite
         run: python -m pytest -q
 
+  lint:
+    name: Lint with ruff
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install the package and its test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Run ruff with the rules in pyproject.toml
+        run: python -m ruff check .
+
   stdlib-only:
     name: Verify the runtime stays stdlib-only
     runs-on: ubuntu-latest
