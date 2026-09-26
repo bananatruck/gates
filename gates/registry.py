@@ -30,9 +30,13 @@ from .schema import SCHEMA_VERSION, GateReport
 
 REGISTRY_FILENAME = "registry.json"
 
-#: The provenance links Gate 1 can establish. "claim" is deliberately absent —
-#: Gate 3 appends it when a claim in the manuscript resolves to a trace id.
+#: The provenance links Gate 1 can establish, in order. ``_chain`` builds every
+#: value's chain from this tuple. "claim" is deliberately absent: Gate 3 appends
+#: it through :func:`claim_chain` when a claim in the manuscript renders a value.
 CHAIN_LINKS = ("task", "command", "log", "value")
+
+#: The link Gate 3 adds, locating the rendered claim in the manuscript.
+CLAIM_LINK = "claim"
 
 
 def build_registry(report: GateReport, *, task_ref: str | None = None) -> dict[str, Any]:
@@ -142,6 +146,40 @@ def chain_integrity(registry: dict[str, Any]) -> dict[str, Any]:
     return registry.get("chain_integrity") or _integrity(registry.get("values") or {})
 
 
+def claim_chain(
+    registry: dict[str, Any],
+    key: str,
+    *,
+    ref: str,
+    resolved: bool,
+    why: str | None = None,
+) -> list[dict[str, Any]]:
+    """The value's chain with the manuscript claim appended as its last link.
+
+    ``ref`` locates the claim in the manuscript, and ``resolved`` says whether
+    the text there is the registry value. The value's own links are copied, not
+    re-derived, so a claim is never better traced than the value it cites. A
+    registry that records no chain for the key yields every Gate 1 link
+    unresolved, since nothing says how that value was produced.
+    """
+    entry = (registry.get("values") or {}).get(key) or {}
+    chain = entry.get("chain")
+    if chain:
+        links = [dict(link) for link in chain]
+    else:
+        links = [
+            {
+                "link": name,
+                "ref": None,
+                "resolved": False,
+                "why": f"the registry records no provenance chain for {key!r}",
+            }
+            for name in CHAIN_LINKS
+        ]
+    links.append({"link": CLAIM_LINK, "ref": ref, "resolved": resolved, "why": why})
+    return links
+
+
 # --------------------------------------------------------------------------- #
 # internals
 # --------------------------------------------------------------------------- #
@@ -161,32 +199,31 @@ def _chain(
     the case that must outrank a numeric discrepancy.
     """
     log_path = run.get("stdout_path")
-    return [
-        {
-            "link": "task",
+    links = {
+        "task": {
             "ref": task_hash,
             "resolved": task_hash is not None,
             "why": None if task_hash else "the host scaffold supplied no task reference",
         },
-        {
-            "link": "command",
+        "command": {
             "ref": run.get("run_id"),
             "resolved": bool(run.get("run_id")) and bool(run.get("argv")) and hash_verified,
             "why": None if hash_verified else "the executed source did not hash to the recorded source",
         },
-        {
-            "link": "log",
+        "log": {
             "ref": log_path,
             "resolved": bool(log_path) and Path(log_path).exists(),
             "why": None if log_path else "no captured log for this run",
         },
-        {
-            "link": "value",
+        "value": {
             "ref": trace_id,
             "resolved": bool(trace_id),
             "why": None if trace_id else "the value carries no trace id",
         },
-    ]
+    }
+    # CHAIN_LINKS fixes the order; a name without a builder here is a KeyError,
+    # not a silently shorter chain.
+    return [{"link": name, **links[name]} for name in CHAIN_LINKS]
 
 
 def _integrity(values: dict[str, Any]) -> dict[str, Any]:

@@ -24,12 +24,16 @@ from gates.adapters.agentlab import (
 )
 from gates.pipeline import gated_report
 from gates.errors import GateError, GateFailure
+from gates.gate1 import Gate1Config, run_gate1
 from gates.gate3 import (
+    CLAIMS_FILENAME,
     GATE_NAME,
+    RENDERED_FILENAME,
     Gate3Config,
     render_result_tokens,
     run_gate3,
 )
+from gates.registry import CHAIN_LINKS, CLAIM_LINK, build_registry
 from gates.prose import claim_sections
 from gates.report import render_feedback
 from gates.schema import PaperRecord, Severity, Verdict
@@ -1101,6 +1105,86 @@ def test_gate_3_turns_are_not_counted_as_gate_2_reviews(tmp_path):
     assert make_review_context(research_dir=str(tmp_path)).ledger.path == context.ledger.path
     report_loop(context, writer(TYPED, TOKENISED), registry=registry(RECORDED))
     assert context.ledger.loop_summary()["runs_reviewed"] == 0
+
+
+# --------------------------------------------------------------------------- #
+# claim chains: task, command, log, value, then the claim
+# --------------------------------------------------------------------------- #
+
+
+def gate1_registry(tmp_path, *, task_ref):
+    """A registry Gate 1 actually wrote, so every link has something to resolve."""
+    src = "record_metadata('seed', 0)\nv = 4 / 5\nrecord_result('acc', v)\n"
+    report = run_gate1(
+        src, Gate1Config(artifact_root=str(tmp_path / "g1"), timeout_s=30, task_ref=task_ref)
+    )
+    assert report.passed
+    return build_registry(report, task_ref=task_ref)
+
+
+CITES_ACC = "\\section{Results}\nAccuracy reaches \\result{acc}.\n"
+
+
+def test_every_value_chain_follows_chain_links(tmp_path):
+    reg = gate1_registry(tmp_path, task_ref="classify cora")
+    assert [link["link"] for link in reg["values"]["acc"]["chain"]] == list(CHAIN_LINKS)
+
+
+def test_a_traced_claim_carries_all_five_links_to_the_manuscript(tmp_path):
+    reg = gate1_registry(tmp_path, task_ref="classify cora")
+    report = run_gate3(CITES_ACC, reg, config(tmp_path))
+
+    row = check(report, "report.claim_chains")
+    assert report.verdict is Verdict.PASS
+    assert row.severity is Severity.INFO and row.passed
+    assert (row.evidence["claims"], row.evidence["complete_chains"]) == (1, 1)
+
+    claims = json.loads(pathlib.Path(row.evidence["path"]).read_text())
+    chain = claims[0]["chain"]
+    assert [link["link"] for link in chain] == [*CHAIN_LINKS, CLAIM_LINK]
+    assert all(link["resolved"] for link in chain)
+    assert claims[0]["trace_id"] == reg["values"]["acc"]["trace_id"]
+    rendered = (pathlib.Path(report.artifact_dir) / RENDERED_FILENAME).read_text()
+    assert rendered[claims[0]["start"] : claims[0]["end"]] == "0.8"
+
+
+def test_a_missing_task_is_reported_as_a_rate_and_never_blocks(tmp_path):
+    """Duty 1 is covered by the FAIL checks. An honest run the host gave no task
+    reference is still honest, so the broken task link is counted, not fatal."""
+    reg = gate1_registry(tmp_path, task_ref=None)
+    report = run_gate3(CITES_ACC, reg, config(tmp_path))
+
+    row = check(report, "report.claim_chains")
+    assert report.verdict is Verdict.PASS
+    assert not row.passed and not row.blocking
+    assert row.evidence["missing_links"] == {"task": 1}
+    assert "task (1)" in row.message
+
+
+def test_a_host_render_that_differs_breaks_the_claim_link(tmp_path):
+    reg = gate1_registry(tmp_path, task_ref="classify cora")
+    tampered = "\\section{Results}\nAccuracy reaches 0.9.\n"
+    report = run_gate3(CITES_ACC, reg, config(tmp_path, rendered=tampered))
+
+    row = check(report, "report.claim_chains")
+    claims = json.loads(pathlib.Path(row.evidence["path"]).read_text())
+    assert row.evidence["missing_links"] == {"claim": 1}
+    assert claims[0]["chain"][-1]["why"] == "the manuscript reads '0.9' here"
+    # The verdict comes from the byte check, not from the chain.
+    assert not check(report, "report.rendered_values_match_registry").passed
+
+
+def test_a_registry_without_chains_leaves_every_gate_1_link_unresolved(tmp_path):
+    report = run_gate3(TOKENISED, registry(RECORDED), config(tmp_path))
+    row = check(report, "report.claim_chains")
+    assert row.evidence["complete_chains"] == 0
+    assert row.evidence["missing_links"] == {name: 3 for name in CHAIN_LINKS}
+
+
+def test_a_manuscript_that_renders_nothing_emits_no_chain_row(tmp_path):
+    report = run_gate3(TYPED, registry(RECORDED), config(tmp_path))
+    assert check(report, "report.claim_chains") is None
+    assert not (pathlib.Path(report.artifact_dir) / CLAIMS_FILENAME).exists()
 
 
 # --------------------------------------------------------------------------- #

@@ -36,6 +36,13 @@ each check runs when its input exists:
     report.model_unbound_claims             WARN   iff a model is set and
                                                    flags a row; INFO if the
                                                    scan could not run
+    report.claim_chains                     INFO   iff a token rendered
+
+``report.claim_chains`` is evidence, not a check: it counts the rendered claims
+whose provenance runs unbroken from task to manuscript, and writes each chain to
+``claims.json``. A claim whose value is correct but whose run had no task
+reference is honest work, so a broken link is reported as a rate and never
+blocks.
 
 The model layer is Gate 1's (D31): the model reads what the number scanner
 passed and writes the REQUIRED FIXES, and neither can move the verdict.
@@ -55,6 +62,7 @@ outcome, and it is the number Gate 3 exists to produce.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -70,7 +78,7 @@ from .llm import (
     ModelLayer,
 )
 from .prose import CITATION, claim_sections, extract_claims, sections
-from .registry import citable_values
+from .registry import CHAIN_LINKS, CLAIM_LINK, citable_values, claim_chain
 from .schema import CheckResult, GateReport, PaperRecord, Severity, decide
 
 GATE_NAME = "GATE 3 — REPORT VALIDITY"
@@ -91,6 +99,10 @@ _ARXIV_ID = re.compile(r"(?:arxiv:?\s*)?(\d{4}\.\d{4,5})(v\d+)?", re.IGNORECASE)
 
 #: What the reader will see, written beside the report on every attempt.
 RENDERED_FILENAME = "manuscript.rendered"
+
+#: Each rendered claim's provenance chain, written beside the report when a
+#: token rendered.
+CLAIMS_FILENAME = "claims.json"
 
 #: Figure references, in both dialects the archived manuscripts actually use.
 _FIGURES = (
@@ -815,6 +827,75 @@ def _check_claim_sections_bound(
 # --------------------------------------------------------------------------- #
 
 
+def claim_chains(
+    rendered: str, subs: list[Substitution], registry: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """One record per rendered token: where it landed, and its full chain.
+
+    The claim link resolves when the reader sees the registry value at the
+    token's position, the same byte comparison
+    ``report.rendered_values_match_registry`` makes.
+    """
+    values = registry.get("values") or {}
+    claims = []
+    for sub in subs:
+        entry = values.get(sub.key) or {}
+        expected = str(entry.get("value"))
+        seen = rendered[sub.start : sub.end]
+        chain = claim_chain(
+            registry,
+            sub.key,
+            ref=f"{RENDERED_FILENAME}:{sub.start}-{sub.end}",
+            resolved=seen == expected,
+            why=None if seen == expected else f"the manuscript reads {seen!r} here",
+        )
+        claims.append(
+            {
+                "key": sub.key,
+                "start": sub.start,
+                "end": sub.end,
+                "trace_id": entry.get("trace_id"),
+                "chain": chain,
+                "chain_complete": all(link["resolved"] for link in chain),
+            }
+        )
+    return claims
+
+
+def _check_claim_chains(claims: list[dict[str, Any]], path: Path) -> CheckResult | None:
+    """The traced-claim rate. INFO: a broken link is reported, never blocking."""
+    if not claims:
+        return None
+    complete = sum(1 for c in claims if c["chain_complete"])
+    missing: dict[str, int] = {}
+    for claim in claims:
+        for link in claim["chain"]:
+            if not link["resolved"]:
+                missing[link["link"]] = missing.get(link["link"], 0) + 1
+    order = (*CHAIN_LINKS, CLAIM_LINK)
+    message = (
+        f"{complete} of {len(claims)} rendered claim(s) trace unbroken through "
+        f"{', '.join(order)}"
+    )
+    if missing:
+        message += "; unresolved: " + ", ".join(
+            f"{name} ({missing[name]})" for name in order if name in missing
+        )
+    return CheckResult(
+        id="report.claim_chains",
+        passed=complete == len(claims),
+        severity=Severity.INFO,
+        message=message,
+        evidence={
+            "claims": len(claims),
+            "complete_chains": complete,
+            "rate": complete / len(claims),
+            "missing_links": {name: missing[name] for name in order if name in missing},
+            "path": str(path),
+        },
+    )
+
+
 def run_gate3(
     source: str,
     registry: dict[str, Any],
@@ -873,6 +954,15 @@ def run_gate3(
 
     artifact_dir = config.attempt_dir(attempt)
     artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    claims = claim_chains(rendered, subs, registry)
+    chains = _check_claim_chains(claims, artifact_dir / CLAIMS_FILENAME)
+    if chains is not None:
+        # INFO by construction, so decide() below is blind to it.
+        checks.append(chains)
+        (artifact_dir / CLAIMS_FILENAME).write_text(
+            json.dumps(claims, indent=2), encoding="utf-8"
+        )
 
     report = GateReport(
         gate=GATE_NAME,

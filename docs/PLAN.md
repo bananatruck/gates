@@ -525,6 +525,7 @@ Numeric binding — deterministic, eliminates fabricated results by construction
 | `report.no_numeric_literals_in_results` | No bare numeral appears in a results context. The writer emits `\result{exp1.K2.test_acc}` tokens only | FAIL |
 | `report.all_tokens_resolve` | Every `\result{...}` key exists in the Gate 1 registry. An unknown key fails the build | FAIL |
 | `report.rendered_values_match_registry` | Post-render, every substituted value is byte-identical to the registry value | FAIL |
+| `report.claim_chains` | Each rendered claim's chain, task to command to log to value to claim, written to `claims.json` and reported as a rate. Evidence only, since a run with no task reference is still honest | INFO |
 
 The renderer, not the model, writes the numbers. A number that was never measured has no token,
 and a token that has no value does not compile.
