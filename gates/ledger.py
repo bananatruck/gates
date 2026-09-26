@@ -100,7 +100,7 @@ class Ledger:
         Gate 2 rows only. Gate 3's loop writes ``turn`` to the same ledger, and
         counting its manuscripts here would restate Gate 2's published number.
         """
-        # ponytail: runs are split on turn 0, so two loops appending to one
+        # limit: runs are split on turn 0, so two loops appending to one
         # ledger at the same time would merge; key rows by run id if hosts ever
         # review concurrently.
         runs: list[list[dict[str, Any]]] = []

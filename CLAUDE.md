@@ -87,6 +87,9 @@ No gate compares its own `attempt` against `max_attempts`.
 - Tests run with the repo venv: `.venv/bin/python -m pytest`.
   All of them, every time. The count is `tests_total` in `progress.md`, which the suite checks; the live arXiv test is skipped unless `GATES_LIVE_ARXIV=1`.
 - Bug fixes start with a failing test that reproduces the bug.
+- A `# limit:` comment marks a known ceiling of a check: the case it does not catch, and what would fix it.
+  It sits on the line that has the ceiling, and `progress.md` points at it by file.
+  A limit is stated, not hidden; the paper's honesty boundary is built from them.
 - `.venv/bin/ruff check .` must pass before a commit; CI runs the same rules from `pyproject.toml`.
 - Cache and build output live under `.cache/`. Nothing else belongs in the repo root.
 - Do not commit scratch notes, TODO dumps, or generated summary docs unless asked.
@@ -97,7 +100,7 @@ No gate compares its own `attempt` against `max_attempts`.
 ## 6. Known exceptions
 
 - **Do not mass-remove em dashes from existing source.**
-  New prose uses a plain hyphen, but `GATE_NAME` in `gate1.py:35` and `gate2.py:63` are published identifiers.
+  New prose uses a plain hyphen, but `GATE_NAME` in `gate1.py`, `gate2.py` and `gate3.py` are published identifiers.
   The Gate 1 string appears in four files inside the signed report package, including captured run logs.
   Rewriting them breaks the match between the code and the frozen evidence.
 - **`gates/retrieval.py` is not a paper registry.**

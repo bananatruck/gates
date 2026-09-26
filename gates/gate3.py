@@ -188,7 +188,7 @@ def render_result_tokens(
     the source and never print. LaTeX only, since the reference host writes
     LaTeX; a Markdown host would need a fenced block.
     """
-    # ponytail: a declared text containing \end{verbatim} would close the block
+    # limit: a declared text containing \end{verbatim} would close the block
     # early; Gate 2's messages never do, escape it if a host's can.
     if declared and not declared.endswith("\n"):
         declared += "\n"

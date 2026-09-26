@@ -68,3 +68,17 @@ def test_the_suite_cannot_reach_the_network():
         socket.create_connection(("127.0.0.1", 9), timeout=1)
     with pytest.raises(RuntimeError, match="offline"):
         socket.getaddrinfo("arxiv.org", 443)
+
+
+def test_known_ceilings_use_the_one_documented_tag():
+    """CLAUDE.md §5 names ``# limit:`` as the tag; progress.md points at them."""
+    tagged = {
+        str(path.relative_to(REPO))
+        for path in (REPO / "gates").rglob("*.py")
+        if "# limit: " in path.read_text(encoding="utf-8")
+    }
+    assert tagged >= {"gates/runner.py", "gates/static_checks.py"}
+    assert not any(
+        "ponytail:" in path.read_text(encoding="utf-8")
+        for path in (REPO / "gates").rglob("*.py")
+    )

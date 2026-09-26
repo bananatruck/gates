@@ -261,7 +261,7 @@ def _child_holds_ptrace_capability() -> bool:
     A root parent's child gets the bounding set; any other child keeps only the
     ambient set. No ``/proc`` means the child cannot read ``/proc`` either.
     """
-    # ponytail: ignores securebits, no_new_privs and file capabilities on the
+    # limit: ignores securebits, no_new_privs and file capabilities on the
     # interpreter; read /proc/<child>/status after spawn if those ever matter.
     wanted = "CapBnd" if os.geteuid() == 0 else "CapAmb"
     for line in _proc_status().splitlines():

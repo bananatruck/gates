@@ -272,7 +272,7 @@ def find_unused_record_values(
     reads is read anywhere else, so one real use clears it. A call-site literal
     reads no name and is never returned; ``classify_record_calls`` owns that.
     """
-    # ponytail: names only. cfg.lr recorded while cfg.batch is used reads as
+    # limit: names only. cfg.lr recorded while cfg.batch is used reads as
     # used, and so does a value passed to a logger; follow attributes and
     # subscripts if a decoy is ever caught hiding behind one.
     tree = parse(source, filename)
