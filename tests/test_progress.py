@@ -113,3 +113,38 @@ def test_the_state_block_says_which_fields_are_not_checked():
     )
     for field in ("branch", "head", "head_date"):
         assert field in text, f"the unchecked field {field!r} is not named"
+
+
+#: README's test table: each row's files. A test file in no group fails
+#: ``test_the_readme_test_table_matches_the_tree``, so a new file must be placed.
+README_GROUPS = {
+    "Gate 1: checks, loop, level-0 bypass": ("test_gate1", "test_loop", "test_bypass"),
+    "Gate 2: checks, loop, tier comparison": ("test_gate2", "test_gate2_loop", "test_gate2_tiers"),
+    "Gate 3: checks, loop, model layer, scanner miss, arXiv resolver": (
+        "test_gate3", "test_gate3_loop", "test_gate3_model", "test_gate3_m4", "test_arxiv_lookup",
+    ),
+    "Model layer and log scanning": (
+        "test_llm_report", "test_llm_scan", "test_llm_layer", "test_log_corpus",
+        "test_log_digest", "test_retrieval", "test_model_cost",
+    ),
+    "Wiring, levels, setup, install skills, key handling": (
+        "test_levels", "test_setup", "test_install_skill", "test_key_leak", "test_portability",
+    ),
+    "Evaluation tooling and this status check": (
+        "test_tuning", "test_paper_audit", "test_stats", "test_live_tools", "test_collect",
+        "test_mechanism", "test_posthoc_audit", "test_progress",
+    ),
+}
+
+
+def test_the_readme_test_table_matches_the_tree(collected):
+    """README's test metrics are a status document too, so they are checked."""
+    readme = (REPO / "README.md").read_text(encoding="utf-8")
+    grouped = {f"tests/{name}.py" for files in README_GROUPS.values() for name in files}
+    assert sorted(set(collected) - grouped) == [], "a test file is in no README group"
+    for group, files in README_GROUPS.items():
+        count = sum(collected[f"tests/{name}.py"] for name in files)
+        assert f"| {group} | {count} |" in readme, f"README's row for {group!r} should say {count}"
+    total = sum(collected.values())
+    assert f"| **Total** | **{total}** |" in readme
+    assert int(_state()["tests_total"]) == total

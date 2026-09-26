@@ -1,0 +1,12 @@
+id,panel,measure,arm,k,n,interval,source
+g1_delivered_on,Gate 1,Required values delivered downstream,Gate 1 on,40,40,yes,reports/finalized-report-and-results (08-15 campaign)
+g1_delivered_off,Gate 1,Required values delivered downstream,Gate 1 off,0,40,yes,reports/finalized-report-and-results (08-15 campaign)
+g1_traced_on,Gate 1,Manuscript claims traceable,Gate 1 on,28,29,yes,reports/finalized-report-and-results (08-15 campaign)
+g1_traced_off,Gate 1,Manuscript claims traceable,Gate 1 off,0,11,yes,reports/finalized-report-and-results (08-15 campaign)
+g2a_detect,Gate 2 tier A,Defective registries rejected,,27,27,yes,rig/gate2_tier_a_eval.py
+g2a_fpr,Gate 2 tier A,Clean registries wrongly rejected,,0,18,yes,rig/gate2_tier_a_eval.py
+g2b_detect,Gate 2 tier B,Plan divergences caught,,12,12,yes,rig/gate2_tier_b_eval.py
+g2b_fpr,Gate 2 tier B,Divergence false alarms,,0,17,yes,rig/gate2_tier_b_eval.py
+g2b_trace,Gate 2 tier B,Unverifiable fields flagged,,6,6,yes,rig/gate2_tier_b_eval.py
+g2b_trace_fpr,Gate 2 tier B,Traceability false alarms,,0,23,yes,rig/gate2_tier_b_eval.py
+g3_detect,Gate 3,Typed result literals detected,,34,49,no,rig/gate3_scanner_miss.py (two manuscripts: no interval, D39)

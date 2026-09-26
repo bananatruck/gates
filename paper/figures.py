@@ -1,6 +1,10 @@
-"""Every figure in the paper, drawn from results.csv and nothing else.
+"""Every figure in the paper, drawn from results.csv and mechanism.csv and nothing else.
 
     python3 paper/figures.py        # writes paper/figures/*.png
+
+Figures 1-7 are the benchmark evaluation, from results.csv. Figure 8 is the
+mechanism evidence already measured, from mechanism.csv, where every row names
+the rig or signed report that produced it.
 
 Filling in a real result means replacing its row in results.csv (status
 ``dummy`` becomes ``measured``) and running this again. A figure that still
@@ -193,6 +197,58 @@ def audit_figure(name):
     finish(fig, statuses, name)
 
 
+def mechanism_figure(name):
+    """Measured already: what each gate catches, and what it wrongly flags.
+
+    One horizontal bar per measure, each with its denominator and, where the
+    source reports one, its Wilson interval. No row here is a dummy.
+    """
+    import sys
+
+    sys.path.insert(0, str(HERE.parent))
+    from rig.stats import wilson
+
+    with open(HERE / "mechanism.csv", newline="") as f:
+        rows = list(csv.DictReader(f))
+    fig, ax = plt.subplots(figsize=(10, 5.2), facecolor=SURFACE)
+    ax.set_facecolor(SURFACE)
+    labels = []
+    for y, row in enumerate(rows):
+        k, n = int(row["k"]), int(row["n"])
+        value = 100 * k / n
+        off = row["arm"].endswith("off")
+        ax.barh(y, value, 0.62, color=ALONE if off else GATED)
+        end = value
+        if row["interval"] == "yes":
+            lo, hi = wilson(k, n)
+            ax.hlines(y, 100 * lo, 100 * hi, color=INK2, linewidth=1)
+            end = 100 * hi
+        ax.text(end + 1.5, y, f"{k}/{n}", va="center", fontsize=7.5, color=INK)
+        arm = f", {row['arm']}" if row["arm"] else ""
+        labels.append(f"{row['panel']}: {row['measure']}{arm}")
+    ax.set_yticks(range(len(rows)), labels)
+    ax.invert_yaxis()
+    ax.set_xlim(0, 115)
+    ax.set_xticks([0, 20, 40, 60, 80, 100])
+    ax.grid(axis="x", color=GRID, linewidth=0.6)
+    ax.set_axisbelow(True)
+    for side in ("top", "right", "left"):
+        ax.spines[side].set_visible(False)
+    ax.spines["bottom"].set_color(MUTED)
+    ax.tick_params(colors=INK2, labelsize=7.5, length=0)
+    ax.set_xlabel("%  (whisker: Wilson 95% interval)", fontsize=8, color=INK2)
+    fig.suptitle("Mechanism evidence, measured: what each gate catches and what it wrongly flags",
+                 x=0.01, ha="left", fontsize=10, weight="bold", color=INK)
+    ax.legend(handles=[Patch(color=GATED, label="gate on"), Patch(color=ALONE, label="Gate 1 off, the host as shipped")],
+              loc="lower right", frameon=False, fontsize=7, labelcolor=INK2)
+    fig.text(0.01, 0.01, "Sources: paper/mechanism.csv. Gate 1 from the signed 08-15 campaign; "
+             "Gates 2 and 3 from the model-free rigs.", fontsize=6.5, color=MUTED)
+    fig.subplots_adjust(left=0.36, right=0.98, top=0.9, bottom=0.12)
+    fig.savefig(OUT / name, dpi=200, facecolor=SURFACE)
+    plt.close(fig)
+    return len(rows)
+
+
 if __name__ == "__main__":
     OUT.mkdir(exist_ok=True)
     for number, benchmark in enumerate(("CORE-Bench", "MLR-Bench", "BadScientist"), start=1):
@@ -200,6 +256,7 @@ if __name__ == "__main__":
         level_figure(benchmark, f"fig{number}_{slug}_levels.png")
         compare_figure(benchmark, f"fig{number + 3}_{slug}_compare.png")
     audit_figure("fig7_audit.png")
+    mechanism_figure("fig8_mechanism.png")
     # A row no figure reads is a result that silently never reaches the paper.
     missing = [f"{r['benchmark']}/{r['system']}/{r['arm']}/{r['metric']}"
                for i, r in enumerate(ROWS) if i not in drawn]
