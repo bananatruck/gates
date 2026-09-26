@@ -22,13 +22,13 @@ Lives in ``rig/`` because ``pyproject.toml`` packages ``gates*`` only.
 
 from __future__ import annotations
 
-import math
 import tempfile
 from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
 from gates.gate2 import Gate2Config, PlanField, run_gate2
+from rig.stats import wilson
 
 CONFORMANCE = "coherence.method_conformance"
 TRACEABLE = "coherence.method_traceable"
@@ -168,15 +168,6 @@ UNVERIFIABLES: tuple[Case, ...] = (
 
 CASES = DIVERGENCES + CONFORMANCES + UNVERIFIABLES
 
-
-def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
-    if n == 0:
-        return (0.0, 1.0)
-    p = k / n
-    d = 1 + z * z / n
-    centre = (p + z * z / (2 * n)) / d
-    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
-    return (max(0.0, centre - half), min(1.0, centre + half))
 
 
 def _registry(case: Case) -> dict[str, Any]:

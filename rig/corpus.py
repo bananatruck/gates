@@ -23,10 +23,10 @@ plugin-registration noise has made the paper worse, not the compute bill.
 from __future__ import annotations
 
 import json
-import math
 from dataclasses import dataclass
 from pathlib import Path
 from collections.abc import Callable, Iterable
+from rig.stats import wilson
 
 CORPUS_PATH = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "log_corpus.jsonl"
 
@@ -143,16 +143,6 @@ class Score:
             "spurious": self.spurious,
         }
 
-
-def wilson(successes: int, trials: int, z: float = 1.96) -> tuple[float, float]:
-    """95% Wilson score interval for a proportion."""
-    if trials == 0:
-        return (0.0, 1.0)
-    p = successes / trials
-    denom = 1 + z * z / trials
-    centre = (p + z * z / (2 * trials)) / denom
-    margin = z * math.sqrt(p * (1 - p) / trials + z * z / (4 * trials * trials)) / denom
-    return (max(0.0, centre - margin), min(1.0, centre + margin))
 
 
 def score(scanner: ScannerFn, entries: Iterable[CorpusEntry] | None = None) -> Score:
