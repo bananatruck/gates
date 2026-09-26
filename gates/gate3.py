@@ -774,6 +774,20 @@ def _check_identifiers_resolve(
     )
 
 
+def audit_identifiers(
+    source: str, lookup: Callable[[str], PaperRecord | None]
+) -> CheckResult | None:
+    """``source.identifiers_resolve`` alone, for a paper with no run behind it.
+
+    The one Gate 3 check that needs neither a registry nor a run, so it can
+    audit papers other systems already released. ``run_gate3`` refuses a
+    registry that is not citable, which a released paper never has; this is
+    the same check without that precondition, and returns ``None`` when the
+    paper cites no arXiv identifier.
+    """
+    return _check_identifiers_resolve(source, lookup)
+
+
 def _check_claim_sections_bound(
     source: str, values: dict[str, Any]
 ) -> CheckResult | None:

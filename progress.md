@@ -17,7 +17,7 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 branch: main
 head: 297ffcd
 head_date: 2026-09-26
-tests_total: 720
+tests_total: 723
 tests_gate1: 105
 tests_gate2: 101
 tests_gate3: 90

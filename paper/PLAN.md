@@ -151,8 +151,9 @@ This supersedes D8, which rejected CORE-Bench because only 17 of its 181 questio
 Done when figure 1 has no dummy rows.
 
 **Phase 6 - post-hoc audit.**
-Collect the papers each system released, then add `rig/posthoc_audit.py`, which runs Gate 3's `source.identifiers_resolve` with `arxiv_lookup` over each one.
-`run_gate3` needs a citable registry, which a released paper does not have, so the audit calls the check directly.
+`rig/posthoc_audit.py` is built (09-26): it runs Gate 3's `source.identifiers_resolve` with `arxiv_lookup` over every paper under `<root>/<system>/`, through `audit_identifiers`, because `run_gate3` needs a citable registry that a released paper does not have.
+Only arXiv identifiers are checkable, so a paper citing none is counted as not checkable, never as clean.
+What remains is collecting each system's released papers as text.
 Done when figure 7 has no dummy rows.
 
 **Phase 7 - AI Scientist v2 adapter (late stage, after phases 1-6).**

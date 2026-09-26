@@ -58,8 +58,7 @@ def arxiv_lookup(
 ) -> Callable[[str], PaperRecord | None]:
     """A resolver for ``Gate3Config.lookup``, backed by arXiv and a disk cache.
 
-    Lives in the adapter by D41, because ``gates/`` never opens a socket and
-    ``rig/`` is the model-free scenario loop. The gate receives only the returned
+    Lives in the adapter by D41, because ``gates/`` never opens a socket. The gate receives only the returned
     function, so it cannot tell arXiv from the dict-backed fake the suite uses.
 
     Three behaviours the gate depends on:

@@ -7,9 +7,9 @@ the library. Two kinds of module live here (D61):
   feedback report, rewrite - with scripted agents, so they need no model, no
   key and no network. CI runs every one.
 * **Live tools** measure something only a real model or source can answer:
-  ``tuning`` (does model feedback converge faster than the template?) and
-  ``corpus`` prompt variants. Each takes its model injected, has a CLI, and is
-  tested with a fake.
+  ``tuning`` (does model feedback converge faster than the template?),
+  ``corpus`` prompt variants, and ``posthoc_audit`` over released papers. Each
+  takes its model or resolver injected, has a CLI, and is tested with a fake.
 
 ``tests/conftest.py`` makes the suite refuse every socket, so a loop that
 starts reaching the network fails CI instead of quietly needing a key.
