@@ -190,9 +190,11 @@ Each was open; the default is what the plan runs unless changed here.
 
 | Decision | Default | Why |
 |---|---|---|
-| model under test | `deepseek-v4-flash` | the Gate 1 campaign used it, so level 1 can be checked against that evidence |
-| judge and reviewer | a different provider from the model under test | D54: one model judging itself measures self-consistency |
-| seeds | chosen after the phase 2 pilot | cost per run is unknown until measured |
+| model under test | `deepseek-flash`, DeepSeek V4.1 Flash (D62) | DeepSeek serves V4.1 Flash under this name since 2026-09-10, and routes the old `deepseek-v4-flash` to it with no end date, so pinning the old name would not reproduce V4 either. The 08-15 Gate 1 evidence was V4 Flash, so level 1 here is compared with it as context, not as a replication |
+| second model | `deepseek-v4-pro`, MLR-Bench at levels 0 and 3 (D62) | the thesis says fabrication is an information-flow defect, not a model tendency; the same drop on two models is direct evidence for it (§9) |
+| judge and reviewer | Gemini Pro and Claude Sonnet, scores averaged (D62) | MLR-Judge averages Gemini-2.5-Pro-Preview and Claude-3.7-Sonnet, so this stays comparable, and neither is the model under test (D54). Those versions may be retired: each run's `judge/` names the exact model ids, and the paper calls them successors. Needs a Google and an Anthropic key |
+| cost | measured per run, never capped (D62) | `manifest.json` records `cost_usd` and `wallclock_s`, and `paper/collect.py` totals them in `costs.csv`; the number is published, so it is measured, not limited |
+| seeds | chosen after the phase 2 pilot, by §9's power rule | the pilot's discordance sets the count |
 | BadScientist variant | real runs with manipulated write-ups | fabricated papers with no experiments never pass Gate 1, so every level from 1 up would read 0% and measure nothing about Gates 2 and 3 |
 | CORE-Bench split | Hard, 45 test tasks | the level where agents fail most, so the most room to see an effect |
 | venue | AAMAS 2027 | the template is already in `AI Research/`; confirm before phase 9 |
