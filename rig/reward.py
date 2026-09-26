@@ -24,30 +24,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gates import ExecutionRecord, run_experiment
-
-#: Upstream's ``execute_code(code_str, timeout=60, MAX_LEN=1000)``.
-LEGACY_MAX_LEN = 1000
-
-#: Upstream's crash marker, and the whole of its failure detection.
-LEGACY_MARKER = "[CODE EXECUTION ERROR]"
-
-
-def legacy_buffer(execution: ExecutionRecord) -> str:
-    """The capture buffer as upstream built it, before the slice.
-
-    Order is the defect: the marker goes on the end, after everything the
-    program printed.
-    """
-    buffer = execution.stdout_text()
-    if execution.exception is not None:
-        buffer += f"{LEGACY_MARKER}: {execution.exception.message}\n"
-        buffer += execution.exception.traceback or ""
-    return buffer
-
-
-def legacy_view(execution: ExecutionRecord, max_len: int = LEGACY_MAX_LEN) -> str:
-    """What the solver and the writing agent actually received."""
-    return legacy_buffer(execution)[:max_len]
+from gates.pipeline import LEGACY_MARKER, LEGACY_MAX_LEN
+# The rig's older names for the one definition in gates/pipeline.py.
+from gates.pipeline import upstream_buffer as legacy_buffer
+from gates.pipeline import upstream_view as legacy_view
 
 
 def upstream_detects_failure(

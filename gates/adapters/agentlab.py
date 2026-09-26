@@ -31,6 +31,8 @@ from .. import Gate1Config, Gate2Config, Gate3Config, Ledger, run_experiment
 from ..pipeline import (  # noqa: F401 - the host imports these from here
     MLE_GATE_INSTRUCTIONS,
     REPORT_GATE_INSTRUCTIONS,
+    LEGACY_MARKER,
+    LEGACY_MAX_LEN,
     GateContext,
     GatedExecution,
     build_evidence_bundle,
@@ -39,6 +41,8 @@ from ..pipeline import (  # noqa: F401 - the host imports these from here
     record_divergence,
     report_loop,
     review_loop,
+    upstream_buffer,
+    upstream_view,
 )
 from .arxiv import arxiv_lookup  # noqa: F401 - the host imports it from here
 
@@ -340,12 +344,6 @@ def make_gate_model(
     return call
 
 
-#: Upstream's ceiling on what the writing agent ever saw. Reproduced exactly in
-#: the bypass path, because a baseline that quietly got a bigger channel would
-#: understate the defect this layer exists to fix.
-LEGACY_MAX_LEN = 1000
-
-
 def _ungated_execute(code: str, context: GateContext) -> GatedExecution:
     """The host's original path: run it, truncate to 1,000 characters, accept.
 
@@ -359,15 +357,11 @@ def _ungated_execute(code: str, context: GateContext) -> GatedExecution:
     workdir = Path(context.config.artifact_root) / f"ungated_{context.attempt:02d}"
     execution = run_experiment(code, workdir,
                                timeout_s=context.config.timeout_s)
-    captured = execution.stdout_text()
-    exc = execution.exception
-    if exc is not None:
-        # Appended AFTER the program's own output, then the whole thing sliced.
-        captured += f"[CODE EXECUTION ERROR]: {exc.message}\n{exc.traceback}"
-    bundle = captured[:LEGACY_MAX_LEN]
-    accepted = "[CODE EXECUTION ERROR]" not in bundle
+    captured = upstream_buffer(execution)
+    bundle = upstream_view(execution)
+    accepted = LEGACY_MARKER not in bundle
 
-    lost = exc is not None and accepted
+    lost = execution.exception is not None and accepted
     print(f"$$$$ gate 1 BYPASSED (level 0) — attempt {context.attempt}, "
           f"{'accepted' if accepted else 'rejected'}, {len(captured):,} chars "
           f"captured, {len(bundle):,} handed on"

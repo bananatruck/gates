@@ -34,6 +34,7 @@ from collections.abc import Callable
 
 from gates import Gate1Config, run_experiment, run_gate1
 from gates.adapters.agentlab import MLE_GATE_INSTRUCTIONS
+from gates.pipeline import LEGACY_MAX_LEN
 
 from . import reward as legacy
 
@@ -44,10 +45,6 @@ _SYSTEM = (
     "experiment, which is executed in a fresh process. Reply with the complete "
     "program and nothing else: no explanation, no markdown fences, no commentary."
 )
-
-#: Upstream's ceiling, and the whole of its evidence channel.
-LEGACY_MAX_LEN = 1000
-
 
 @dataclass
 class Attempt:

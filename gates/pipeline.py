@@ -28,6 +28,7 @@ from . import (
     GateFailure,
     GateReport,
     Ledger,
+    ExecutionRecord,
     build_registry,
     render_feedback,
     render_summary,
@@ -160,6 +161,38 @@ class GateContext:
         self.consecutive_rejections = 0 if passed else self.consecutive_rejections + 1
 
 
+#: Upstream's ``execute_code(code_str, timeout=60, MAX_LEN=1000)``: the ceiling
+#: on everything the solver and the writing agent ever saw. A baseline that
+#: quietly got a bigger channel would understate the defect this layer fixes.
+LEGACY_MAX_LEN = 1000
+
+#: Upstream's crash marker, and the whole of its failure detection.
+LEGACY_MARKER = "[CODE EXECUTION ERROR]"
+
+
+def upstream_buffer(execution: ExecutionRecord) -> str:
+    """The capture buffer as upstream built it, before the slice.
+
+    Order is the defect: the marker goes on the end, after everything the
+    program printed, so on a run that prints past the ceiling the slice drops
+    it and the crash becomes invisible.
+    """
+    buffer = execution.stdout_text()
+    exc = execution.exception
+    if exc is not None:
+        buffer += f"{LEGACY_MARKER}: {exc.message}\n{exc.traceback}"
+    return buffer
+
+
+def upstream_view(execution: ExecutionRecord, max_len: int = LEGACY_MAX_LEN) -> str:
+    """Exactly what upstream's ``execute_code`` returned: the buffer, sliced.
+
+    The one definition of level 0's channel. The bypass hands it on, and the
+    gated path rebuilds it so the ledger can score the counterfactual.
+    """
+    return upstream_buffer(execution)[:max_len]
+
+
 @dataclass
 class GatedExecution:
     """What the solver gets back in place of a raw stdout string."""
@@ -185,27 +218,18 @@ class GatedExecution:
             return f"gate bypassed — {'accepted' if self.passed else 'rejected'}"
         return render_summary(self.report)
 
-    def legacy_view(self, max_len: int = 1000) -> str:
-        """Reconstruct exactly what upstream's ``execute_code`` would have returned.
+    def legacy_view(self, max_len: int = LEGACY_MAX_LEN) -> str:
+        """What upstream's ``execute_code`` would have returned for this run.
 
-        Upstream appended its error marker to the *end* of the capture buffer and
-        then sliced ``[:MAX_LEN]``, so on any run that printed more than
-        ``max_len`` characters the marker fell off and the crash became
-        invisible. Reproducing that view lets the ledger answer the
-        counterfactual — what would the reward model have scored, given the
-        channel the scaffold actually had? — instead of guessing at it.
+        Lets the ledger answer the counterfactual - what would the reward model
+        have scored, given the channel the scaffold actually had? - instead of
+        guessing at it.
         """
         if self.report is None:
             # The gate-off control already holds exactly this view.
             return self.evidence_bundle
         execution = self.report.execution
-        if execution is None:
-            return ""
-        buffer = execution.stdout_text()
-        exc = execution.exception
-        if exc is not None:
-            buffer += f"[CODE EXECUTION ERROR]: {exc.message}\n{exc.traceback}"
-        return buffer[:max_len]
+        return "" if execution is None else upstream_view(execution, max_len)
 
 
 def gate_level() -> int:

@@ -19,9 +19,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from rig import host_dir
 from rig.paper_audit import PaperAudit, audit, render
 
-HOST = Path("/home/kesh/AgentLaboratory-Gemini")
+HOST = host_dir()
 ARCHIVED_RUN = HOST / "results" / "gemini_3_5_flash_run_1"
 #: The completed full-workflow ablation: both arms, same task, same models.
 ABLATION = HOST / "full_ablation_runs" / "deepseek_common_20260815"

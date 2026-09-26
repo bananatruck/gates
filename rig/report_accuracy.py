@@ -34,8 +34,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from gates import run_experiment
-
-LEGACY_MAX_LEN = 1000
+from gates.pipeline import LEGACY_MAX_LEN
 
 #: "Test accuracy with all training data: 0.9400", "Ratio (full/subset): 1.0000",
 #: "final_acc = 0.94". A label, a separator, a number — which is the shape a
@@ -206,9 +205,9 @@ def analyse_all(root: str | Path, *, timeout_s: int = 240) -> dict[str, dict]:
 if __name__ == "__main__":
     import sys
 
-    root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(
-        "/home/kesh/AgentLaboratory-Gemini/ablation_runs"
-    )
+    from rig import host_dir
+
+    root = Path(sys.argv[1]) if len(sys.argv) > 1 else host_dir() / "ablation_runs"
     dest = Path(sys.argv[2]) if len(sys.argv) > 2 else root / "report_accuracy.json"
     results = analyse_all(root)
     dest.write_text(json.dumps(results, indent=2), encoding="utf-8")
