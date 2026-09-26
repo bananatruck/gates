@@ -15,12 +15,12 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 
 <!-- STATE:BEGIN -->
 branch: main
-head: aebb3a0
-head_date: 2026-09-21
-tests_total: 694
+head: 297ffcd
+head_date: 2026-09-26
+tests_total: 700
 tests_gate1: 105
 tests_gate2: 101
-tests_gate3: 84
+tests_gate3: 90
 tests_llm_scan: 21
 tests_llm_layer: 14
 <!-- STATE:END -->
