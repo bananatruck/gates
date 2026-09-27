@@ -43,7 +43,12 @@ The suite runs each against a fake (D61).
 **Wave** - one task, one model and one seed at every requested level, started together on one machine by the host's `tools_levels.py`.
 Its level 0 and level 3 runs are a pair for the significance test.
 
-**Void wave** - a wave in which a run failed for a reason outside the agent: a stall, a signal, a full disk, an interrupt or an API outage.
+**Void wave** - a wave in which a run failed for a reason outside the agent (a stall, a signal, a full disk, an interrupt or an API outage), or in which a condition every sterile run needs did not hold (D67).
 It moves whole to `runs-void/`, keeps its logs and metrics for reference, never enters a table, and is rerun at the same seed.
+Its cost is spent money and is reported with the study's total.
+
+**Sterile run** - a run that started from nothing but the pinned inputs (task text, configuration, commits, packages), had its own empty caches, working folder and home folder, and held every guarantee the level runner makes, such as its equal share of the GPU (D67).
+Only sterile runs enter a table.
+_Avoid_: clean run, which says nothing about which conditions held.
 
 **Faked-results candidate** - a paper every eligible judge flags for "Faked Experimental Results"; a person's verdict decides whether it counts (D63).
