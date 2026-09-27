@@ -1217,6 +1217,8 @@ def test_gated_review_counts_agent_turns_not_executions(tmp_path):
     second = gated_review(reg, ctx)
     assert second.report.rewrite == 2
     assert second.report.attempt == 2
+    saved = pathlib.Path(second.report.artifact_dir) / "gate2_report.json"
+    assert json.loads(saved.read_text())["rewrite"] == 2
 
 
 def test_gated_review_carries_limitations_into_the_writing_phase(tmp_path):

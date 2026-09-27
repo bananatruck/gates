@@ -176,3 +176,13 @@ def test_a_citation_nobody_retrieved_is_sent_back(played):
     assert {c.id for c in first.report.failed_checks()} == {"source.cited_papers_in_registry"}
     assert "not retrieved: 2501.00001v1" in first.feedback
     assert "retrieved: 1902.07153v2, 2410.21676v4" in first.feedback
+
+
+def test_the_saved_report_carries_the_rewrite_number(tmp_path):
+    """The file on disk must count the writer's turns, as the feedback header does."""
+    outcome = run_gate3_loop(SCENARIOS["budget-exhausts"], workdir=tmp_path)
+    saved = [
+        json.loads((Path(turn.report.artifact_dir) / "gate3_report.json").read_text())["rewrite"]
+        for turn in outcome.turns
+    ]
+    assert saved == list(range(1, outcome.turns_used + 1))

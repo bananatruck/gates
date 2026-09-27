@@ -80,8 +80,14 @@ class Gate1Config:
         return Path(self.artifact_root) / "gate1" / f"attempt_{attempt:02d}"
 
 
-def run_gate1(source: str, config: Gate1Config, attempt: int = 1) -> GateReport:
+def run_gate1(
+    source: str, config: Gate1Config, attempt: int = 1, *, rewrite: int = 0
+) -> GateReport:
     """Run every Gate 1 check against ``source`` and return the verdict.
+
+    ``rewrite`` is the agent turn this execution belongs to. It is set here,
+    not by the caller afterwards, because the report and registry are written
+    to disk before this returns.
 
     Static checks run first and short-circuit: rejecting a program with an
     unbound name should not cost a 45-minute training run.
@@ -112,6 +118,7 @@ def run_gate1(source: str, config: Gate1Config, attempt: int = 1) -> GateReport:
         gate=GATE_NAME,
         verdict=decide(checks),
         attempt=attempt,
+        rewrite=rewrite,
         max_attempts=config.max_attempts,
         checks=checks,
         artifact_dir=str(artifact_dir),

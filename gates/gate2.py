@@ -311,7 +311,7 @@ class Gate2Config:
 
 
 def run_gate2(
-    registry: dict[str, Any], config: Gate2Config, attempt: int = 1
+    registry: dict[str, Any], config: Gate2Config, attempt: int = 1, *, rewrite: int = 0
 ) -> GateReport:
     """Run Gate 2's deterministic tier against a Gate 1 registry.
 
@@ -363,6 +363,7 @@ def run_gate2(
         gate=GATE_NAME,
         verdict=decide(checks),
         attempt=attempt,
+        rewrite=rewrite,
         max_attempts=config.max_attempts,
         checks=checks,
         artifact_dir=str(artifact_dir),

@@ -282,8 +282,10 @@ def gated_execute(code: str, context: GateContext) -> GatedExecution:
     """Execute ``code`` under Gate 1 and return the verdict plus its artifacts."""
     require_gate(1)
     context.attempt += 1
-    report = run_gate1(code, context.config, attempt=context.attempt)
-    report.rewrite = context.consecutive_rejections + 1
+    report = run_gate1(
+        code, context.config, attempt=context.attempt,
+        rewrite=context.consecutive_rejections + 1,
+    )
     context.note(report)
 
     print(f"$$$$ {render_summary(report)}")
@@ -310,8 +312,10 @@ def gated_review(registry: dict[str, Any], context: GateContext) -> GatedExecuti
     """
     require_gate(2)
     context.attempt += 1
-    report = run_gate2(registry, context.config, attempt=context.attempt)
-    report.rewrite = context.consecutive_rejections + 1
+    report = run_gate2(
+        registry, context.config, attempt=context.attempt,
+        rewrite=context.consecutive_rejections + 1,
+    )
     context.note(report)
 
     print(f"$$$$ {render_summary(report)}")
@@ -471,10 +475,10 @@ def gated_report(
         registry,
         context.config,
         attempt=context.attempt,
+        rewrite=context.consecutive_rejections + 1,
         declared=declared,
         retrieved=retrieved,
     )
-    report.rewrite = context.consecutive_rejections + 1
     context.note(report)
 
     print(f"$$$$ {render_summary(report)}")

@@ -210,3 +210,18 @@ def test_loop_stops_when_the_engineer_gives_up(tmp_path):
     assert outcome.turns_used == 0
     assert outcome.outcome == "no_pass"
     assert outcome.gate_failure is None
+
+
+def test_the_saved_report_and_registry_carry_the_rewrite_number(played):
+    """The files on disk are the evidence, so they must count turns as the log does.
+
+    Wave 1 of the MLR-Bench pilot saved ``"rewrite": 0`` in every report, because
+    the files were written before the pipeline set the number.
+    """
+    outcome = played["recovers"]
+    saved = [
+        json.loads((Path(execution.report.artifact_dir) / name).read_text())["rewrite"]
+        for execution in outcome.executions
+        for name in ("gate1_report.json", "registry.json")
+    ]
+    assert saved == [1, 1, 2, 2, 3, 3]

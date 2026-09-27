@@ -916,6 +916,7 @@ def run_gate3(
     config: Gate3Config,
     attempt: int = 1,
     *,
+    rewrite: int = 0,
     declared: str = "",
     retrieved: Iterable[str] | None = None,
 ) -> GateReport:
@@ -982,6 +983,7 @@ def run_gate3(
         gate=GATE_NAME,
         verdict=decide(checks),
         attempt=attempt,
+        rewrite=rewrite,
         max_attempts=config.max_attempts,
         checks=checks,
         artifact_dir=str(artifact_dir),
