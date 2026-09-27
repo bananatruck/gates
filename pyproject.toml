@@ -26,7 +26,7 @@ cache_dir = ".cache/pytest"
 target-version = "py310"
 cache-dir = ".cache/ruff"
 # The signed package holds captured agent code; linting it would mean editing evidence.
-extend-exclude = ["reports", "build"]
+extend-exclude = ["reports", "build", "tests/fixtures/mlrbench"]
 
 [tool.ruff.lint]
 # Correctness and bug-risk rules, plus a few simplifications. Line length is not enforced.

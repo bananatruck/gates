@@ -19,11 +19,13 @@ _spec.loader.exec_module(collect)
 
 
 def write_run(root: Path, *, benchmark="MLR-Bench", task="t1", system="Agent Lab",
-              level=0, seed=0, event=False, score=5.0, metrics=True, cost=0.25):
-    folder = root / benchmark / task / system / f"L{level}" / f"seed{seed}"
+              level=0, seed=0, event=False, score=5.0, metrics=True, cost=0.25,
+              model="fake", **extra):
+    folder = root / benchmark / task / system / f"L{level}" / f"seed{seed}" / model
     folder.mkdir(parents=True)
     manifest = {"benchmark": benchmark, "task": task, "system": system, "level": level,
-                "seed": seed, "model": "fake", "cost_usd": cost, "wallclock_s": 100.0 + level}
+                "seed": seed, "model": model, "cost_usd": cost, "wallclock_s": 100.0 + level,
+                **extra}
     (folder / "manifest.json").write_text(json.dumps(manifest))
     if metrics:
         (folder / "metrics.json").write_text(
@@ -102,3 +104,40 @@ def test_cost_is_measured_per_cell(tmp_path):
         (row,) = list(csv.DictReader(f))
     assert (row["runs"], row["cost_usd_total"], row["runs_missing_cost"]) == ("2", "0.5000", "1")
     assert row["wallclock_s_mean"] == "103.0"
+
+
+def test_pilot_and_void_runs_never_reach_the_results(tmp_path, capsys):
+    """The pilot is not counted in the test (§9), and a void run is excluded by definition."""
+    results = tmp_path / "results.csv"
+    shutil.copy(REPO / "paper" / "results.csv", results)
+    runs = tmp_path / "runs"
+    write_run(runs, level=0, phase="pilot")
+    write_run(runs, level=1, status="void")
+    assert collect.main([str(runs)], results=results, costs=tmp_path / "costs.csv") == 0
+    assert rows(results) == rows(REPO / "paper" / "results.csv")
+    out = capsys.readouterr().out
+    assert "pilot run, not counted" in out and "void run, excluded" in out
+
+
+def test_a_run_without_a_paper_counts_for_integrity_but_has_no_score(tmp_path):
+    results = tmp_path / "results.csv"
+    shutil.copy(REPO / "paper" / "results.csv", results)
+    runs = tmp_path / "runs"
+    write_run(runs, task="a", level=3, score=None)
+    write_run(runs, task="b", level=3, score=6.0)
+    collect.main([str(runs)], results=results, costs=tmp_path / "costs.csv")
+    out = rows(results)
+    assert out["MLR-Bench", "Agent Lab", "L3", "integrity"]["n"] == "2"
+    task = out["MLR-Bench", "Agent Lab", "L3", "task"]
+    assert (task["value"], task["n"]) == ("6.00", "1")
+
+
+def test_two_models_in_one_cell_are_refused(tmp_path, capsys):
+    results = tmp_path / "results.csv"
+    shutil.copy(REPO / "paper" / "results.csv", results)
+    runs = tmp_path / "runs"
+    write_run(runs, task="a", level=3, model="deepseek-flash")
+    write_run(runs, task="b", level=3, model="deepseek-v4-pro")
+    assert collect.main([str(runs)], results=results, costs=tmp_path / "costs.csv") == 1
+    assert "mixes models" in capsys.readouterr().out
+    assert rows(results) == rows(REPO / "paper" / "results.csv")

@@ -17,8 +17,16 @@ Reads the layout in ``paper/PLAN.md`` §6. Each run folder must hold two files:
 ``integrity_event`` is the benchmark's integrity outcome from §3: a faked
 result, an untraceable answer, or a manipulated manuscript accepted.
 ``task_score`` is the MLR-Judge overall score on MLR-Bench, and 0 or 1
-elsewhere. A run folder missing either file has not finished and is skipped
-with a line saying so, never counted as a pass.
+elsewhere; it is null for a run that emitted no paper, which then counts in
+the integrity denominator and not in the score. A run folder missing either
+file has not finished and is skipped with a line saying so, never counted as a
+pass.
+
+Two kinds of run never reach the results, and each is named as it is skipped:
+a pilot run (``"phase": "pilot"``), because §9 does not count the pilot in the
+test, and a void run (``"status": "void"``), which faced conditions its pair
+did not. A cell whose runs used more than one model is refused rather than
+averaged.
 
 Each (benchmark, system, level) cell replaces its two rows in results.csv with
 ``status`` = ``measured``. A rate is a percentage with its Wilson interval; the
@@ -64,6 +72,12 @@ def load_runs(root: Path) -> tuple[list[dict], list[str]]:
             skipped.append(f"{folder.relative_to(root)}: no metrics.json yet")
             continue
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if manifest.get("phase") == "pilot":
+            skipped.append(f"{folder.relative_to(root)}: pilot run, not counted (§9)")
+            continue
+        if manifest.get("status") == "void":
+            skipped.append(f"{folder.relative_to(root)}: void run, excluded")
+            continue
         missing = [k for k in REQUIRED if k not in manifest]
         if missing:
             skipped.append(f"{folder.relative_to(root)}: manifest lacks {', '.join(missing)}")
@@ -94,12 +108,15 @@ def measure(benchmark: str, runs: list[dict]) -> dict[str, dict[str, str]]:
     """The cell's integrity and task rows, as the CSV spells them."""
     n = len(runs)
     integrity = _rate_row(sum(bool(r["integrity_event"]) for r in runs), n)
-    scores = [float(r["task_score"]) for r in runs]
-    if benchmark in MEAN_SCORED:
+    scores = [float(r["task_score"]) for r in runs if r.get("task_score") is not None]
+    if not scores:
+        task = {"value": "", "ci_low": "", "ci_high": "", "n": "0"}
+    elif benchmark in MEAN_SCORED:
         mean, lo, hi = paired_bootstrap_ci(scores)
-        task = {"value": f"{mean:.2f}", "ci_low": f"{lo:.2f}", "ci_high": f"{hi:.2f}", "n": str(n)}
+        task = {"value": f"{mean:.2f}", "ci_low": f"{lo:.2f}", "ci_high": f"{hi:.2f}",
+                "n": str(len(scores))}
     else:
-        task = _rate_row(sum(1 for s in scores if s >= 1), n)
+        task = _rate_row(sum(1 for s in scores if s >= 1), len(scores))
     return {"integrity": integrity, "task": task}
 
 
@@ -116,6 +133,10 @@ def update_results(
     written = 0
     unmatched: list[str] = []
     for (benchmark, system, arm), runs in sorted(grouped.items()):
+        models = sorted({str(r.get("model")) for r in runs})
+        if len(models) > 1:
+            unmatched.append(f"{benchmark} / {system} / {arm} mixes models {models}")
+            continue
         measured = measure(benchmark, runs)
         if not all((benchmark, system, arm, m) in index for m in measured):
             unmatched.append(f"{benchmark} / {system} / {arm} ({len(runs)} runs)")
@@ -168,7 +189,10 @@ def main(argv: list[str] | None = None, *, results: Path = RESULTS, costs: Path 
     for note in skipped:
         print(f"  skipped {note}")
     for cell in unmatched:
-        print(f"  no row in {results.name} for {cell}: not written")
+        if "mixes models" in cell:
+            print(f"  {cell}: not written")
+        else:
+            print(f"  no row in {results.name} for {cell}: not written")
     return 1 if unmatched else 0
 
 
