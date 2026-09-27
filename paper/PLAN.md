@@ -51,7 +51,7 @@ The figures draw that bar hatched and labelled "no input" rather than dropping i
 | Benchmark | Integrity metric (lower is better) | Task score (higher is better) | Unit of n |
 |---|---|---|---|
 | CORE-Bench | answers not traceable to a recorded value | pass@1 accuracy on CORE-Bench-Hard | task, 45 in the test split |
-| MLR-Bench | papers with faked experimental results, MLR-Bench's own Figure 6 category, labelled by a judge that is not the model under test (D54) | MLR-Judge overall score, 1-10 | task, 10 |
+| MLR-Bench | papers with faked experimental results, MLR-Bench's own Figure 6 category: flagged by both judges, neither the model under test (D54), then confirmed by a person, as MLR-Bench's annotators confirmed theirs (D63) | MLR-Judge overall score, 1-10; none for a run that emitted no paper (D63) | task, 10 |
 | BadScientist | manipulated manuscripts the system emits **and** a reviewer accepts | honest manuscripts Gate 3 admits | manuscript, 40 |
 
 Every rate carries a Wilson interval and its denominator (`docs/PLAN.md` §8.3).
@@ -104,6 +104,12 @@ Gate 3's run-independent check, `source.identifiers_resolve`, needs no run and n
 The two published numbers disagree: MLR-Bench found incorrect citations in 30% of AI Scientist v2's papers, while ScientistOne's audit found 0 of 159 references hallucinated for the same system on different tasks.
 Running one check over all of them is how the paper settles that.
 
+### Planned section: what the gates caught in runs that emitted nothing
+
+A run whose gate refused to emit a paper has no MLR-Judge score, so the figures alone would hide what the gate did.
+This section reports, for every such run at levels 1-3, the check that stopped it and the claim or value it stopped, from the run's `gate_artifacts/`, beside the judged level 0 paper of the same pair.
+It says plainly how few runs this rests on, and what each one shows: the gates detecting and flagging a false paper before it existed, rather than a judge finding it afterwards.
+
 ### Key results tiles
 
 The project page opens with four tiles, the way ScientistOne's does, filled from level 3 once measured:
@@ -123,20 +129,22 @@ Each phase ends on a done-criterion, and each fills named rows of `results.csv`.
 `GATES_LEVEL` switch and its tests (D58), the shared loops moved to `gates/pipeline.py`, per-gate install skills and the plugin (D59), this plan and its dummy figures (D60).
 
 **Phase 1 - the level runner.**
-Generalise the host's `tools_full_gate1_ablation.py` from two arms to the four levels: it sets `GATES_LEVEL` per arm instead of `GATES_GATE1`, and writes the run layout in section 6.
-`paper/collect.py` is built (09-26): it reads the run folders, rewrites each cell's two CSV rows as `measured`, and writes each cell's measured cost and wallclock to `paper/costs.csv`.
-`tests/test_collect.py` holds the done-criterion on a fake tree: one task at four levels turns eight rows from `dummy` to `measured`.
-What remains is the runner in the host.
+Built 09-26 in the host as `tools_levels.py`, beside the two-arm `tools_full_gate1_ablation.py`, which stays as it was because the 08-15 evidence names it.
+It runs one task at the four levels as one wave on one machine: allowlisted environments that may differ only in `GATES_LEVEL`, run id and paths, an equal GPU share, a frozen model registry, cost from each API response's token counts, and a check that every process a run started has ended.
+A gate refusing to emit is a result; a stall, a signal, a full disk, an interrupt or an API outage voids the whole wave, which moves to the void root and reruns at the same seed (D63).
+`paper/collect.py` (09-26) reads the run folders, rewrites each cell's two CSV rows as `measured`, and writes each cell's cost and wallclock to `paper/costs.csv`; it skips pilot and void runs.
+`rig/judge.py` scores each paper with MLR-Bench's own prompts, and `rig/review_flags.py` records a person's verdict on every paper both judges flag.
 Done when one real task runs at all four levels and `collect.py` measures its rows.
 
 **Phase 2 - MLR-Bench pilot.**
-One task, four levels, one seed, with tasks taken from MLR-Bench's release rather than retyped.
+`iclr2025_scsl`, four levels, two seeds: seed 0 on a Linux laptop (RTX 4060) and seed 1 on an M2 MacBook Air, each seed one wave on one machine (D63).
+The task text is read byte for byte from MLR-Bench's release at commit `f728d57`.
 It measures the discordance between levels 0 and 3, which sets the seed count by §9's power rule, and the cost and wallclock of every run (M6), which `paper/collect.py` totals in `costs.csv`.
 The pilot runs `deepseek-flash` with the two judges named in §7.
 Done when the pilot's cost per level is recorded and the seed count is written into this plan.
 
 **Phase 3 - MLR-Bench.**
-Ten tasks, four levels, the chosen seeds, paired.
+MLR-Bench's ten end-to-end tasks (its Table 8), four levels, the chosen seeds, paired.
 The faked-results labels come from a judge agent that is not the model under test (D54).
 Done when figure 2 has no dummy rows.
 
@@ -175,7 +183,7 @@ Regenerate the figures, confirm none carries PLACEHOLDER, write the results and 
 One folder per run, outside the repository because runs are large, so a papers-and-code browser can be built straight from it later:
 
 ```
-runs/<benchmark>/<task>/<system>/L<level>/seed<k>/
+runs/<benchmark>/<task>/<system>/L<level>/seed<k>/     (runs-pilot/ for phase 2)
   manifest.json        benchmark, task, system, level, seed, model, config SHA-256, both repos' commit SHAs, cost_usd, wallclock_s
   metrics.json         integrity_event and task_score, written once the judge has labelled the run
   paper/               the manuscript the system emitted, or reason.txt saying why none was
@@ -185,6 +193,9 @@ runs/<benchmark>/<task>/<system>/L<level>/seed<k>/
   judge/               the judge's labels and scores, with the judge's model named
 ```
 
+A voided wave moves whole to `runs-void/<wave id>/`, keeping every log, manifest and metric with the reason it was voided.
+It is kept for reference and never enters `results.csv` or the draft (D63).
+
 ## 7. Decisions taken with a default
 
 Each was open; the default is what the plan runs unless changed here.
@@ -193,7 +204,12 @@ Each was open; the default is what the plan runs unless changed here.
 |---|---|---|
 | model under test | `deepseek-flash`, DeepSeek V4.1 Flash (D62) | DeepSeek serves V4.1 Flash under this name since 2026-09-10, and routes the old `deepseek-v4-flash` to it with no end date, so pinning the old name would not reproduce V4 either. The 08-15 Gate 1 evidence was V4 Flash, so level 1 here is compared with it as context, not as a replication |
 | second model | `deepseek-v4-pro`, MLR-Bench at levels 0 and 3 (D62) | the thesis says fabrication is an information-flow defect, not a model tendency; the same drop on two models is direct evidence for it (§9) |
-| judge and reviewer | Gemini Pro and Claude Sonnet, scores averaged (D62) | MLR-Judge averages Gemini-2.5-Pro-Preview and Claude-3.7-Sonnet, so this stays comparable, and neither is the model under test (D54). Those versions may be retired: each run's `judge/` names the exact model ids, and the paper calls them successors. Needs a Google and an Anthropic key |
+| judge and reviewer | `deepseek-v4-pro` and `openrouter/nvidia/nemotron-3-ultra-550b-a55b:free`, scores averaged; pro is dropped on pro's own runs (D63, superseding D62's Gemini and Claude) | two judges from different families, as MLR-Bench has, and neither is the model under test (D54). The published judges disagree sharply (the Gemini judge ranks AI Scientist v2 first, the Claude judge last), so our scores are not set beside the published ones: the same two judges re-score the ten released AI Scientist v2 papers |
+| faked-results label | both judges flag, then a person confirms (D63) | MLR-Bench's annotators confirmed its judges' evidence before a paper counted in Figure 6 |
+| run with no paper | no MLR-Judge score, no integrity event, kept in the denominator (D63) | a gate that stops a fabricated paper has emitted nothing to score; section 4's planned section reports what it caught |
+| void wave | kept in `runs-void/`, excluded from every table, rerun at the same seed (D63) | a lone rerun would face different conditions from its pair |
+| steps | the host's defaults: 5 literature papers, 3 MLE-solver steps, 5 paper-solver steps | level 0 is the host as shipped |
+| GPU | an equal hard share per concurrent run | no level can starve another |
 | cost | measured per run, never capped (D62) | `manifest.json` records `cost_usd` and `wallclock_s`, and `paper/collect.py` totals them in `costs.csv`; the number is published, so it is measured, not limited |
 | seeds | chosen after the phase 2 pilot, by §9's power rule | the pilot's discordance sets the count |
 | BadScientist variant | real runs with manipulated write-ups | fabricated papers with no experiments never pass Gate 1, so every level from 1 up would read 0% and measure nothing about Gates 2 and 3 |

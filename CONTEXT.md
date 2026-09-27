@@ -37,5 +37,13 @@ A broken link is counted in `report.claim_chains`, never fatal.
 **Mechanism evidence** - what the gates catch and wrongly flag, measured by the rigs and the signed campaign: `paper/mechanism.csv`, figure 8.
 It is not a benchmark result, and the figures never mix the two.
 
-**Live tool** - a module in `rig/` that needs a real model or network to measure anything: `tuning`, `corpus` with `--backend`, `posthoc_audit`.
+**Live tool** - a module in `rig/` that needs a real model or network to measure anything: `tuning`, `corpus` with `--backend`, `posthoc_audit`, `judge`.
 The suite runs each against a fake (D61).
+
+**Wave** - one task, one model and one seed at every requested level, started together on one machine by the host's `tools_levels.py`.
+Its level 0 and level 3 runs are a pair for the significance test.
+
+**Void wave** - a wave in which a run failed for a reason outside the agent: a stall, a signal, a full disk, an interrupt or an API outage.
+It moves whole to `runs-void/`, keeps its logs and metrics for reference, never enters a table, and is rerun at the same seed.
+
+**Faked-results candidate** - a paper every eligible judge flags for "Faked Experimental Results"; a person's verdict decides whether it counts (D63).
