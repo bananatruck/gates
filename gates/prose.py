@@ -75,6 +75,8 @@ class Claim:
     context: str
     status: str = "unsourced"
     source: str = ""
+    #: The numeral as the manuscript spells it, so ``0.5`` and ``0.50`` differ.
+    text: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -151,7 +153,7 @@ def extract_claims(paper_text: str) -> list[Claim]:
     """Numeric claims in the sections where a paper states its findings."""
     claims: list[Claim] = []
     section = "preamble"
-    seen: set[tuple[float, str]] = set()
+    seen: set[tuple[str, str]] = set()
     for line in paper_text.splitlines():
         heading = _heading(line)
         if heading is not None:
@@ -167,10 +169,10 @@ def extract_claims(paper_text: str) -> list[Claim]:
                 continue
             value = float(token)
             context = context_of(line, token)
-            if (value, context) in seen:
+            if (token, context) in seen:
                 continue
-            seen.add((value, context))
-            claims.append(Claim(value=value, context=context))
+            seen.add((token, context))
+            claims.append(Claim(value=value, context=context, text=token))
     return claims
 
 

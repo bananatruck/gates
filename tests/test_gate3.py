@@ -155,6 +155,99 @@ def test_an_unreadable_structure_is_degraded_not_green(tmp_path):
     assert literals.evidence["sections_scanned"] == []
 
 
+#: A sweep as the wave 3 experiments recorded it: the setting lives in the key
+#: the program built, not in a value.
+SWEPT = {
+    "exp1.lam0.5.clean_acc": (0.781, "ratio"),
+    "exp1.lam0.9.clean_acc": (0.742, "ratio"),
+    "exp1.ttest_0.5_vs_0.9.p": (0.031, "p"),
+}
+
+
+def test_a_setting_the_program_recorded_is_not_a_typed_result(tmp_path):
+    """The false positive that rejected 11 of wave 3's 12 level 3 manuscripts.
+
+    Every numeral Gate 3 flagged there was a sweep setting, such as the lambda
+    of a row, and every one of them was in the registry's keys. Naming the
+    setting a result belongs to is not typing a result.
+    """
+    paper = (
+        "\\section{Results}\n"
+        "Clean accuracy is \\result{exp1.lam0.5.clean_acc} at $\\lambda=0.5$ and "
+        "\\result{exp1.lam0.9.clean_acc} at $\\lambda=0.9$, a difference with "
+        "$p=\\result{exp1.ttest_0.5_vs_0.9.p}$.\n"
+        "\\begin{tabular}{cc}\n0.5 & \\result{exp1.lam0.5.clean_acc} \\\\\n"
+        "\\end{tabular}\n"
+    )
+    report = run_gate3(paper, registry(SWEPT), config(tmp_path))
+    literals = check(report, "report.no_numeric_literals_in_results")
+    assert literals.passed
+    assert {row["value"] for row in literals.evidence["recorded_settings"]} == {
+        0.5, 0.9
+    }
+
+
+def test_a_setting_no_key_records_is_still_typed(tmp_path):
+    """The exemption is the registry's, never the writer's to claim."""
+    paper = (
+        "\\section{Results}\n"
+        "Clean accuracy is \\result{exp1.lam0.5.clean_acc} at $\\lambda=0.5$ "
+        "and falls further at $\\lambda=0.7$.\n"
+    )
+    report = run_gate3(paper, registry(SWEPT), config(tmp_path))
+    literals = check(report, "report.no_numeric_literals_in_results")
+    assert not literals.passed
+    assert [row["value"] for row in literals.evidence["literals"]] == [0.7]
+
+
+def test_a_typed_result_beside_a_recorded_setting_still_fails(tmp_path):
+    paper = (
+        "\\section{Results}\n"
+        "At $\\lambda=0.5$ clean accuracy is 0.78.\n"
+    )
+    report = run_gate3(paper, registry(SWEPT), config(tmp_path))
+    literals = check(report, "report.no_numeric_literals_in_results")
+    assert not literals.passed
+    assert [row["value"] for row in literals.evidence["literals"]] == [0.78]
+
+
+def test_a_typed_result_equal_to_a_setting_in_value_is_still_typed(tmp_path):
+    """The exemption matches the numeral as written, not its value.
+
+    Compared by value, a result typed to two places equalled a setting for 49
+    of wave 3's 201 recorded values. A key writes a setting as ``0.5``; a
+    typed result reads ``0.50``, and only the key's own spelling is exempt.
+    """
+    paper = (
+        "\\section{Results}\n"
+        "At $\\lambda=0.5$ clean accuracy is 0.50.\n"
+    )
+    report = run_gate3(paper, registry(SWEPT), config(tmp_path))
+    literals = check(report, "report.no_numeric_literals_in_results")
+    assert not literals.passed
+    assert [row["context"] for row in literals.evidence["literals"]] == [
+        "At =0.5 clean accuracy is 0.50."
+    ]
+    assert [row["value"] for row in literals.evidence["recorded_settings"]] == [0.5]
+
+
+def test_a_setting_written_shorter_than_its_key_is_still_the_setting(tmp_path):
+    """Wave 2's program spelled its sweep ``lam0.50``; the writer wrote ``0.5``.
+
+    Fewer places than the key is the same setting. More places than the key,
+    as in the test above, is a claim to precision the setting never had.
+    """
+    padded = {"exp1.lam0.50.clean_acc": (0.781, "ratio")}
+    paper = (
+        "\\section{Results}\n"
+        "Clean accuracy is \\result{exp1.lam0.50.clean_acc} at $\\lambda=0.5$.\n"
+    )
+    report = run_gate3(paper, registry(padded), config(tmp_path))
+    literals = check(report, "report.no_numeric_literals_in_results")
+    assert literals.passed
+    assert [row["value"] for row in literals.evidence["recorded_settings"]] == [0.5]
+
+
 # --------------------------------------------------------------------------- #
 # report.all_tokens_resolve
 # --------------------------------------------------------------------------- #

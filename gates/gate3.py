@@ -55,6 +55,16 @@ value does not render. ``report.no_numeric_literals_in_results`` is the
 enforcement that the pipeline was used, and as a scanner over prose it has a
 false-negative rate. The paper must say this in those terms.
 
+A numeral that names a setting the program recorded is not a typed result.
+A sweep records its setting in the key it builds, such as
+``exp1.lam0.5.clean_acc``, so ``0.5`` in "at lambda = 0.5" is the registry's
+number, not the writer's, and is reported as a recorded setting instead of a
+literal. The exemption comes only from keys Gate 1 verified, and a numeral
+may not carry more decimal places than its key, so ``0.50`` against a key's
+``0.5`` is still typed. Its cost is one more false negative: a result typed at
+a setting's value, no more precisely than the key spells it, passes the
+scanner.
+
 The first thing this gate measures is our own archived run: the gated arm's
 manuscript types its digits directly, so it fails here. That is the correct
 outcome, and it is the number Gate 3 exists to produce.
@@ -77,7 +87,7 @@ from .llm import (
     ModelFn,
     ModelLayer,
 )
-from .prose import CITATION, claim_sections, extract_claims, sections
+from .prose import CITATION, NUMBER, claim_sections, extract_claims, sections
 from .registry import CHAIN_LINKS, CLAIM_LINK, citable_values, claim_chain
 from .schema import CheckResult, GateReport, PaperRecord, Severity, decide
 
@@ -223,13 +233,41 @@ def _mask_tokens(source: str) -> str:
     return RESULT_TOKEN.sub("RESULT", source)
 
 
-def _check_no_numeric_literals(source: str) -> CheckResult:
+def _places(numeral: str) -> int:
+    return len(numeral.partition(".")[2])
+
+
+def _recorded_settings(keys: Iterable[str]) -> dict[float, int]:
+    """The settings the program wrote into its own result keys.
+
+    A sweep names each result by its setting, ``exp1.lam0.5.clean_acc``, so the
+    setting is recorded even though no value holds it. The same pattern as the
+    manuscript scanner reads them, so a key and a sentence yield the same token.
+    Each setting maps to the most decimal places any key spells it with: a
+    writer may drop a key's trailing zero (``0.50`` as ``0.5``) but not add
+    places, since compared by value alone a result typed to two places equalled
+    a setting for 49 of the 201 values in wave 3's level 3 run.
+    """
+    settings: dict[float, int] = {}
+    for key in keys:
+        for token in NUMBER.findall(key):
+            value = float(token)
+            settings[value] = max(settings.get(value, 0), _places(token))
+    return settings
+
+
+def _check_no_numeric_literals(
+    source: str, keys: Iterable[str] = ()
+) -> CheckResult:
     """No bare numeral appears where the paper states its findings.
 
     Coverage decides the verdict's meaning. A manuscript whose findings sections
     the scanner cannot locate has not been checked, and reporting that as a pass
     would be the same defect this gate exists to catch. It is reported as INFO
     and degraded instead - absent, never green.
+
+    ``keys`` are the citable registry keys. A numeral that names a setting one
+    of them records is listed apart, never dropped.
     """
     masked = _mask_tokens(source)
     sections = claim_sections(masked)
@@ -245,13 +283,28 @@ def _check_no_numeric_literals(source: str) -> CheckResult:
             evidence={"sections_scanned": [], "degraded": True},
         )
 
-    literals = [
-        {"value": c.value, "context": c.context} for c in extract_claims(masked)
-    ]
+    settings = _recorded_settings(keys)
+    literals: list[dict[str, Any]] = []
+    recorded: list[dict[str, Any]] = []
+    for claim in extract_claims(masked):
+        row = {"value": claim.value, "context": claim.context}
+        # limit: a result typed at a setting's value, with no more places than
+        # the key spells it, passes as that setting; a \setting{} token would
+        # close it at the cost of changing the writer's prompt mid-study.
+        places = settings.get(claim.value)
+        named = places is not None and _places(claim.text) <= places
+        (recorded if named else literals).append(row)
     if literals:
         message = (
             f"{len(literals)} bare numeral(s) in a results context, e.g. "
             f"{literals[0]['value']!r} in \"{literals[0]['context']}\""
+        )
+    elif recorded:
+        message = (
+            f"no bare numeral in {len(sections)} findings section(s); "
+            f"{len(recorded)} numeral(s) name a setting the registry's keys "
+            f"record, e.g. {recorded[0]['value']!r} in "
+            f"\"{recorded[0]['context']}\""
         )
     elif RESULT_TOKEN.search(source):
         message = (
@@ -273,6 +326,7 @@ def _check_no_numeric_literals(source: str) -> CheckResult:
         message=message,
         evidence={
             "literals": literals,
+            "recorded_settings": recorded,
             "sections_scanned": sections,
             "discrepancies": [
                 f"{row['value']!r} is typed into the manuscript rather than "
@@ -942,7 +996,7 @@ def run_gate3(
     origin = "supplied" if config.rendered is not None else "self_rendered"
 
     checks = [
-        _check_no_numeric_literals(source),
+        _check_no_numeric_literals(source, values),
         _check_tokens_resolve(source, values),
         _check_rendered_matches(rendered, subs, values, origin),
     ]

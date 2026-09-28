@@ -17,10 +17,10 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 branch: main
 head: aafb298
 head_date: 2026-09-27
-tests_total: 747
+tests_total: 752
 tests_gate1: 105
 tests_gate2: 101
-tests_gate3: 90
+tests_gate3: 95
 tests_llm_scan: 21
 tests_llm_layer: 14
 <!-- STATE:END -->
