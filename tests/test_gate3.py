@@ -206,6 +206,104 @@ def test_a_bare_numeral_is_typed_whatever_the_keys_contain(tmp_path, typed, keys
     assert "recorded_settings" not in literals.evidence
 
 
+@pytest.mark.parametrize(
+    ("body", "token"),
+    [
+        ("$\\result{exp1.acc}\\times 10^{2}$", "\\result{exp1.acc}"),
+        ("\\result{exp1.acc}e2", "\\result{exp1.acc}"),
+        ("$\\setting{config.lr}\\times10^{-3}$", "\\setting{config.lr}"),
+    ],
+)
+def test_a_power_of_ten_typed_beside_a_token_is_typed(tmp_path, body, token):
+    paper = f"\\section{{Results}}\nAccuracy is {body}.\n"
+    reg = registry(
+        {"exp1.acc": (0.81, "ratio")}, settings={"config.lr": 0.001}
+    )
+    report = run_gate3(paper, reg, config(tmp_path))
+    adjacency = check(report, "report.token_adjacency")
+    assert not adjacency.passed
+    assert adjacency.evidence["modified"] == [token]
+    assert token in adjacency.message
+
+
+@pytest.mark.parametrize(
+    ("body", "token"),
+    [
+        ("$-\\result{exp1.acc}$", "\\result{exp1.acc}"),
+        ("+\\result{exp1.acc}", "\\result{exp1.acc}"),
+        ("\N{MINUS SIGN}\\result{exp1.acc}", "\\result{exp1.acc}"),
+    ],
+)
+def test_a_sign_typed_before_a_token_is_typed(tmp_path, body, token):
+    paper = f"\\section{{Results}}\nThe gain is {body} points.\n"
+    report = run_gate3(
+        paper, registry({"exp1.acc": (0.81, "ratio")}), config(tmp_path)
+    )
+    adjacency = check(report, "report.token_adjacency")
+    assert not adjacency.passed
+    assert adjacency.evidence["modified"] == [token]
+    assert token in adjacency.message
+
+
+@pytest.mark.parametrize(
+    ("line", "token"),
+    [
+        ("Accuracy is \\result{exp1.acc}9 on test.", "\\result{exp1.acc}"),
+        ("Accuracy is 9\\result{exp1.acc} percent.", "\\result{exp1.acc}"),
+        ("Accuracy is \\result{exp1.acc}25 on test.", "\\result{exp1.acc}"),
+        (
+            "We train for \\setting{config.lr}000 steps and get "
+            "\\result{exp1.acc}.",
+            "\\setting{config.lr}",
+        ),
+    ],
+)
+def test_digits_glued_to_a_token_are_typed(tmp_path, line, token):
+    paper = f"\\section{{Results}}\n{line}\n"
+    reg = registry(
+        {"exp1.acc": (0.81, "ratio")}, settings={"config.lr": 0.001}
+    )
+    report = run_gate3(paper, reg, config(tmp_path))
+    adjacency = check(report, "report.token_adjacency")
+    assert not adjacency.passed
+    assert adjacency.evidence["modified"] == [token]
+    assert token in adjacency.message
+
+
+@pytest.mark.parametrize(
+    "claim",
+    [
+        "\\result{exp1.acc}\\%",
+        "\\result{exp1.acc}~points",
+        "(\\result{exp1.acc})",
+        "\\result{exp1.acc},",
+        "\\result{exp1.acc}.",
+        "\\result{exp1.acc}, \\result{exp1.std}",
+    ],
+)
+def test_honest_token_neighbours_pass(tmp_path, claim):
+    paper = f"\\section{{Results}}\nAccuracy is {claim}\n"
+    reg = registry(
+        {"exp1.acc": (0.81, "ratio"), "exp1.std": (0.02, "ratio")}
+    )
+    report = run_gate3(paper, reg, config(tmp_path))
+    assert check(report, "report.token_adjacency").passed
+    assert report.passed, [row.message for row in report.failed_checks()]
+
+
+def test_a_plus_minus_between_two_tokens_is_not_a_sign(tmp_path):
+    paper = (
+        "\\section{Results}\n"
+        "$\\result{exp1.acc} \\pm \\result{exp1.std}$\n"
+    )
+    reg = registry(
+        {"exp1.acc": (0.81, "ratio"), "exp1.std": (0.02, "ratio")}
+    )
+    report = run_gate3(paper, reg, config(tmp_path))
+    assert check(report, "report.token_adjacency").passed
+    assert report.passed, [row.message for row in report.failed_checks()]
+
+
 def test_a_token_resolves_only_in_its_own_section(tmp_path):
     """A setting cited as a result, or a result cited as a setting, names nothing."""
     reg = registry({"exp1.acc": (0.81, "ratio")}, settings={"config.lr": 0.001})
@@ -1080,7 +1178,7 @@ def test_every_check_gate3_emits_can_be_rendered_and_has_a_fix(tmp_path):
 
     reg = registry(RECORDED)
     paper = (
-        "\\section{Results}\nAccuracy was 0.97, or \\result{exp1.acc_at_400} "
+        "\\section{Results}\nAccuracy was 0.97, or +\\result{exp1.acc_at_400} "
         "against \\result{exp1.invented}.\n\\includegraphics{absent.png}\n"
         "\\section{Further Results}\nSGC is fast.\n"
         "\\section{Related Work}\nAs in (arXiv 2501.00001v1).\n"

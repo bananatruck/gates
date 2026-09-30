@@ -172,6 +172,13 @@ def _evidence_missing_keys(check: CheckResult) -> list[str]:
     return out
 
 
+def _evidence_token_adjacency(check: CheckResult) -> list[str]:
+    return [
+        f"  {row['token']} has adjacent typed notation {row['typed']!r}"
+        for row in check.evidence.get("details", [])[:_MAX_EVIDENCE_ROWS]
+    ]
+
+
 def _evidence_syntax(check: CheckResult) -> list[str]:
     ev = check.evidence
     if not ev.get("source_line"):
@@ -474,6 +481,7 @@ _EVIDENCE_RENDERERS = {
     # same {missing, recorded} question asked of a manuscript instead of a run.
     "report.no_numeric_literals_in_results": _evidence_typed_numbers,
     "report.all_tokens_resolve": _evidence_missing_keys,
+    "report.token_adjacency": _evidence_token_adjacency,
     "report.rendered_values_match_registry": _evidence_mismatches,
     "report.figures_referenced_exist": _evidence_figures,
     "report.limitations_declared": _evidence_limitations,
@@ -602,6 +610,11 @@ _FIXES = {
         "first. An unresolvable token does not render. A setting recorded with "
         "several values renders none of them: the experiment must record each "
         "row's setting under its own key before the paper can cite it."
+    ),
+    "report.token_adjacency": (
+        "Remove the typed sign, exponent, scale, or digits touching the token. "
+        "Record the final value and cite that value with one token so the "
+        "renderer writes the complete number."
     ),
     "report.rendered_values_match_registry": (
         "A rendered value does not match the registry. Do not edit a "
