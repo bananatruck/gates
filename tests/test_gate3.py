@@ -34,7 +34,7 @@ from gates.gate3 import (
     run_gate3,
 )
 from gates.registry import CHAIN_LINKS, CLAIM_LINK, build_registry
-from gates.prose import claim_sections
+from gates.prose import Claim, claim_sections
 from gates.report import render_feedback
 from gates.schema import PaperRecord, Severity, Verdict
 from gates.setup import defaults
@@ -246,6 +246,43 @@ def test_a_setting_written_shorter_than_its_key_is_still_the_setting(tmp_path):
     literals = check(report, "report.no_numeric_literals_in_results")
     assert literals.passed
     assert [row["value"] for row in literals.evidence["recorded_settings"]] == [0.5]
+
+
+@pytest.mark.parametrize(
+    "typed",
+    [
+        "$0.5e-3$", "0.5E+2", "$0.5\\times10^{-3}$", "$0.5 \\cdot 10^{2}$",
+        "$0.5\\,\\times 10^{3}$", "0.5~\\times~10^3", "0.5 \u00d7 10^3",
+        "$-0.5$", "+0.5", "\u22120.5",
+    ],
+)
+def test_a_signed_or_scaled_numeral_is_not_the_setting_it_contains(tmp_path, typed):
+    """``0.5e-3`` is 0.0005 and ``-0.5`` is below zero: neither is the setting 0.5.
+
+    The scanner reads the digits ``0.5`` out of both, so before this D71's
+    exemption let a typed result through as the recorded ``lam0.5``.
+    """
+    paper = f"\\section{{Results}}\nThe clean error rate is {typed} on the held-out split.\n"
+    report = run_gate3(paper, registry(SWEPT), config(tmp_path))
+    literals = check(report, "report.no_numeric_literals_in_results")
+    assert not literals.passed
+    assert literals.evidence["recorded_settings"] == []
+
+
+def test_a_range_ending_at_a_setting_is_still_the_setting(tmp_path):
+    """The hyphen in ``0.1-0.5`` joins a range; it is not a minus sign."""
+    wide = {**SWEPT, "exp1.lam0.1.clean_acc": (0.79, "ratio")}
+    paper = "\\section{Results}\nAcross $\\lambda$ in 0.1-0.5 accuracy is \\result{exp1.lam0.5.clean_acc}.\n"
+    report = run_gate3(paper, registry(wide), config(tmp_path))
+    literals = check(report, "report.no_numeric_literals_in_results")
+    assert literals.passed
+    assert {row["value"] for row in literals.evidence["recorded_settings"]} == {0.1, 0.5}
+
+
+def test_a_claim_states_how_the_manuscript_spells_it():
+    """With a default spelling, a claim built without one has no places and is always exempt."""
+    with pytest.raises(TypeError):
+        Claim(value=0.5, context="x")
 
 
 # --------------------------------------------------------------------------- #

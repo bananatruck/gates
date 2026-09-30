@@ -233,6 +233,11 @@ def _mask_tokens(source: str) -> str:
     return RESULT_TOKEN.sub("RESULT", source)
 
 
+#: A numeral with no sign and no power of ten: the only spelling a setting
+#: recorded in a key can take. ``-0.5`` and ``0.5e-3`` are other values.
+PLAIN_NUMERAL = re.compile(r"\d+(?:\.\d+)?")
+
+
 def _places(numeral: str) -> int:
     return len(numeral.partition(".")[2])
 
@@ -289,10 +294,15 @@ def _check_no_numeric_literals(
     for claim in extract_claims(masked):
         row = {"value": claim.value, "context": claim.context}
         # limit: a result typed at a setting's value, with no more places than
-        # the key spells it, passes as that setting; a \setting{} token would
-        # close it at the cost of changing the writer's prompt mid-study.
+        # the key spells it, passes as that setting, and so does any number a
+        # key happens to contain (the 1.2 of exp1.2.acc); a \setting{} token
+        # would close both at the cost of changing the writer's prompt mid-study.
         places = settings.get(claim.value)
-        named = places is not None and _places(claim.text) <= places
+        named = (
+            places is not None
+            and PLAIN_NUMERAL.fullmatch(claim.text) is not None
+            and _places(claim.text) <= places
+        )
         (recorded if named else literals).append(row)
     if literals:
         message = (
