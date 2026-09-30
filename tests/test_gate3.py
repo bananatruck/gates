@@ -231,6 +231,7 @@ def test_a_power_of_ten_typed_beside_a_token_is_typed(tmp_path, body, token):
     [
         "\\result{x}\\times 10^2",
         "\\result{x}×10^2",
+        "\\result{x}·10^2",
         "\\result{x}\\cdot 10^{-3}",
         "\\result{x} \\times  10 ^ { - 3 }",
     ],
@@ -313,6 +314,40 @@ def test_digits_glued_to_a_token_are_typed(tmp_path, line, token):
     assert not adjacency.passed
     assert adjacency.evidence["modified"] == [token]
     assert token in adjacency.message
+
+
+@pytest.mark.parametrize(
+    "claim",
+    [
+        "\\result{x}\\,000",
+        "1\\,\\result{x}",
+        "\\result{x}\\ 9",
+        "\\result{x}{}9",
+        "1{}\\result{x}",
+        "\\result{x}~9",
+        "\\result{x}.5",
+    ],
+)
+def test_digits_behind_tex_spacing_or_a_decimal_point_are_typed(tmp_path, claim):
+    # A thin space groups thousands (12\,000), so \result{n}\,000 reads as a
+    # thousand times n; a decimal point extends the rendered digits.
+    paper = f"\\section{{Results}}\nAccuracy is {claim} here.\n"
+    report = run_gate3(paper, registry({"x": (0.81, "ratio")}), config(tmp_path))
+
+    adjacency = check(report, "report.token_adjacency")
+    assert not adjacency.passed
+    assert adjacency.evidence["modified"] == ["\\result{x}"]
+
+
+@pytest.mark.parametrize(
+    "claim",
+    ["\\result{x}\\,\\%", "\\result{x}~\\%", "\\result{x}. Then", "\\result{x}~points"],
+)
+def test_tex_spacing_without_a_digit_is_honest(tmp_path, claim):
+    paper = f"\\section{{Results}}\nAccuracy is {claim} here.\n"
+    report = run_gate3(paper, registry({"x": (0.81, "ratio")}), config(tmp_path))
+
+    assert check(report, "report.token_adjacency").passed
 
 
 @pytest.mark.parametrize(

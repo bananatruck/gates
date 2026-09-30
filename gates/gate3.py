@@ -111,11 +111,16 @@ TOKEN = re.compile(r"\\(result|setting)\{([^}]+)\}")
 #: A sign that starts a value rather than joining a word or two tokens.
 _TYPED_SIGN_BEFORE_TOKEN = re.compile(r"(?<![\w\-−}])[+\-−]$")
 
+#: TeX spacing a writer can put between a token and a digit without the
+#: digit leaving the rendered number: a thin or control space groups
+#: thousands (``12\\,000``), and ``{}`` and ``~`` render as nothing or a space.
+_TEX_GLUE = r"(?:\\[,;:! ]|\{\}|~)*"
+
 #: Typed notation that scales a token's rendered value. The scanner cannot
 #: judge its small integer parts, so the token boundary has to retain them.
 _TOKEN_SCALE = re.compile(
     r"\s*(?:"
-    r"(?:\\times|\\cdot|×)\s*10\s*\^\s*"
+    r"(?:\\times|\\cdot|×|·)\s*10\s*\^\s*"
     r"(?:\{\s*[+\-−]?\s*[0-9]+\s*\}|[+\-−]?\s*[0-9]+)"
     r"|[eE][+\-−]?[0-9]+"
     r")"
@@ -350,8 +355,8 @@ def _check_token_adjacency(source: str) -> CheckResult | None:
         prefix = source[: token.start()]
         before = source[token.start() - 1 : token.start()]
         after = source[token.end() :]
-        before_digits = re.search(r"[0-9]+$", prefix)
-        after_digits = re.match(r"[0-9]+", after)
+        before_digits = re.search(rf"[0-9]+{_TEX_GLUE}$", prefix)
+        after_digits = re.match(rf"{_TEX_GLUE}\.?[0-9]+", after)
         sign = _TYPED_SIGN_BEFORE_TOKEN.search(prefix)
         if sign:
             details.append({"token": token.group(0), "typed": sign.group(0)})
