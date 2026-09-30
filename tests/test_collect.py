@@ -141,3 +141,97 @@ def test_two_models_in_one_cell_are_refused(tmp_path, capsys):
     assert collect.main([str(runs)], results=results, costs=tmp_path / "costs.csv") == 1
     assert "mixes models" in capsys.readouterr().out
     assert rows(results) == rows(REPO / "paper" / "results.csv")
+
+
+# --------------------------------------------------------------------------- #
+# crashes, split by cause (09-29 review, issue 3 and Q7)
+# --------------------------------------------------------------------------- #
+
+OOM_AT_CAP = ("CUDA out of memory. Tried to allocate 20.00 MiB. GPU 0 has a total capacity "
+              "of 7.65 GiB of which 5.36 GiB is free. 1.72 GiB allowed; Of the allocated memory")
+
+
+def test_each_crash_cause_is_read_from_the_record():
+    cause = collect.crash_cause
+    assert cause({"type": "OutOfMemoryError", "message": OOM_AT_CAP}, False) == "oom_at_cap"
+    assert cause({"type": "OutOfMemoryError", "message": "CUDA out of memory. Tried"}, False) == "oom"
+    assert cause(None, True) == "timeout"
+    assert cause({"type": "RuntimeError", "message": "Failed to import transformers.trainer"}, False) == "environment"
+    assert cause({"type": "ModuleNotFoundError", "message": "No module named 'peft'"}, False) == "environment"
+    assert cause({"type": "TypeError", "message": "unsupported operand"}, False) == "agent_code"
+    assert cause(None, False) is None
+    harness = collect.HARNESS_CAUSES
+    assert harness == {"oom_at_cap", "timeout", "environment"}
+
+
+def _ungated(folder: Path, index: int, exception: dict | None):
+    d = folder / "gate_artifacts" / f"ungated_{index:02d}"
+    d.mkdir(parents=True)
+    (d / "results.json").write_text(json.dumps({"exception": exception}))
+
+
+def _attempt(folder: Path, index: int, exception: dict | None, timed_out=False, verdict="FAIL"):
+    d = folder / "gate_artifacts" / "gate1" / f"attempt_{index:02d}"
+    d.mkdir(parents=True)
+    (d / "gate1_report.json").write_text(json.dumps(
+        {"verdict": verdict, "execution": {"exception": exception, "timed_out": timed_out}}))
+
+
+def test_crashes_are_counted_per_cell_and_split_harness_from_agent(tmp_path):
+    runs = tmp_path / "runs"
+    l0 = write_run(runs, level=0, metrics=False, paper_present=True)
+    _ungated(l0, 1, {"type": "TypeError", "message": "x"})
+    _ungated(l0, 2, {"type": "OutOfMemoryError", "message": OOM_AT_CAP})
+    l3 = write_run(runs, level=3, metrics=False, paper_present=True)
+    _attempt(l3, 1, None, timed_out=True)
+    _attempt(l3, 2, {"type": "NameError", "message": "y"})
+    _attempt(l3, 3, None, verdict="PASS")
+
+    table = collect.crash_table(collect.load_crash_runs(runs))
+    lvl0 = table[("MLR-Bench", "Agent Lab", "L0")]
+    lvl3 = table[("MLR-Bench", "Agent Lab", "L3")]
+    assert (lvl0["executions"], lvl0["crashed"], lvl0["harness"], lvl0["agent"]) == (2, 2, 1, 1)
+    assert lvl0["oom_at_cap"] == 1 and lvl0["agent_code"] == 1
+    # Level 0's paper was written on its last execution, which crashed.
+    assert lvl0["papers"] == 1 and lvl0["papers_on_crashed_run"] == 1
+    assert lvl0["papers_on_harness_crash"] == 1
+    assert (lvl3["executions"], lvl3["crashed"], lvl3["harness"], lvl3["agent"]) == (3, 2, 1, 1)
+    # A gated paper comes from the last attempt Gate 1 passed, which did not crash.
+    assert lvl3["papers_on_crashed_run"] == 0
+
+
+def test_crash_runs_need_no_judging_but_skip_pilot_and_void(tmp_path):
+    runs = tmp_path / "runs"
+    write_run(runs, level=0, metrics=False)
+    write_run(runs, level=1, metrics=False, phase="pilot")
+    write_run(runs, level=2, metrics=False, status="void")
+    loaded = collect.load_crash_runs(runs)
+    assert [r["level"] for r in loaded] == [0]
+
+
+def test_costs_carry_tokens_and_cost_per_accepted_paper(tmp_path):
+    runs = tmp_path / "runs"
+    usage = {"tokens": {"prompt": 1000, "completion": 200, "reasoning": 50}}
+    write_run(runs, level=3, seed=0, cost=1.0, usage=usage, score=6.0, event=False)
+    write_run(runs, level=3, seed=1, cost=2.0, usage=usage, score=5.0, event=True)
+    write_run(runs, level=3, seed=2, cost=3.0, usage=usage, score=None, event=False)
+    costs = tmp_path / "costs.csv"
+    collect.write_costs(collect.cells(collect.load_runs(runs)[0]), costs)
+    with open(costs, newline="") as f:
+        row = next(csv.DictReader(f))
+    assert row["tokens_prompt_mean"] == "1000" and row["tokens_completion_mean"] == "200"
+    # One paper was scored and not flagged: $6 over the cell buys one.
+    assert row["accepted_papers"] == "1"
+    assert row["cost_usd_per_accepted_paper"] == "6.0000"
+
+
+def test_main_writes_the_crash_table_beside_the_costs(tmp_path):
+    results = tmp_path / "results.csv"
+    shutil.copy(REPO / "paper" / "results.csv", results)
+    runs = tmp_path / "runs"
+    l0 = write_run(runs, level=0, paper_present=True)
+    _ungated(l0, 1, {"type": "OutOfMemoryError", "message": OOM_AT_CAP})
+    collect.main([str(runs)], results=results, costs=tmp_path / "costs.csv")
+    with open(tmp_path / "crashes.csv", newline="") as f:
+        row = next(csv.DictReader(f))
+    assert row["arm"] == "L0" and row["harness"] == "1" and row["papers_on_harness_crash"] == "1"
