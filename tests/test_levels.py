@@ -196,3 +196,81 @@ def test_l0_prime_accepts_by_level_0s_rule_and_delivers_gate_1s_evidence(monkeyp
     assert "REJECTED" not in l0d.evidence_bundle
     assert "REQUIRED FIXES" not in l0d.evidence_bundle
     assert l0d.feedback == l0d.evidence_bundle
+
+
+#: Gate 1 rejects these before anything runs. Level 0 runs them (B22).
+UNBOUND_IN_AN_UNCALLED_FUNCTION = (
+    "record_metadata('seed', 0)\n"
+    "def f():\n"
+    "    return hidden_dim\n"
+    "acc = sum([1, 0]) / 2\n"
+    "print('acc', acc)\n"
+    "record_result('exp1.acc', acc)\n"
+)
+SHADOWED_RECORD_RESULT = (
+    "def record_result(k, v, unit=None):\n"
+    "    print(k, v)\n"
+    "record_metadata('seed', 0)\n"
+    "acc = sum([1, 0]) / 2\n"
+    "print('acc', acc)\n"
+    "record_result('exp1.acc', acc)\n"
+)
+SYNTAX_ERROR = "record_metadata('seed', 0)\ndef f(\n"
+
+
+def _run(monkeypatch, tmp_path, level, code, **kwargs):
+    from gates.adapters.agentlab import gated_execute, make_context
+
+    monkeypatch.setenv("GATES_LEVEL", level)
+    return gated_execute(code, make_context(research_dir=str(tmp_path), **kwargs))
+
+
+@pytest.mark.parametrize(
+    "code",
+    [UNBOUND_IN_AN_UNCALLED_FUNCTION, SHADOWED_RECORD_RESULT, SYNTAX_ERROR],
+    ids=["unbound-name", "shadowed-record-result", "syntax-error"],
+)
+def test_l0_prime_accepts_what_level_0_accepts(monkeypatch, tmp_path, code):
+    """Acceptance is level 0's rule, including when Gate 1 rejects without running."""
+    l0 = _run(monkeypatch, tmp_path / "l0", "0", code)
+    l0d = _run(monkeypatch, tmp_path / "l0d", "0d", code)
+    assert l0d.passed is l0.passed
+    # Gate 1 still produced its report; the bundle is the evidence, not a verdict.
+    assert l0d.report is not None
+    assert "REJECTED" not in l0d.evidence_bundle
+    assert l0d.feedback == l0d.evidence_bundle
+
+
+def test_a_syntax_error_at_l0_prime_shows_its_traceback(monkeypatch, tmp_path):
+    """Level 0 hands on the SyntaxError. L0' must not replace it with '(none recorded)'."""
+    l0 = _run(monkeypatch, tmp_path / "l0", "0", SYNTAX_ERROR)
+    l0d = _run(monkeypatch, tmp_path / "l0d", "0d", SYNTAX_ERROR)
+    assert "SyntaxError" in l0.evidence_bundle
+    assert "SyntaxError" in l0d.evidence_bundle
+    assert "(none recorded)" not in l0d.evidence_bundle
+
+
+#: Records a seed and a value, then sleeps past the limit. The kill drops
+#: results.json, so the seed warning would be a lie (B23).
+KILLED_AT_THE_TIMEOUT = (
+    "import time, random\n"
+    "record_metadata('seed', 0)\n"
+    "record_result('exp1.acc', random.random())\n"
+    "print('starting')\n"
+    "time.sleep(30)\n"
+)
+
+
+def test_l0_prime_says_a_run_was_killed_at_the_timeout(monkeypatch, tmp_path):
+    """A timeout is accepted, as at level 0, and the bundle says the run was killed."""
+    l0 = _run(monkeypatch, tmp_path / "l0", "0", KILLED_AT_THE_TIMEOUT, timeout_s=3)
+    l0d = _run(monkeypatch, tmp_path / "l0d", "0d", KILLED_AT_THE_TIMEOUT, timeout_s=3)
+    assert l0.passed and l0d.passed
+    assert "starting" in l0.evidence_bundle
+    assert "starting" in l0d.evidence_bundle
+    assert "killed" in l0d.evidence_bundle
+    assert "no seed was declared" not in l0d.evidence_bundle
+    # Gate 1 ran to a full report; its verdict is not what the agent is handed.
+    assert l0d.report is not None and l0d.report.execution is not None
+    assert "REJECTED" not in l0d.evidence_bundle
+    assert "REQUIRED FIXES" not in l0d.evidence_bundle
