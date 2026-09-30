@@ -235,8 +235,12 @@ def _alive(pid: int) -> bool:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
-    stat = Path(f"/proc/{pid}/stat")
-    return not (stat.exists() and stat.read_text().split(")")[-1].split()[0] == "Z")
+    # A killed child is a zombie until init reaps it; a zombie is not running.
+    try:
+        state = Path(f"/proc/{pid}/stat").read_text().split(")")[-1].split()[0]
+    except OSError:
+        return False
+    return state != "Z"
 
 
 def test_a_changed_mlrbench_file_is_refused(tmp_path):
