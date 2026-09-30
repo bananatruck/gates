@@ -219,6 +219,17 @@ def _evidence_varied(check: CheckResult) -> list[str]:
     return out
 
 
+def _evidence_setting_values(check: CheckResult) -> list[str]:
+    out = []
+    for row in check.evidence.get("varied", [])[:_MAX_EVIDENCE_ROWS]:
+        values = ", ".join(map(str, row["values"]))
+        out.append(
+            f"  {row['key']}: recorded {row['call_count']} times with "
+            f"{len(row['values'])} values: {values}"
+        )
+    return out
+
+
 def _evidence_range(check: CheckResult) -> list[str]:
     out = []
     for row in check.evidence.get("violations", [])[:_MAX_EVIDENCE_ROWS]:
@@ -451,6 +462,7 @@ _EVIDENCE_RENDERERS = {
     # and the agent never has to learn a second format.
     "logs.model_error_signals": _evidence_log_signals,
     "results.single_observation": _evidence_varied,
+    "results.setting_single_value": _evidence_setting_values,
     # Gate 2.
     "coherence.range_valid": _evidence_range,
     "coherence.plausibility": _evidence_plausibility,
@@ -531,6 +543,15 @@ _FIXES = {
         "record it with record_setting(\"<key>\", <value>) instead; a setting "
         "is cited as \\setting{<key>}, never as a result."
     ),
+    "results.setting_single_value": (
+        "A setting key holds one value, and the keys above were recorded with "
+        "several, so the paper could cite only the last one beside every row. "
+        "In a sweep, record one key per row, keyed the way that row's results "
+        "are: record_setting(f\"exp1.lam{lam}.lam\", lam) beside "
+        "record_result(f\"exp1.lam{lam}.acc\", acc). A value that changes "
+        "during the run, such as a scheduled learning rate, is recorded once, "
+        "as the value the run was configured with."
+    ),
     "results.values_finite": (
         "A metric is NaN or infinite. Check for division by zero, an empty "
         "evaluation split, or a diverged loss."
@@ -578,7 +599,9 @@ _FIXES = {
     "report.all_tokens_resolve": (
         "A result token names a key that was never recorded. Use one of the "
         "recorded keys listed above, or have the experiment record the value "
-        "first. An unresolvable token does not render."
+        "first. An unresolvable token does not render. A setting recorded with "
+        "several values renders none of them: the experiment must record each "
+        "row's setting under its own key before the paper can cite it."
     ),
     "report.rendered_values_match_registry": (
         "A rendered value does not match the registry. Do not edit a "

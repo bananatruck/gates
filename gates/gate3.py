@@ -84,7 +84,14 @@ from .llm import (
     ModelLayer,
 )
 from .prose import CITATION, claim_sections, extract_claims, sections
-from .registry import CHAIN_LINKS, CLAIM_LINK, citable_settings, citable_values, claim_chain
+from .registry import (
+    CHAIN_LINKS,
+    CLAIM_LINK,
+    ambiguous_settings,
+    citable_settings,
+    citable_values,
+    claim_chain,
+)
 from .schema import CheckResult, GateReport, PaperRecord, Severity, decide
 
 GATE_NAME = "GATE 3 — REPORT VALIDITY"
@@ -312,27 +319,42 @@ def _check_no_numeric_literals(source: str) -> CheckResult:
 
 
 def _check_tokens_resolve(
-    source: str, values: dict[str, Any], settings: dict[str, Any] | None = None
+    source: str,
+    values: dict[str, Any],
+    settings: dict[str, Any] | None = None,
+    ambiguous: dict[str, list[Any]] | None = None,
 ) -> CheckResult:
     """Every token names a key the registry actually holds, in its own section.
 
     A ``\\setting{}`` token resolves only against the settings and a
     ``\\result{}`` token only against the results: citing a setting as a
-    result would turn a configured number into a finding.
+    result would turn a configured number into a finding. A setting recorded
+    with more than one value resolves to none of them (B9), and ``ambiguous``
+    names those so the message can say why.
     """
     settings = settings or {}
+    ambiguous = ambiguous or {}
     tokens = sorted({m.group(1).strip() for m in RESULT_TOKEN.finditer(source)})
     named = sorted({m.group(1).strip() for m in SETTING_TOKEN.finditer(source)})
-    missing = sorted(set(tokens) - set(values)) + [
-        f"\\setting{{{key}}}" for key in sorted(set(named) - set(settings))
+    unresolved = sorted(set(named) - set(settings))
+    several = {key: ambiguous[key] for key in unresolved if key in ambiguous}
+    missing_results = sorted(set(tokens) - set(values))
+    missing = missing_results + [f"\\setting{{{key}}}" for key in unresolved]
+    unnamed = missing_results + [
+        f"\\setting{{{key}}}" for key in unresolved if key not in several
+    ]
+    reasons = [f"{len(unnamed)} token(s) name no recorded value: {', '.join(unnamed)}"] if unnamed else []
+    reasons += [
+        f"{key} holds {len(held)} values ({', '.join(map(str, held))}), so "
+        f"\\setting{{{key}}} cannot stand for one of them"
+        for key, held in several.items()
     ]
     return CheckResult(
         id="report.all_tokens_resolve",
         passed=not missing,
         severity=Severity.FAIL,
         message=(
-            f"{len(missing)} token(s) name no recorded value: "
-            f"{', '.join(missing)}"
+            "; ".join(reasons)
             if missing
             else f"{len(tokens)} result token(s) and {len(named)} setting "
             f"token(s) resolve to a recorded value"
@@ -344,6 +366,7 @@ def _check_tokens_resolve(
             "recorded": sorted(values),
             "tokens": tokens,
             "settings": named,
+            "ambiguous": several,
         },
     )
 
@@ -979,6 +1002,7 @@ def run_gate3(
         )
     values = citable_values(registry)
     settings = citable_settings(registry)
+    ambiguous = ambiguous_settings(registry)
 
     self_rendered, subs = render_result_tokens(
         source, values, declared=declared, settings=settings
@@ -988,7 +1012,7 @@ def run_gate3(
 
     checks = [
         _check_no_numeric_literals(source),
-        _check_tokens_resolve(source, values, settings),
+        _check_tokens_resolve(source, values, settings, ambiguous),
         _check_rendered_matches(rendered, subs, values, origin, settings),
     ]
     model = ModelLayer(

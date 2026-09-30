@@ -26,7 +26,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .schema import SCHEMA_VERSION, GateReport
+from .schema import SCHEMA_VERSION, GateReport, distinct
 
 REGISTRY_FILENAME = "registry.json"
 
@@ -124,6 +124,10 @@ def build_registry(report: GateReport, *, task_ref: str | None = None) -> dict[s
                     "arg_kind": setting.arg_kind,
                     "used_by_run": setting.used_by_run,
                     "call_count": setting.call_count,
+                    # Kept, as for a value, so a key recorded once per sweep
+                    # row shows every row's value rather than the last (B9).
+                    "observations": list(setting.observations),
+                    "observations_truncated": setting.observations_truncated,
                 },
             }
             for key, setting in (execution.settings if execution else {}).items()
@@ -156,10 +160,32 @@ def citable_values(registry: dict[str, Any]) -> dict[str, Any]:
 
 
 def citable_settings(registry: dict[str, Any]) -> dict[str, Any]:
-    """The settings a manuscript may cite as ``\\setting{key}``: none, unless the gate passed."""
+    """The settings a manuscript may cite as ``\\setting{key}``: none, unless the gate passed.
+
+    A setting that held more than one value is left out too, since a token
+    renders one value and each of them is right only for its own row (B9).
+    """
     if not registry.get("citable"):
         return {}
-    return {k: v["value"] for k, v in (registry.get("settings") or {}).items()}
+    several = ambiguous_settings(registry)
+    return {
+        k: v["value"] for k, v in (registry.get("settings") or {}).items() if k not in several
+    }
+
+
+def ambiguous_settings(registry: dict[str, Any]) -> dict[str, list[Any]]:
+    """Each setting whose entry records more than one value, mapped to those values.
+
+    Gate 1 fails such a run (``results.setting_single_value``); this is the
+    registry's own guard, for a consumer that reads one without its verdict.
+    """
+    out: dict[str, list[Any]] = {}
+    for key, entry in (registry.get("settings") or {}).items():
+        observed = ((entry.get("provenance") or {}).get("observations")) or []
+        held = distinct([*(o.get("value") for o in observed), entry.get("value")])
+        if len(held) > 1:
+            out[key] = held
+    return out
 
 
 def resolve_trace(registry: dict[str, Any], trace_id: str) -> dict[str, Any] | None:
