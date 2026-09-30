@@ -5,9 +5,11 @@ unmeasured false-negative rate is a scanner a reviewer will not trust, and
 ``report.no_numeric_literals_in_results`` is a scanner over prose, so the
 "eliminated by construction" claim belongs to the *pipeline* and not to it.
 
-**This measures and does not fix (D38).** The published Gate 1 traceability
+**Measured, then fixed once (D38, D76).** The published Gate 1 traceability
 number came from this scanner reading ``.tex`` (see ``gates/prose.py``), so
-changing it restates a measured result. Every gap below is reported and left in
+D38 froze it and D48 reported 34 of 49. D76 lifted the freeze for one rule,
+masking references per token instead of skipping their lines, and the
+measurement moved to 46 of 49. Every remaining gap is reported and left in
 place.
 
 **Denominator (D39).** Two manuscripts, the gated and ungated arms of the
@@ -31,12 +33,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from gates.prose import (  # noqa: E402
-    CITATION,
     CLAIM_SECTIONS,
     NUMBER,
-    SKIP_LINE,
     _heading,
     is_claim,
+    scannable,
 )
 
 from rig.gate3_m4_labels import (  # noqa: E402
@@ -132,9 +133,9 @@ def _scanner_reports(line: str, visible: bool = True) -> Counter[str]:
     line numbers and this measurement needs to know which line a finding came
     from. The steps below are its steps, in its order.
     """
-    if not visible or SKIP_LINE.search(line):
+    stripped = scannable(line) if visible else None
+    if stripped is None:
         return Counter()
-    stripped = CITATION.sub(" ", line)
     kept = [t for t in NUMBER.findall(stripped) if is_claim(t)]
     # context_of() locates a token with line.find(), so repeats of one token on
     # one line share a context and all but the first are deduplicated away.

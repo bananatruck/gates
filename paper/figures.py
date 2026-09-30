@@ -240,7 +240,9 @@ def mechanism_figure(name):
     fig.suptitle("Mechanism evidence, measured: what each gate catches and what it wrongly flags",
                  x=0.01, ha="left", fontsize=10, weight="bold", color=INK)
     ax.legend(handles=[Patch(color=GATED, label="gate on"), Patch(color=ALONE, label="Gate 1 off, the host as shipped")],
-              loc="lower right", frameon=False, fontsize=7, labelcolor=INK2)
+              # Above the plot, so no bar can run under it: at 46 of 49 Gate 3's did.
+              loc="lower right", bbox_to_anchor=(1.0, 1.0), ncol=2,
+              frameon=False, fontsize=7, labelcolor=INK2)
     fig.text(0.01, 0.01, "Sources: paper/mechanism.csv. Gate 1 from the signed 08-15 campaign; "
              "Gates 2 and 3 from the model-free rigs.", fontsize=6.5, color=MUTED)
     fig.subplots_adjust(left=0.36, right=0.98, top=0.9, bottom=0.12)

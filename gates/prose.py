@@ -17,9 +17,12 @@ findings because it could not read the file is the exact defect this project
 exists to catch, so :func:`claim_sections` exists to make coverage visible: an
 audit over zero sections must never be presented as an audit that found nothing.
 
-LaTeX behaviour is deliberately unchanged. The published Gate 1 traceability
-number came from this scanner reading ``.tex``, and altering that path would
-silently restate a measured result.
+LaTeX behaviour was frozen until D76, because the published Gate 1
+traceability number came from this scanner reading ``.tex`` (D38). D76 masks
+references and citations per token instead of skipping their lines, and
+re-measures both numbers it restates: G3-M4 from 34 to 46 of 49, and Gate 1
+traceability on the 08-15 campaign's gated paper from 28 of 29 claims to 34 of
+37. The signed package keeps its vintage.
 """
 
 from __future__ import annotations
@@ -42,11 +45,32 @@ CLAIM_SECTIONS = (
     "conclusion",
 )
 
-#: LaTeX scaffolding whose numbers are structural, not empirical.
+#: LaTeX scaffolding whose numbers are structural, not empirical. A line
+#: carrying one is not prose, so every number on it is skipped.
 SKIP_LINE = re.compile(
-    r"\\(usepackage|documentclass|geometry|label|ref|cite|includegraphics|"
+    r"\\(usepackage|documentclass|geometry|includegraphics|"
     r"begin\{equation|end\{equation|section|subsection)"
 )
+
+#: A cross-reference, citation or label inside a sentence: ``\ref{tab:2}``,
+#: ``\eqref{eq:1}``, ``\citep[p.~3]{smith2020}``, ``\label{fig:3}``. Its digits
+#: are an identifier, so the command is masked and the rest of the line is
+#: still read (D76). Until D76 any such command skipped the whole line, which
+#: hid 12 of G3-M4's 15 missed results.
+REFERENCE = re.compile(
+    r"\\(?:[A-Za-z]*ref|[A-Za-z]*cite[A-Za-z]*|label)\*?(?:\[[^\]]*\])*\{[^}]*\}"
+)
+
+
+def scannable(line: str) -> str | None:
+    """The line as the claim scanner reads it, or ``None`` when it is scaffolding.
+
+    References and citations are blanked token by token, and arXiv ids with
+    them; what remains is read for numbers.
+    """
+    if SKIP_LINE.search(line):
+        return None
+    return CITATION.sub(" ", REFERENCE.sub(" ", line))
 
 #: Citation identifiers, removed before claims are extracted.
 #:
@@ -126,9 +150,10 @@ def claim_sections(paper_text: str) -> list[str]:
 
 def flags_claim(line: str) -> bool:
     """Whether :func:`extract_claims` takes a number from this findings line."""
-    if SKIP_LINE.search(line):
+    text = scannable(line)
+    if text is None:
         return False
-    return any(is_claim(token) for token in NUMBER.findall(CITATION.sub(" ", line)))
+    return any(is_claim(token) for token in NUMBER.findall(text))
 
 
 def sections(paper_text: str) -> list[tuple[str, str]]:
@@ -157,11 +182,11 @@ def extract_claims(paper_text: str) -> list[Claim]:
         if heading is not None:
             section = heading
             continue
-        if SKIP_LINE.search(line):
-            continue
         if not any(s in section for s in CLAIM_SECTIONS):
             continue
-        line = CITATION.sub(" ", line)
+        line = scannable(line)
+        if line is None:
+            continue
         for token in NUMBER.findall(line):
             if not is_claim(token):
                 continue

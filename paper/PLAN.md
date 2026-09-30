@@ -228,7 +228,7 @@ These say how the gates behave; the figures above say what they change.
 | Gate 1 | reviewer score 3.735 gated against 3.765 ungated: the evidence channel, not the science, changed | `README.md`, measured results |
 | Gate 2 tier A | 27/27 defects caught, 0/18 clean registries flagged, over 45 labelled registries | `rig/gate2_tier_a_eval.py` |
 | Gate 2 tier B | 12/12 and 6/6 caught, 0/17 and 0/23 false alarms, over 29 cases | `rig/gate2_tier_b_eval.py` |
-| Gate 3 | 34 of 49 result literals in two archived manuscripts detected, 15 missed, 12 of the misses from one rule | `rig/gate3_scanner_miss.py` (G3-M4, D48) |
+| Gate 3 | 46 of 49 result literals in two archived manuscripts detected, 3 missed (2 small integers, 1 repeated value), 8 false positives; 34 of 49 before references were masked per token (D76) | `rig/gate3_scanner_miss.py` (G3-M4, D48, D76) |
 
 The mechanism metrics M1-M6 are defined in `docs/PLAN.md` §8.2.
 
