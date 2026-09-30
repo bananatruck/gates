@@ -20,6 +20,7 @@ from collections.abc import Callable, Iterable
 from .errors import GateError
 from .gate3 import RENDERED_FILENAME
 from .report import render_evidence
+from .runner import run_experiment
 from . import (
     REGISTRY_FILENAME,
     Gate1Config,
@@ -344,12 +345,24 @@ def evidence_only_execute(code: str, context: GateContext) -> GatedExecution:
     0's: the run is accepted unless the crash marker sits inside upstream's
     1,000-character view. So a difference between L0' and level 0 is the
     channel's, and one between L0' and level 1 is enforcement's.
+
+    Gate 1 does not run a program it has already rejected statically. Level 0
+    does, and this rule is level 0's, so that program still runs here and the
+    bundle shows what that run produced.
     """
     context.attempt += 1
     report = run_gate1(code, context.config, attempt=context.attempt, rewrite=1)
     execution = report.execution
-    accepted = execution is not None and LEGACY_MARKER not in upstream_view(execution)
-    bundle = build_evidence_bundle(report, enforced=False)
+    if execution is None:
+        execution = run_experiment(
+            code,
+            report.artifact_dir,
+            timeout_s=context.config.timeout_s,
+            cwd=context.config.cwd,
+            python=context.config.python,
+        )
+    accepted = LEGACY_MARKER not in upstream_view(execution)
+    bundle = build_evidence_bundle(report, enforced=False, execution=execution)
     print(f"$$$$ gate 1 EVIDENCE ONLY (L0') - attempt {context.attempt}, "
           f"{'accepted' if accepted else 'rejected'} by upstream's rule; "
           f"Gate 1 would have said {report.verdict.value}")
@@ -633,7 +646,11 @@ def report_loop(
 
 
 def build_evidence_bundle(
-    report: GateReport, budget: int = STDOUT_BUDGET_CHARS, *, enforced: bool = True
+    report: GateReport,
+    budget: int = STDOUT_BUDGET_CHARS,
+    *,
+    enforced: bool = True,
+    execution: ExecutionRecord | None = None,
 ) -> str:
     """The evidence handed downstream in place of a 1000-character prefix.
 
@@ -643,13 +660,16 @@ def build_evidence_bundle(
 
     ``enforced=False`` is L0': the same evidence for any verdict, with no
     verdict in it, and the exception the run raised, which level 0's view
-    carries when it fits and a passed bundle never needs.
+    carries when it fits and a passed bundle never needs. A run the timeout
+    killed says so, instead of a seed warning read from a file the kill never
+    wrote. ``execution`` is that run when Gate 1 never started it; otherwise
+    the report's own.
     """
     if enforced and not report.passed:
         return f"[GATE 1 REJECTED THIS RUN]\n\n{render_feedback(report)}"
 
-    metrics = report.metrics()
-    execution_ = report.execution
+    execution_ = report.execution if execution is None else execution
+    metrics = execution_.metrics if execution_ else {}
     lines = [
         f"VERIFIED RESULTS — Gate 1 PASS (attempt {report.attempt})",
         "",
@@ -676,26 +696,34 @@ def build_evidence_bundle(
             unit = f"  [{m.unit}]" if m.unit else ""
             where = f"  (experiment.py:{m.lineno})" if m.lineno else ""
             lines.append(f"  {key.ljust(width)} = {m.value}{unit}{where}")
-    else:
+    elif execution_ and execution_.timed_out:
+        lines.append(
+            "  The run was killed at the timeout before its results were written."
+        )
+    elif not (execution_ and execution_.exception):
+        # A crash explains the empty registry; "(none recorded)" would hide it.
         lines.append("  (none recorded)")
 
-    execution = report.execution
-    if execution and execution.settings:
+    if execution_ and execution_.settings:
         lines += [
             "",
             "RECORDED SETTINGS — record_setting(); cite as \\setting{key}, never as a result",
         ]
-        width = max(len(k) for k in execution.settings)
-        for key in sorted(execution.settings):
-            m = execution.settings[key]
+        width = max(len(k) for k in execution_.settings)
+        for key in sorted(execution_.settings):
+            m = execution_.settings[key]
             unit = f"  [{m.unit}]" if m.unit else ""
             lines.append(f"  {key.ljust(width)} = {m.value}{unit}")
 
-    if execution and execution.metadata:
+    if execution_ and execution_.metadata:
         lines += ["", "RUN METADATA"]
-        lines += [f"  {k} = {v}" for k, v in sorted(execution.metadata.items())]
+        lines += [f"  {k} = {v}" for k, v in sorted(execution_.metadata.items())]
 
     warnings = report.warnings()
+    if execution_ and execution_.timed_out and not execution_.results_json_path:
+        # The seed check reads results.json. A kill never writes that file, so
+        # "no seed was declared" describes the missing file, not the program.
+        warnings = [check for check in warnings if check.id != "env.seed_recorded"]
     if warnings:
         lines += ["", "WARNINGS — these must be stated in the report, not omitted"]
         for check in warnings:
@@ -715,15 +743,15 @@ def build_evidence_bundle(
             f"  registry: {os.path.join(report.artifact_dir, REGISTRY_FILENAME)}",
         ]
 
-    if not enforced and execution and execution.exception:
-        lines += ["", "EXCEPTION", execution.exception.traceback.rstrip()]
+    if not enforced and execution_ and execution_.exception:
+        lines += ["", "EXCEPTION", execution_.exception.traceback.rstrip()]
 
-    if execution:
-        stdout = execution.stdout_text()
+    if execution_:
+        stdout = execution_.stdout_text()
         lines += [
             "",
-            f"FULL EXPERIMENT OUTPUT ({execution.stdout_bytes:,} bytes, untruncated "
-            f"at {execution.stdout_path})",
+            f"FULL EXPERIMENT OUTPUT ({execution_.stdout_bytes:,} bytes, untruncated "
+            f"at {execution_.stdout_path})",
             "",
             _fit(stdout, budget),
         ]
