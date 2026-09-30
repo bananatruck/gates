@@ -555,10 +555,13 @@ The causes matter more than the rate:
 | Misses | Cause |
 |---|---|
 | 12 | The findings line carries a `\ref`, which `SKIP_LINE` matches, so every number on it is dropped and the line reports nothing |
-| 2 | `NUMBER` needs a decimal point or four digits, so a two- or three-digit integer result is invisible |
+| 2 | `is_claim` needs a decimal point or four digits, so a two- or three-digit integer result is invisible (`NUMBER` itself reads two digits) |
 | 1 | `context_of` uses `line.find`, so a value stated twice on one line is counted once |
 
-One cause explains four fifths of what the scanner cannot see, and it is not the one the literature readout predicted.
+**Re-measured under D76** (per-token masking of `\ref`, `\cite` and `\label` instead of skipping the line): 46 of 49 detected, 3 missed (the two small integers and the repeated value), 8 reported but not claims.
+The table above is D48's measurement, kept as the record of why the rule changed.
+
+One cause explained four fifths of what the scanner could not see, and it was not the one the literature readout predicted.
 That probe found the class through `\cite`.
 In a real manuscript a findings sentence points at the table or figure it discusses, so `\ref` is the common trigger.
 The third row undercounts literals without letting a line through, because the first occurrence still reports.

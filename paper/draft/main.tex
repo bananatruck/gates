@@ -48,10 +48,11 @@ on Autonomous Agents and Multiagent Systems (AAMAS 2027)}{3--7 May 2027}{Hanoi, 
 Autonomous research agents publish numbers their experiments never produced.
 The usual explanation is that the model fabricates.
 In the scaffold we audited, the cause was mechanical: the host cut experiment output to 1,000 characters before any agent read it, so the writer never saw the real numbers and the failure detector never saw the crash.
-We treat hallucinated results as an information-flow defect and close the channel at three points: execution validity, source-result coherence and report validity.
+We argue that a large share of hallucinated results is an information-flow defect, and close the channel at three points: execution validity, source-result coherence and report validity.
 The three gates are deterministic, need no model to reach a verdict, and install into an existing scaffold through one small adapter.
 A single switch runs them cumulatively, so each gate's contribution can be measured on its own.
 We evaluate the layer on CORE-Bench, MLR-Bench and BadScientist at every level, on two host scaffolds.
+\todo{Benchmarks: D70 replaced this set (Hidden Pitfalls, ARC-Bench, re-scoring, MLR-Bench); rewrite once the Holm family is re-declared (D-E).}
 \todo{one sentence of headline results, from the level-3 bars of Figures 1--3, once measured.}
 \end{abstract}
 
@@ -74,7 +75,8 @@ The host cut experiment output to 1,000 characters before the writing agent read
 A run that raised \texttt{NameError} on every attempt scored 1.0 from the reward model and went into the paper with a full results table.
 The model did not need to be dishonest; nothing ever showed it the numbers.
 
-That makes fabrication a property of the information flow, and so something a deterministic layer can stop.
+That makes much of the fabrication a property of the information flow, and so something a deterministic layer can stop.
+An ablation that delivers the gate's evidence without enforcing its verdict (L0') separates the two, and we report it beside the levels.
 \gates{} places a gate at each point where a scaffold loses its grip on evidence:
 
 \begin{itemize}
@@ -167,12 +169,14 @@ BadScientist (40 write-ups) & manipulated manuscripts emitted and accepted & hon
 For BadScientist we manipulate the write-ups of real runs rather than generating papers with no experiments.
 A paper with no experiment never passes Gate 1, so every level from 1 up would read zero and say nothing about Gates 2 and 3.
 The model under test is DeepSeek V4.1 Flash; DeepSeek V4 Pro repeats MLR-Bench at levels 0 and 3, to test whether the effect belongs to the information flow or to one model.
-The faked-result labels and the MLR-Judge scores come from Gemini Pro and Claude Sonnet, averaged as MLR-Judge does, so no judge is the model under test.
+The faked-result labels and the MLR-Judge scores come from DeepSeek V4 Pro and NVIDIA Nemotron 3 Ultra, averaged as MLR-Judge does; a judge never scores a run of its own model, so on the V4 Pro runs only Nemotron counts.
+A person confirms each faked-result flag, blind to the level and in a shuffled order.
 Every run records its cost and wallclock, and we report both.
 
 \paragraph{Significance, fixed before the pilot.}
 Level 0 and level 3 run on the same task with the same seed, so each task-seed is a pair.
-Per benchmark, an exact McNemar test on the discordant pairs tests the integrity event, with Holm's correction across the three benchmarks at $\alpha = 0.05$.
+Per benchmark, an exact McNemar test on the discordant pairs tests the integrity event, with Holm's correction across the benchmarks at $\alpha = 0.05$.
+\todo{Name the Holm family once re-declared (D-E, D81).}
 The task score must be non-inferior: the lower bound of a seeded 95\% paired-bootstrap interval of level 3 minus level 0 stays above $-0.5$ MLR-Judge points, $-5$ points of pass@1, and $-10$ points of honest admission.
 The pilot's discordance sets the seed count for 80\% power.
 
@@ -227,6 +231,18 @@ In the Gate 1 campaign, reviewer scores were 3.735 gated and 3.765 ungated, and 
 Gate 2's methodology checks read plan fields a model extracts from free-text plans, so a divergence on one is capped at a warning.
 The Gate 1 campaign ran on DeepSeek V4 Flash and the benchmark runs on V4.1 Flash, which DeepSeek now serves under the old name too, so the campaign is context for level 1, not a replication of it.
 Gate 3's citation checks see arXiv identifiers only; a paper that cites none is not checkable, and we count it as such rather than as clean.
+
+A fabrication made before the number is recorded is not caught by checking the recorded number.
+We planted fourteen such fabrications in a model-free red team: a number typed at the recording call, one passed through a variable, a dictionary or a reducer, all four blocked; a key recorded once per epoch with the best value last, warned.
+Nine pass silently.
+Six are choices of method on real computation: a random number in a plausible band, a measurement nudged upward, the best epoch reported as final, a failed seed dropped from the mean, the best of five seeds, and training accuracy labelled as test.
+No check on a recorded value can see them, because each value is what the code computed.
+Three are limits of the static pass: a result recorded as a setting, a literal passed through tuple unpacking, and a literal returned by a function the program defines.
+
+The claim scanner misses two- and three-digit integers and a value stated twice on one line: 3 of 49 labelled result literals in two archived manuscripts.
+A person's confirmation hides the level but not the paper's text, which can still reveal its treatment.
+Waves 2 and 3 split the GPU four ways, and 13 of the 14 crashes at level 0 were out of memory under that per-run cap, which gated levels could retry around and level 0 could not; we report crashes by cause and count only the agent's.
+Level 3 used 2.27 and 2.32 times level 0's tokens in those waves, so a quality difference between them is also a compute difference.
 \todo{Whatever the runs show.}
 
 \section{Conclusion}
@@ -250,7 +266,7 @@ Gate 3 also writes each rendered claim's provenance chain, from task to command 
 Gate & Result \\
 \midrule
 1 & 40/40 required values reached the writer, against 0/40 through a 1,000-character channel \\
-1 & 28/29 manuscript claims traceable, against 0/11 ungated \\
+1 & 28/29 manuscript claims traceable, against 0/11 ungated (34/37 under the revised claim scanner) \\
 2, tier A & 27/27 defects caught, 0/18 clean registries flagged \\
 2, tier B & 12/12 and 6/6 caught, 0/17 and 0/23 false alarms \\
 3 & 46 of 49 result literals detected in two archived manuscripts \\

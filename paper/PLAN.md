@@ -15,8 +15,10 @@ The four main files:
 
 ## 1. The claim, and what would show it
 
-Hallucinated results in autonomous research agents are an information-flow defect, not a model tendency.
-If that is right, three things are true, and each figure tests one of them:
+A large share of the hallucinated results in autonomous research agents is an information-flow defect, not a model tendency.
+The claim is scoped this way until two ablations have run (09-29 review): L0', which delivers Gate 1's evidence without enforcing its verdict (D77), and the second model (§9).
+L0' separates the channel from the verdict; the second model separates the flow from one model.
+If the claim is right, three things are true, and each figure tests one of them:
 
 1. Turning the gates on removes fabricated results, one gate at a time, in the order the information flows (figures 1-3).
 2. It does so on more than one host, and a host with GATES beats the same host without them (figures 4-6).
@@ -84,6 +86,21 @@ This is the one benchmark where Gate 3 carries the result, so it is Gate 3's adv
 The right panel is the cost: honest write-ups Gate 3 wrongly rejects.
 Reference line: 69.0% acceptance for fabricated papers under the composed "All" strategy at τ0.5 (BadScientist Table 1, p.7).
 Their papers had no experiments at all, so the line is context, not a like-for-like baseline.
+
+### Presentation tiers (09-29 review, Q3)
+
+Three kinds of number reach the paper, and they are never drawn as if they were one kind.
+
+| Tier | What | Where it appears |
+|---|---|---|
+| 1 | our own runs, levels 0-3 (and L0' once it runs), same judges, same pins | the main figures, 1-3 |
+| 2 | released papers of other systems, re-scored by the same judges (`rig/stage_released.py`, D80) | a separate panel, labelled re-scored |
+| 3 | numbers other papers publish, from their own judges and setups | a table only, never a bar beside tier 1 |
+
+A tier 3 number beside a tier 1 bar would compare two judges as if they were two systems.
+Figures 4-6 below were drawn before this rule and still place a published cell as a bar; `paper/figures.py` moves it to the table before the draft (open, `progress.md` D81).
+
+Rig results (figure 8, §8) are mechanism evidence in the appendix, never a headline.
 
 ### Figures 4-6: each system alone and with GATES
 
@@ -224,7 +241,7 @@ These say how the gates behave; the figures above say what they change.
 | Gate | Result | Source |
 |---|---|---|
 | Gate 1 | 40/40 required values delivered downstream, against 0/40 through the host's 1,000-character channel | `README.md`, measured results |
-| Gate 1 | 28/29 manuscript claims traceable, against 0/11 ungated | `README.md`, measured results |
+| Gate 1 | 28/29 manuscript claims traceable, against 0/11 ungated; the claim scanner of D76 re-reads the same gated paper as 34/37 | `README.md`, measured results; D76 |
 | Gate 1 | reviewer score 3.735 gated against 3.765 ungated: the evidence channel, not the science, changed | `README.md`, measured results |
 | Gate 2 tier A | 27/27 defects caught, 0/18 clean registries flagged, over 45 labelled registries | `rig/gate2_tier_a_eval.py` |
 | Gate 2 tier B | 12/12 and 6/6 caught, 0/17 and 0/23 false alarms, over 29 cases | `rig/gate2_tier_b_eval.py` |
@@ -233,6 +250,11 @@ These say how the gates behave; the figures above say what they change.
 The mechanism metrics M1-M6 are defined in `docs/PLAN.md` §8.2.
 
 ## 9. Significance, fixed before any run
+
+**Status on 09-29 (D81).**
+The integrity outcome's headline definition is D69's, dated 09-27, before the judging of waves 2-3 began: a faked result counts when a person confirms it from either judge's evidence; the stricter both-judges-plus-a-person count is reported beside it.
+`rig.review_flags --either` produces the headline count (D79); which of the two fills the integrity rows of `results.csv` is open for Kesh.
+The Holm family below still names CORE-Bench and BadScientist, which D70 no longer runs; it must be re-declared (run kit 09-29, D-E) before the first wave of a new benchmark, so the family is never chosen after a result.
 
 "GATES significantly improves the host" is tested this way, written down before the pilot so the test cannot be chosen after the results.
 The functions are in `rig/stats.py`, stdlib only, so every number can be recomputed on a bare interpreter.
