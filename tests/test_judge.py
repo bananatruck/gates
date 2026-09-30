@@ -9,11 +9,13 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import time
 from pathlib import Path
 
 import pytest
 
 from rig import judge, review_flags
+from rig.live import AgentCLIError, agent_model
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "mlrbench"
 TASK = (FIXTURE / "tasks" / "iclr2025_scsl.md").read_bytes()
@@ -100,6 +102,7 @@ def _fake_agent_clis(tmp_path, monkeypatch):
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 name = Path(sys.argv[0]).name
@@ -109,6 +112,11 @@ if "--version" in sys.argv:
 prompt = sys.stdin.read()
 with Path(os.environ["FAKE_AGENT_LOG"]).open("a", encoding="utf-8") as stream:
     stream.write(json.dumps({"name": name, "argv": sys.argv[1:], "stdin": prompt}) + "\\n")
+if delay := os.environ.get("FAKE_AGENT_SLEEP"):
+    time.sleep(float(delay))
+if os.environ.get("FAKE_AGENT_INVALID") == name:
+    print("not JSON")
+    raise SystemExit
 if "identifying hallucinations" in prompt:
     body = {"has_hallucination": False, "hallucinations": [],
             "overall_assessment": "a", "confidence": 4}
@@ -145,11 +153,11 @@ def test_agent_judges_use_stdin_and_tag_every_output(tmp_path, monkeypatch):
         ["--trust", "--mode", "ask", "--model", "gpt-5", "-p"],
         ["--trust", "--mode", "ask", "--model", "gpt-5", "-p"],
     ]
-    payloads = [json.loads(call["stdin"]) for call in calls]
-    assert all(payload["system"] == "" for payload in payloads)
-    assert all(TASK.decode() in payload["user"] for payload in payloads)
-    assert all("accuracy 99.9" in payload["user"] for payload in payloads)
-    assert all("print('trained')" in payload["user"] for payload in payloads)
+    payloads = [call["stdin"] for call in calls]
+    assert all(payload.startswith("\n\n") for payload in payloads)
+    assert all(TASK.decode() in payload for payload in payloads)
+    assert all("accuracy 99.9" in payload for payload in payloads)
+    assert all("print('trained')" in payload for payload in payloads)
 
     summary = json.loads((folder / "judge" / "summary.json").read_text())
     metrics = json.loads((folder / "metrics.json").read_text())
@@ -175,6 +183,31 @@ def test_agent_judges_use_stdin_and_tag_every_output(tmp_path, monkeypatch):
 def test_agent_judge_does_not_score_its_own_model_name():
     judges = ["agent:claude/sonnet", "agent:cursor/gpt-5"]
     assert judge.eligible(judges, "sonnet") == ["agent:cursor/gpt-5"]
+
+
+def test_agent_timeout_kills_a_hung_cli_and_leaves_the_judge_for_retry(
+    tmp_path, monkeypatch
+):
+    log = _fake_agent_clis(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_AGENT_SLEEP", "60")
+    folder = make_run(tmp_path / "runs")
+
+    model = agent_model("agent:claude/sonnet", timeout_s=0.2)
+    with pytest.raises(AgentCLIError, match="timed out after 0.2 seconds"):
+        model("user", "system")
+    log.write_text("")
+
+    started = time.monotonic()
+    assert judge.main([
+        "--runs", str(tmp_path / "runs"), "--mlrbench", str(FIXTURE),
+        "--judge", "agent:claude/sonnet", "--agent-timeout", "0.2",
+    ]) == 0
+
+    assert time.monotonic() - started < 5
+    assert len(log.read_text().splitlines()) == 6
+    summary = json.loads((folder / "judge" / "summary.json").read_text())
+    assert summary["complete"] is False
+    assert not (folder / "metrics.json").exists()
 
 
 def test_a_changed_mlrbench_file_is_refused(tmp_path):
@@ -280,17 +313,34 @@ def test_a_run_without_a_paper_gets_no_score_and_no_judge(tmp_path, judged):
     assert "no_paper:gate" in metrics["no_paper"]
 
 
-def test_a_judge_that_returns_no_json_leaves_the_run_for_a_retry(tmp_path, judged):
-    folder = make_run(tmp_path)
-    outcome = judged(folder, {PRO: lambda p, s: "I cannot comply", FREE: fake(5, False)})
-    assert outcome.startswith("incomplete") and not (folder / "metrics.json").exists()
-    # A retry asks only the judge that failed.
-    for name in ("overall.json", "hallucination.json"):
-        (folder / "judge" / judge.slug(PRO) / name).unlink()
-    free_calls = []
-    judged(folder, {PRO: fake(6, False), FREE: fake(5, False, free_calls)})
-    assert free_calls == []
-    assert json.loads((folder / "metrics.json").read_text())["task_score"] == 5.5
+def test_a_judge_error_is_retried_while_a_completed_judge_is_left_alone(
+    tmp_path, monkeypatch
+):
+    log = _fake_agent_clis(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_AGENT_INVALID", "claude")
+    folder = make_run(tmp_path / "runs")
+    argv = [
+        "--runs", str(tmp_path / "runs"), "--mlrbench", str(FIXTURE),
+        "--judge", "agent:claude/sonnet", "--judge", "agent:cursor/gpt-5",
+    ]
+
+    assert judge.main(argv) == 0
+    first_calls = [json.loads(line)["name"] for line in log.read_text().splitlines()]
+    assert first_calls.count("claude") == 6
+    assert first_calls.count("cursor-agent") == 2
+    first_summary = json.loads((folder / "judge" / "summary.json").read_text())
+    assert first_summary["complete"] is False
+    assert not (folder / "metrics.json").exists()
+
+    monkeypatch.delenv("FAKE_AGENT_INVALID")
+    assert judge.main(argv) == 0
+    calls = [json.loads(line)["name"] for line in log.read_text().splitlines()]
+    assert calls.count("claude") == 8
+    assert calls.count("cursor-agent") == 2
+    summary = json.loads((folder / "judge" / "summary.json").read_text())
+    assert summary["complete"] is True
+    assert summary["task_score"] == 6
+    assert json.loads((folder / "metrics.json").read_text())["task_score"] == 6
 
 
 def test_a_run_given_a_different_task_text_is_refused(tmp_path, judged):

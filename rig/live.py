@@ -12,7 +12,6 @@ printed, logged, or passed on a command line.
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
 import subprocess
@@ -25,6 +24,7 @@ from rig import host_dir
 
 ModelFn = Callable[[str, str], str]
 AGENT_REVIEW_TAG = "reviewed by agent for now"
+DEFAULT_AGENT_TIMEOUT_S = 1800
 
 
 class AgentCLIError(RuntimeError):
@@ -49,7 +49,10 @@ def _agent_command(cli: str, model: str) -> tuple[str, ...]:
     return "cursor-agent", "--trust", "--mode", "ask", "--model", model, "-p"
 
 
-def _run_agent(command: tuple[str, ...], *, prompt: str | None = None) -> str:
+def _run_agent(
+    command: tuple[str, ...], *, prompt: str | None = None,
+    timeout_s: float = DEFAULT_AGENT_TIMEOUT_S,
+) -> str:
     try:
         completed = subprocess.run(
             command,
@@ -57,7 +60,12 @@ def _run_agent(command: tuple[str, ...], *, prompt: str | None = None) -> str:
             text=True,
             capture_output=True,
             check=False,
+            timeout=timeout_s,
         )
+    except subprocess.TimeoutExpired as error:
+        raise AgentCLIError(
+            f"{command[0]} timed out after {timeout_s:g} seconds"
+        ) from error
     except OSError as error:
         raise AgentCLIError(f"could not run {command[0]}: {error}") from error
     if completed.returncode:
@@ -72,23 +80,26 @@ class AgentModel:
 
     command: tuple[str, ...]
     cli_version: str
+    timeout_s: float = DEFAULT_AGENT_TIMEOUT_S
 
     def __call__(self, prompt: str, system: str) -> str:
-        payload = json.dumps({"system": system, "user": prompt}, ensure_ascii=False)
-        return _run_agent(self.command, prompt=payload)
+        payload = f"{system}\n\n{prompt}"
+        return _run_agent(self.command, prompt=payload, timeout_s=self.timeout_s)
 
 
-def agent_model(name: str) -> AgentModel:
+def agent_model(
+    name: str, *, timeout_s: float = DEFAULT_AGENT_TIMEOUT_S,
+) -> AgentModel:
     """Build the agent CLI named by ``agent:CLI/MODEL``."""
     parts = agent_judge_parts(name)
     if parts is None:
         raise AgentCLIError(f"{name!r} is not an agent judge")
     cli, model = parts
     command = _agent_command(cli, model)
-    version = _run_agent((command[0], "--version")).strip()
+    version = _run_agent((command[0], "--version"), timeout_s=timeout_s).strip()
     if not version:
         raise AgentCLIError(f"{command[0]} --version returned no version")
-    return AgentModel(command=command, cli_version=version)
+    return AgentModel(command=command, cli_version=version, timeout_s=timeout_s)
 
 #: ``NAME = value`` or ``NAME=value``, the form ``AI_keys.env`` uses. ``source``
 #: cannot read the spaced form, which is why the tools parse it themselves.

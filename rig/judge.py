@@ -56,6 +56,7 @@ from pathlib import Path
 
 from rig.live import (
     AGENT_REVIEW_TAG,
+    DEFAULT_AGENT_TIMEOUT_S,
     AgentCLIError,
     AgentModel,
     ModelFn,
@@ -163,6 +164,13 @@ def _write(path: Path, data) -> None:
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
+def _judge_outputs_complete(folder: Path) -> bool:
+    paths = (folder / "overall.json", folder / "hallucination.json")
+    if not all(path.exists() for path in paths):
+        return False
+    return all("error" not in json.loads(path.read_text(encoding="utf-8")) for path in paths)
+
+
 def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
               reviews: tuple, tasks: Path) -> str:
     """Judge one run folder. Returns what happened, in a few words."""
@@ -195,7 +203,7 @@ def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
     complete = True
     for judge in eligible_judges:
         out = folder / "judge" / slug(judge)
-        if not (out / "overall.json").exists():
+        if not _judge_outputs_complete(out):
             out.mkdir(parents=True, exist_ok=True)
             os.environ[USAGE_ENV] = str(out / "usage.jsonl")
             model = models[judge]
@@ -282,6 +290,10 @@ def main(argv: list[str] | None = None, *, model_for=None) -> int:
                         help="a judge model as the host names it; give two")
     parser.add_argument("--key-file", type=Path)
     parser.add_argument("--host", type=Path, default=None)
+    parser.add_argument(
+        "--agent-timeout", type=float, default=DEFAULT_AGENT_TIMEOUT_S,
+        help="seconds allowed for each agent CLI call (default: 1800)",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -297,7 +309,7 @@ def main(argv: list[str] | None = None, *, model_for=None) -> int:
 
         def model_for(judge):
             if agent_judge_parts(judge):
-                return agent_model(judge)
+                return agent_model(judge, timeout_s=args.agent_timeout)
             return model_from_args(argparse.Namespace(
                 backend=judge, key_file=None, host=args.host,
                 max_tokens=MAX_TOKENS, temp=0.0))
