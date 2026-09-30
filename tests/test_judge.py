@@ -7,6 +7,7 @@ files the run kit carries, with their checksums. The judges here are fakes.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -18,6 +19,7 @@ FIXTURE = Path(__file__).resolve().parent / "fixtures" / "mlrbench"
 TASK = (FIXTURE / "tasks" / "iclr2025_scsl.md").read_bytes()
 PRO = "deepseek-v4-pro"
 FREE = "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
+REVIEW_TAG = "reviewed by agent for now"
 
 
 def overall(score):
@@ -90,6 +92,91 @@ def test_the_prompt_is_mlrbenchs_with_task_paper_and_code(tmp_path, judged):
     assert meta["max_tokens"] == 16384 and meta["temperature"] == 0.0
 
 
+def _fake_agent_clis(tmp_path, monkeypatch):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "agent-calls.jsonl"
+    script = """#!/usr/bin/env python3
+import json
+import os
+import sys
+from pathlib import Path
+
+name = Path(sys.argv[0]).name
+if "--version" in sys.argv:
+    print(f"fake {name} 1.2.3")
+    raise SystemExit
+prompt = sys.stdin.read()
+with Path(os.environ["FAKE_AGENT_LOG"]).open("a", encoding="utf-8") as stream:
+    stream.write(json.dumps({"name": name, "argv": sys.argv[1:], "stdin": prompt}) + "\\n")
+if "identifying hallucinations" in prompt:
+    body = {"has_hallucination": False, "hallucinations": [],
+            "overall_assessment": "a", "confidence": 4}
+else:
+    body = {name: {"score": 6, "justification": "j"} for name in
+            ("Clarity", "Novelty", "Soundness", "Significance")}
+    body.update({"Overall": {"score": 6, "strengths": [], "weaknesses": []},
+                 "Confidence": 4})
+print("```json")
+print(json.dumps(body))
+print("```")
+"""
+    for name in ("claude", "cursor-agent"):
+        executable = bin_dir / name
+        executable.write_text(script)
+        executable.chmod(0o755)
+    monkeypatch.setenv("FAKE_AGENT_LOG", str(log))
+    monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ["PATH"])
+    return log
+
+
+def test_agent_judges_use_stdin_and_tag_every_output(tmp_path, monkeypatch):
+    log = _fake_agent_clis(tmp_path, monkeypatch)
+    folder = make_run(tmp_path / "runs")
+
+    assert judge.main([
+        "--runs", str(tmp_path / "runs"), "--mlrbench", str(FIXTURE),
+        "--judge", "agent:claude/sonnet", "--judge", "agent:cursor/gpt-5",
+    ]) == 0
+
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    assert [call["argv"] for call in calls] == [
+        ["-p", "--model", "sonnet"], ["-p", "--model", "sonnet"],
+        ["--trust", "--mode", "ask", "--model", "gpt-5", "-p"],
+        ["--trust", "--mode", "ask", "--model", "gpt-5", "-p"],
+    ]
+    payloads = [json.loads(call["stdin"]) for call in calls]
+    assert all(payload["system"] == "" for payload in payloads)
+    assert all(TASK.decode() in payload["user"] for payload in payloads)
+    assert all("accuracy 99.9" in payload["user"] for payload in payloads)
+    assert all("print('trained')" in payload["user"] for payload in payloads)
+
+    summary = json.loads((folder / "judge" / "summary.json").read_text())
+    metrics = json.loads((folder / "metrics.json").read_text())
+    assert summary["review_tag"] == REVIEW_TAG
+    assert metrics["review_tag"] == REVIEW_TAG
+    for name, command in (
+        ("agent:claude/sonnet", ["claude", "-p", "--model", "sonnet"]),
+        ("agent:cursor/gpt-5",
+         ["cursor-agent", "--trust", "--mode", "ask", "--model", "gpt-5", "-p"]),
+    ):
+        meta = json.loads((folder / "judge" / judge.slug(name) / "meta.json").read_text())
+        assert meta["judge_kind"] == "agent"
+        assert meta["command"] == command
+        assert meta["cli_version"].startswith("fake ")
+        assert meta["review_tag"] == REVIEW_TAG
+        assert meta["mlr_bench_deviations"] == {
+            "temperature": "the agent CLI does not expose temperature control; MLR-Bench uses 0",
+            "max_tokens": "the agent CLI does not expose max-token control; MLR-Bench uses 16384",
+        }
+        assert "max_tokens" not in meta and "temperature" not in meta
+
+
+def test_agent_judge_does_not_score_its_own_model_name():
+    judges = ["agent:claude/sonnet", "agent:cursor/gpt-5"]
+    assert judge.eligible(judges, "sonnet") == ["agent:cursor/gpt-5"]
+
+
 def test_a_changed_mlrbench_file_is_refused(tmp_path):
     kit = tmp_path / "mlrbench"
     shutil.copytree(FIXTURE, kit)
@@ -136,7 +223,43 @@ def test_both_judges_flagging_waits_for_a_person_whose_verdict_is_final(tmp_path
     assert metrics["task_score"] == 4.0
     review = json.loads((folder / "judge" / "human_review.json").read_text())
     assert review["reviewer"] == "Kesh" and review["confirmed"] is True
+    assert "review_tag" not in review and "review_tag" not in metrics
     assert review_flags.candidates(tmp_path) == []
+
+
+def test_an_agent_reviewer_uses_an_answers_file_without_prompting(tmp_path, judged):
+    folder = make_run(tmp_path)
+    judged(folder, {PRO: fake(3, True), FREE: fake(5, True)})
+    run_name = str(folder.relative_to(tmp_path))
+    answers = tmp_path / "answers.json"
+    answers.write_text(json.dumps({
+        run_name: {"confirmed": True, "note": "the result is absent from the code"},
+    }))
+
+    def no_prompt(_):
+        raise AssertionError("the agent review path must not prompt")
+
+    assert review_flags.main([
+        "--runs", str(tmp_path), "--reviewer", "agent:claude", "--answers", str(answers),
+    ], ask=no_prompt) == 0
+
+    review = json.loads((folder / "judge" / "human_review.json").read_text())
+    metrics = json.loads((folder / "metrics.json").read_text())
+    assert review["reviewer"] == "agent:claude" and review["confirmed"] is True
+    assert review["review_tag"] == REVIEW_TAG
+    assert metrics["review_tag"] == REVIEW_TAG
+    assert metrics["human_reviewed"] is False
+
+
+def test_agent_reviewers_require_answers_and_people_cannot_use_them(tmp_path):
+    answers = tmp_path / "answers.json"
+    answers.write_text("{}")
+    with pytest.raises(SystemExit):
+        review_flags.main(["--runs", str(tmp_path), "--reviewer", "agent:claude"])
+    with pytest.raises(SystemExit):
+        review_flags.main([
+            "--runs", str(tmp_path), "--reviewer", "Kesh", "--answers", str(answers),
+        ])
 
 
 def test_a_person_can_reject_a_flag(tmp_path, judged):

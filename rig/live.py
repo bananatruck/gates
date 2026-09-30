@@ -1,10 +1,9 @@
-"""The model a live rig tool calls, built from its command line (D61).
+"""Build the model a live rig tool calls from command-line configuration (D61).
 
-The live tools take their model injected, like every gate. This module is the
-one place a command line turns into that model: it reads the provider key from
-a key file if asked, puts the host checkout on the import path, and builds the
-model through the host's own ``query_model`` via ``make_gate_model``, so a
-measurement uses the same client the host's runs use.
+The live tools take their model injected, like every gate. API-backed models
+use the host's own ``query_model`` through ``make_gate_model``. Agent-backed
+models run Claude Code or Cursor Agent as a non-interactive ``ModelFn`` and
+send the system and user prompts through stdin.
 
 A key is loaded into this process's environment and nowhere else. It is never
 printed, logged, or passed on a command line.
@@ -13,15 +12,83 @@ printed, logged, or passed on a command line.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
+import subprocess
 import sys
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from rig import host_dir
 
 ModelFn = Callable[[str, str], str]
+AGENT_REVIEW_TAG = "reviewed by agent for now"
+
+
+class AgentCLIError(RuntimeError):
+    """An agent judge name or process invocation is invalid."""
+
+
+def agent_judge_parts(name: str) -> tuple[str, str] | None:
+    """Return the CLI and model from ``agent:CLI/MODEL``, or ``None``."""
+    if not name.startswith("agent:"):
+        return None
+    cli, separator, model = name.removeprefix("agent:").partition("/")
+    if not separator or cli not in {"claude", "cursor"} or not model.strip():
+        raise AgentCLIError(
+            f"invalid agent judge {name!r}; use agent:claude/<model> or agent:cursor/<model>"
+        )
+    return cli, model
+
+
+def _agent_command(cli: str, model: str) -> tuple[str, ...]:
+    if cli == "claude":
+        return "claude", "-p", "--model", model
+    return "cursor-agent", "--trust", "--mode", "ask", "--model", model, "-p"
+
+
+def _run_agent(command: tuple[str, ...], *, prompt: str | None = None) -> str:
+    try:
+        completed = subprocess.run(
+            command,
+            input=prompt,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except OSError as error:
+        raise AgentCLIError(f"could not run {command[0]}: {error}") from error
+    if completed.returncode:
+        detail = completed.stderr.strip() or completed.stdout.strip() or "no error output"
+        raise AgentCLIError(f"{command[0]} exited {completed.returncode}: {detail}")
+    return completed.stdout
+
+
+@dataclass(frozen=True)
+class AgentModel:
+    """A ``ModelFn`` backed by a non-interactive agent CLI."""
+
+    command: tuple[str, ...]
+    cli_version: str
+
+    def __call__(self, prompt: str, system: str) -> str:
+        payload = json.dumps({"system": system, "user": prompt}, ensure_ascii=False)
+        return _run_agent(self.command, prompt=payload)
+
+
+def agent_model(name: str) -> AgentModel:
+    """Build the agent CLI named by ``agent:CLI/MODEL``."""
+    parts = agent_judge_parts(name)
+    if parts is None:
+        raise AgentCLIError(f"{name!r} is not an agent judge")
+    cli, model = parts
+    command = _agent_command(cli, model)
+    version = _run_agent((command[0], "--version")).strip()
+    if not version:
+        raise AgentCLIError(f"{command[0]} --version returned no version")
+    return AgentModel(command=command, cli_version=version)
 
 #: ``NAME = value`` or ``NAME=value``, the form ``AI_keys.env`` uses. ``source``
 #: cannot read the spaced form, which is why the tools parse it themselves.
