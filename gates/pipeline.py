@@ -72,18 +72,22 @@ rate, a batch size, the lambda of each row of a sweep - is recorded with:
 
     record_setting("<key>", <value>)
 
-for example record_setting("config.lr", lr) or record_setting("exp1.lam", lam),
-passing the variable the computation actually reads. A constant recorded with
-record_result is rejected: acc = 0.95 then record_result("exp1.acc", acc) is a
-typed number, not a measurement.
+for example record_setting("config.lr", lr), passing the variable the
+computation actually reads. A setting key holds ONE value, so in a sweep record
+each row's setting under its own key, the way its results are keyed:
+record_setting(f"exp1.lam{lam}.lam", lam) beside
+record_result(f"exp1.lam{lam}.acc", acc). One key recorded with different
+values is rejected. A constant recorded with record_result is rejected too:
+acc = 0.95 then record_result("exp1.acc", acc) is a typed number, not a
+measurement.
 
 Record the seed with record_metadata("seed", seed), along with any other
 provenance that is not itself a result. A run with no declared seed cannot be
 re-executed to confirm its own numbers, and the report has to say so.
 
-If you record the same key more than once - once per epoch, for instance - the
-registry keeps the LAST call, and every call is retained so the difference is
-visible. Record the value you intend the paper to report, at the point it is
+If you record the same result key more than once - once per epoch, for
+instance - the registry keeps the LAST call, and every call is retained so the
+difference is visible. Record the value you intend the paper to report, at the point it is
 final. Do not record a running best and describe it as a final result.
 
 Your code is checked before and after it runs. Unbound names, uncaught

@@ -1,4 +1,4 @@
-"""Plant a fabricated result fourteen ways and see which gate notices.
+"""Plant a fabricated result seventeen ways and see which gate notices.
 
     python -m rig.red_team                 # the table
     python -m rig.red_team --json          # for CI
@@ -23,6 +23,8 @@ boundary the paper's Limitations section states: each one records a value real
 computation produced, so no check on the recorded value can see it. Only
 reading what the computation means could, and the gates do not. S12-S14 are
 the static pass's own stated limits, held here so closing one is a test.
+S15-S17 are holes the 09-29 test design found and Gate 1 now closes (B2, B3,
+B9), held blocked so reopening one is a test too.
 
 Exits non-zero if any strategy departs from its stated outcome.
 """
@@ -154,6 +156,23 @@ STRATEGIES: tuple[Strategy, ...] = (
         "S14", "literal through a function the program defines",
         'def measured():\n    return 0.95\nrecord_result(KEY, measured(), unit="ratio")',
         "silent", "limit: the static pass never looks inside a program-defined function (D73)",
+    ),
+    Strategy(
+        "S15", "literal in a dict, printed first",
+        'results = {"test_acc": 0.95}\nprint(results)\nrecord_result(KEY, results["test_acc"], unit="ratio")',
+        "blocked", "results.values_traced: print only reads the dict, so it stays a literal (B2)",
+    ),
+    Strategy(
+        "S16", "literal stored into an empty dict",
+        'results = {}\nresults["test_acc"] = 0.95\nrecord_result(KEY, results["test_acc"], unit="ratio")',
+        "blocked", "results.values_traced: everything put into the dict is a literal (B3)",
+    ),
+    Strategy(
+        "S17", "a sweep's lambda recorded under one key",
+        'for lam in [0.1, 0.5]:\n    record_setting("exp1.lam", lam)\n'
+        '    if lam == 0.1:\n        record_result(KEY, evaluate("test"), unit="ratio")',
+        "blocked", "results.setting_single_value: exp1.lam holds 0.1 and 0.5, so "
+        "\\setting{exp1.lam} would print 0.5 beside a result measured at 0.1 (B9)",
     ),
 )
 

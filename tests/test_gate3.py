@@ -230,6 +230,63 @@ def test_settings_are_not_citable_from_a_failed_run():
     assert citable_settings(reg) == {}
 
 
+SWEEP_ROW = "\\section{Results}\nAt $\\lambda=\\setting{exp1.lam}$ accuracy is \\result{exp1.lam0.1.acc}.\n"
+
+
+def _swept_setting(observed: list, **provenance) -> dict:
+    """A registry whose ``exp1.lam`` setting was recorded once per sweep row (B9)."""
+    reg = registry({"exp1.lam0.1.acc": (0.51, "ratio"), "exp1.lam0.5.acc": (0.55, "ratio")})
+    reg["settings"]["exp1.lam"] = {
+        "value": observed[-1],
+        "provenance": {
+            "call_count": len(observed),
+            "observations": [{"value": v, "lineno": 5} for v in observed],
+            **provenance,
+        },
+    }
+    return reg
+
+
+def test_a_setting_with_more_than_one_value_is_not_cited_as_one(tmp_path):
+    """B9: 0.5 is the last row's lambda, and would render beside the 0.1 row."""
+    reg = _swept_setting([0.1, 0.5])
+    assert "exp1.lam" not in citable_settings(reg)
+    report = run_gate3(SWEEP_ROW, reg, config(tmp_path))
+    assert not report.passed
+    tokens = check(report, "report.all_tokens_resolve")
+    assert not tokens.passed
+    assert tokens.evidence["missing"] == ["\\setting{exp1.lam}"]
+    assert tokens.evidence["ambiguous"] == {"exp1.lam": [0.1, 0.5]}
+    assert "exp1.lam holds 2 values (0.1, 0.5)" in tokens.message
+    rendered = (pathlib.Path(report.artifact_dir) / RENDERED_FILENAME).read_text()
+    assert "\\lambda=0.5" not in rendered and "\\setting{exp1.lam}" in rendered
+
+
+def test_a_setting_recorded_twice_with_one_value_is_cited(tmp_path):
+    reg = _swept_setting([0.1, 0.1])
+    assert citable_settings(reg) == {"exp1.lam": 0.1}
+    assert run_gate3(SWEEP_ROW, reg, config(tmp_path)).passed
+
+
+def test_a_swept_setting_from_gate_1_is_refused_even_if_the_verdict_is_ignored(tmp_path):
+    """Gate 1 fails the sweep; a host that cites its registry anyway still gets no value."""
+    src = (
+        "record_metadata('seed', 0)\n"
+        "def evaluate(i=0):\n"
+        "    return 0.5 + i * 0.01\n"
+        "for lam in [0.1, 0.5]:\n"
+        "    record_setting('exp1.lam', lam)\n"
+        "    record_result(f'exp1.lam{lam}.acc', evaluate(lam))\n"
+    )
+    gate1 = run_gate1(src, Gate1Config(artifact_root=str(tmp_path / "g1"), timeout_s=30))
+    assert "results.setting_single_value" in {c.id for c in gate1.failed_checks()}
+    reg = build_registry(gate1)
+    assert [o["value"] for o in reg["settings"]["exp1.lam"]["provenance"]["observations"]] == [0.1, 0.5]
+    reg["citable"] = True
+    report = run_gate3(SWEEP_ROW, reg, config(tmp_path))
+    assert "report.all_tokens_resolve" in {c.id for c in report.failed_checks()}
+
+
 # --------------------------------------------------------------------------- #
 # report.all_tokens_resolve
 # --------------------------------------------------------------------------- #

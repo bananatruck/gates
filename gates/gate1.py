@@ -199,6 +199,8 @@ def run_gate1(
                 _check_non_degenerate(execution, config),
             ]
         )
+    if execution.settings:
+        checks.append(_check_setting_single_value(execution))
     checks.append(_check_untruncated(execution))
     guard = _check_parent_guard(execution)
     if guard is not None:
@@ -823,6 +825,53 @@ def _check_single_observation(execution: ExecutionRecord) -> CheckResult:
             "recorded more than once with a changing value: "
             + "; ".join(f"{r['key']} ({r['call_count']} calls)" for r in rows)
             + " — the registry holds the last call, not the best one"
+        ),
+        evidence={"varied": rows},
+    )
+
+
+def _check_setting_single_value(execution: ExecutionRecord) -> CheckResult:
+    """A setting key recorded with more than one value (B9).
+
+    The registry holds one value per setting key, and ``\\setting{key}`` renders
+    it. A sweep that records ``exp1.lam`` once per row leaves the last row's
+    lambda there, which Gate 3 would then print beside every other row's result
+    and Gate 2 would check the plan against.
+
+    It fails where ``results.single_observation`` only warns, and the
+    difference is what the last value means. A result recorded once per epoch
+    is a trajectory whose last value is the final one; a setting recorded once
+    per row has no final value, since each is right only for its own row. And
+    the fix belongs here: the engineer can record each row under its own key,
+    while the writer downstream can only leave the number out.
+    """
+    varied = [s for s in execution.settings.values() if s.varied]
+    if not varied:
+        return CheckResult(
+            id="results.setting_single_value",
+            passed=True,
+            severity=Severity.FAIL,
+            message="every setting key holds one value",
+        )
+    rows = [
+        {
+            "key": s.key,
+            "call_count": s.call_count,
+            "values": s.distinct_values(),
+            "truncated": s.observations_truncated,
+        }
+        for s in varied
+    ]
+    return CheckResult(
+        id="results.setting_single_value",
+        passed=False,
+        severity=Severity.FAIL,
+        message=(
+            f"{len(rows)} setting key(s) recorded with more than one value, so "
+            f"the registry would hold only the last: "
+            + "; ".join(
+                f"{r['key']} ({', '.join(map(str, r['values']))})" for r in rows
+            )
         ),
         evidence={"varied": rows},
     )

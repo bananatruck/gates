@@ -30,10 +30,23 @@ _PURE_CALLS = frozenset(
 )
 
 #: Methods that read a container without changing it. Any other method called
-#: on a container may fill it, so the container stops reading as constant.
+#: on a container may change it, so its arguments join what the container holds.
 _READ_METHODS = frozenset(
     {"get", "copy", "keys", "values", "items", "index", "count", "item", "tolist"}
 ) | _PURE_CALLS
+
+#: Calls that read the containers passed to them and never change them:
+#: printing and formatting, JSON, a logger's level methods, and the harness's
+#: own record calls. A container passed to any other call may be filled by it
+#: (B2).
+_READ_CALLS = frozenset(
+    {
+        "print", "format", "repr", "pprint", "pformat",
+        "dump", "dumps",
+        "debug", "info", "warning", "error", "critical", "exception",
+        "record_result", "record_setting", "record_metadata",
+    }
+)
 
 #: How measured a call site is. A line holding several ``record_result``
 #: calls takes the highest, so one real measurement is never hidden behind a
@@ -253,7 +266,7 @@ def classify_record_calls(
     under-reports rather than accusing a real measurement. A literal kept in a
     dict or list, or passed through ``sum``, ``max``, ``np.mean`` and the other
     :data:`_PURE_CALLS`, is followed; a container the run fills after binding
-    it is not constant (:func:`_filled_containers`).
+    it is not constant (:func:`_container_contents`).
     """
     # limit: a function the program defines is never looked inside, so
     # def measure(): return 0.95 launders a literal as computed; following
@@ -451,8 +464,8 @@ def _constant_bindings(
     parameter, an augmented assignment, an import, a ``with`` or ``except``
     alias, a ``global`` declaration — is dropped entirely rather than partially
     resolved. Dropping it means the name reads as computed, which is the safe
-    direction: this pass only ever warns, and a false warning costs the engineer
-    a rewrite for nothing.
+    direction: a constant result fails the run (D75), so a false one costs an
+    honest engineer a rejection.
     """
     values: dict[str, list[ast.expr]] = {}
     opaque: set[str] = set()
@@ -492,56 +505,137 @@ def _constant_bindings(
             opaque.add(node.name)
         elif isinstance(node, (ast.Global, ast.Nonlocal)):
             opaque.update(node.names)
-    opaque |= _filled_containers(tree, values, record_name)
+    filled, contents = _container_contents(tree, values, record_name)
+    opaque |= filled
+    for name, exprs in contents.items():
+        values[name] = [*values[name], *exprs]
     return {name: exprs for name, exprs in values.items() if name not in opaque}
 
 
 _CONTAINER_DISPLAYS = (ast.List, ast.Dict, ast.Set, ast.ListComp, ast.DictComp, ast.SetComp)
 
+#: A change inside one of these may run any number of times.
+_LOOPS = (
+    ast.For, ast.AsyncFor, ast.While, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp
+)
 
-def _filled_containers(
+
+def _container_contents(
     tree: ast.AST, values: dict[str, list[ast.expr]], record_name: str
-) -> set[str]:
-    """Names bound to a container the run may fill after binding it.
+) -> tuple[set[str], dict[str, list[ast.expr]]]:
+    """What the run puts into each container after binding it.
 
     ``results = {}`` then ``results["acc"] = evaluate()`` is a measurement,
-    though every assignment to the name itself is a literal. A container
-    changes through an item or attribute store, a method call other than a
-    read, or being passed to a call that could fill it; any of them makes the
-    name opaque. A float cannot change that way, so only names bound to a
-    container display are dropped; an alias of one then reads as computed
-    through the binding it follows.
+    though every assignment to the name itself is a literal. So a container
+    reads as constant only when everything put into it is constant too: every
+    key and value stored into it, and every argument of a method on it that is
+    not a read (B3). Those expressions are returned as extra bindings of the
+    name, and the ordinary constant test follows them, exactly as it follows a
+    second plain assignment to a name. ``results["acc"] = 0.95`` and
+    ``accs.sort()`` put in nothing measured; ``accs.append(acc)`` puts in
+    whatever ``acc`` is.
+
+    Everything else that changes a container makes the name opaque, as ``+=``
+    makes a name opaque: an augmented store, a store the pass cannot pair with
+    one value (tuple unpacking, a loop target), any change made inside a loop,
+    and being passed to a call, which may fill it. The loop rule is what keeps
+    a count honest: ``hits.append(1)`` once per correct prediction puts in
+    nothing but a constant, and ``len(hits)`` is still a measurement. A call in
+    :data:`_READ_CALLS` only reads, so printing, logging or dumping a container
+    before recording from it changes nothing (B2).
+
+    An alias shares its container, so ``r = results; r["acc"] = x`` fills
+    ``results``. Only a name bound to a container display takes part: a float
+    cannot change, and an alias reads the container through its binding.
     """
-    touched: set[str] = set()
+    # limit: a container passed to any call outside _READ_CALLS is assumed
+    # filled, so wandb.log(results) or a helper the program defines still
+    # launders a literal dict as computed; knowing what an arbitrary callee
+    # does with its argument would need interprocedural analysis.
+    # limit: any change inside a loop is opaque, so accs.append(0.95) in a
+    # loop launders as computed; a loop that repeats a constant cannot be told
+    # from one that counts without knowing what decides its iterations.
+    # limit: a change in a function body is followed as if it ran once, so a
+    # helper that appends a constant and is called from a loop reads as
+    # constant, as a constant assigned in a branch does for a plain name.
+    looped = {
+        id(inner)
+        for loop in ast.walk(tree)
+        if isinstance(loop, _LOOPS)
+        for inner in ast.walk(loop)
+        if inner is not loop
+    }
+    contents: dict[str, list[ast.expr]] = {}
+    unpaired: set[str] = set()
+    paired: set[int] = set()
+
+    def put(node: ast.AST, container: ast.expr, exprs: list[ast.expr]) -> None:
+        if id(node) in looped:
+            unpaired.add(_root_name(container))
+        else:
+            contents.setdefault(_root_name(container), []).extend(exprs)
+
     for node in ast.walk(tree):
-        if isinstance(node, (ast.Subscript, ast.Attribute)) and isinstance(
-            node.ctx, (ast.Store, ast.Del)
-        ):
-            touched.add(_root_name(node.value))
+        if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                if isinstance(target, ast.Subscript):
+                    paired.add(id(target))
+                    put(node, target.value, [node.value, target.slice])
+                elif isinstance(target, ast.Attribute):
+                    paired.add(id(target))
+                    put(node, target.value, [node.value])
         elif isinstance(node, ast.Call):
             func = node.func
+            args = [*node.args, *(k.value for k in node.keywords)]
             if isinstance(func, ast.Attribute) and func.attr not in _READ_METHODS:
-                touched.add(_root_name(func.value))
+                put(node, func.value, args)
             name = _called_name(func)
-            if name == record_name or name in _PURE_CALLS or name in _CONSTANT_CONVERTERS:
+            if (
+                name == record_name
+                or name in _READ_CALLS
+                or name in _PURE_CALLS
+                or name in _CONSTANT_CONVERTERS
+            ):
                 continue
-            for arg in [*node.args, *(k.value for k in node.keywords)]:
-                touched.add(_root_name(arg))
-    # An alias shares the container: r = results; r["acc"] = x fills results.
-    changed = True
-    while changed:
-        changed = False
-        for name in list(touched):
-            for expr in values.get(name, []):
-                if isinstance(expr, ast.Name) and expr.id not in touched:
-                    touched.add(expr.id)
-                    changed = True
-    return {
+            unpaired.update(_root_name(arg) for arg in args)
+    # An augmented store, tuple unpacking, a loop or with target: nothing
+    # above paired it with the one value it stores.
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, (ast.Subscript, ast.Attribute))
+            and isinstance(node.ctx, ast.Store)
+            and id(node) not in paired
+        ):
+            unpaired.add(_root_name(node.value))
+
+    shared = {name: list(exprs) for name, exprs in contents.items()}
+    filled = set(unpaired)
+    for name in set(contents) | unpaired:
+        for other in _aliases(name, values):
+            shared.setdefault(other, []).extend(contents.get(name, []))
+            if name in unpaired:
+                filled.add(other)
+    containers = {
         name
-        for name in touched
-        if name in values
-        and any(isinstance(e, _CONTAINER_DISPLAYS) for e in values[name])
+        for name, exprs in values.items()
+        if any(isinstance(e, _CONTAINER_DISPLAYS) for e in exprs)
     }
+    return filled & containers, {
+        name: exprs for name, exprs in shared.items() if name in containers and exprs
+    }
+
+
+def _aliases(name: str | None, values: dict[str, list[ast.expr]]) -> set[str]:
+    """Every name ``name`` is bound to through plain ``a = b`` assignments."""
+    found: set[str] = set()
+    stack = [name]
+    while stack:
+        for expr in values.get(stack.pop(), []):
+            if isinstance(expr, ast.Name) and expr.id != name and expr.id not in found:
+                found.add(expr.id)
+                stack.append(expr.id)
+    return found
 
 
 def _stored_names(target: ast.expr) -> set[str]:

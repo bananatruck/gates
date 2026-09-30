@@ -138,11 +138,19 @@ class MetricRecord:
                 out.append(float(v))
         return out
 
+    def distinct_values(self) -> list[Any]:
+        """Every value this key held, once each, oldest first.
+
+        The last call is counted even when the harness stopped keeping
+        observations before it, so a value that changes after the cap is
+        still seen to change.
+        """
+        return distinct([*(obs.get("value") for obs in self.observations), self.value])
+
     @property
     def varied(self) -> bool:
         """Recorded more than once, with the value changing between calls."""
-        seen = [obs.get("value") for obs in self.observations]
-        return len(seen) > 1 and len(set(map(repr, seen))) > 1
+        return len(self.distinct_values()) > 1
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -326,6 +334,22 @@ class GateReport:
 def decide(checks: Iterable[CheckResult]) -> Verdict:
     """A gate fails if any blocking check failed. Warnings never block."""
     return Verdict.FAIL if any(c.blocking for c in checks) else Verdict.PASS
+
+
+def distinct(values: Iterable[Any]) -> list[Any]:
+    """The values once each, in first-seen order, compared as JSON writes them.
+
+    By ``repr`` rather than ``==`` so that a list or dict value can be
+    compared, and so that ``1`` and ``1.0``, which the paper would print
+    differently, count as two values.
+    """
+    seen: set[str] = set()
+    out: list[Any] = []
+    for value in values:
+        if repr(value) not in seen:
+            seen.add(repr(value))
+            out.append(value)
+    return out
 
 
 def _read(path: str | None, limit: int | None) -> str:
