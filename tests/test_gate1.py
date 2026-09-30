@@ -238,9 +238,9 @@ def test_banned_calls_detected():
 )
 def test_literal_vs_computed_classification(call, expected):
     preamble = (
-        "acc = sum([1])\n"
-        "total = sum([2])\n"
-        "scores = [1]\n"
+        "acc = compute()\n"
+        "total = compute()\n"
+        "scores = [compute()]\n"
         "typed = 0.816\n"
         "def compute(): return 1\n"
     )
@@ -297,6 +297,55 @@ def test_the_decoy_reaches_the_metric_provenance(config):
     assert metrics["config.lr"].arg_kind == "constant"
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        # red team S3 and S4 (09-29 review): a literal hidden in a container or a reducer
+        "results = {'acc': 0.95}\nrecord_result('k', results['acc'])",
+        "record_result('k', {'acc': 0.95}['acc'])",
+        "accs = [0.94, 0.96]\nrecord_result('k', accs[-1])",
+        "record_result('k', sum([0.95]))",
+        "record_result('k', max(0.93, 0.95))",
+        "accs = [0.94, 0.96]\nrecord_result('k', sum(accs) / len(accs))",
+        "import statistics\nrecord_result('k', statistics.mean([0.94, 0.96]))",
+        "import numpy as np\nrecord_result('k', np.mean(np.array([0.94, 0.96])))",
+        "record_result('k', round(min([0.951, 0.96]), ndigits=2))",
+        "predictions = [1] * 408 + [0] * 92\nrecord_result('k', sum(predictions) / len(predictions))",
+    ],
+)
+def test_a_literal_behind_a_container_or_a_reducer_is_constant(body):
+    kinds = classify_record_calls(body + "\n")
+    assert list(kinds.values()) in (["constant"], ["literal"])
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        # a container the run fills in is measured, however it started
+        "results = {}\nresults['acc'] = evaluate()\nrecord_result('k', results['acc'])",
+        "results = {'acc': 0.0}\nresults['acc'] = evaluate()\nrecord_result('k', results['acc'])",
+        "results = {'e': {}}\nresults['e']['acc'] = evaluate()\nrecord_result('k', results['e']['acc'])",
+        "accs = []\nfor s in range(3):\n    accs.append(evaluate(s))\nrecord_result('k', max(accs))",
+        "accs = []\nfill(accs)\nrecord_result('k', sum(accs))",
+        "stats = {}\nstats.update(evaluate())\nrecord_result('k', stats['acc'])",
+        "import random\nrecord_result('k', random.random())",
+        "record_result('k', max(evaluate(), 0.5))",
+        "results = {}\nr = results\nr['acc'] = evaluate()\nrecord_result('k', results['acc'])",
+        "results = {}\nr = results\nr['acc'] = evaluate()\nrecord_result('k', r['acc'])",
+    ],
+)
+def test_a_container_the_run_fills_is_not_called_constant(body):
+    kinds = classify_record_calls(body + "\n")
+    assert list(kinds.values()) == ["computed"]
+
+
+def test_a_scalar_passed_to_a_call_still_reads_as_constant():
+    """Only a container can be changed by a call it is passed to; a float cannot."""
+    for body in ("acc = 0.95\nprint(acc)", "a = 0.95\nacc = a\nprint(acc)"):
+        kinds = classify_record_calls(f"{body}\nrecord_result('k', acc)\n")
+        assert list(kinds.values()) == ["constant"], body
+
+
 def test_constant_chain_terminates_on_a_self_reference():
     src = "acc = 0.816\ndef f():\n    global acc\n    acc = acc\nrecord_result('k', acc)\n"
     assert list(classify_record_calls(src).values()) == ["computed"]
@@ -309,7 +358,9 @@ def test_constant_chain_terminates_on_a_self_reference():
 
 def test_clean_run_passes_and_records_values(config):
     src = (
-        "predictions = [1] * 408 + [0] * 92\n"
+        "def predict(n):\n"
+        "    return [1] * 408 + [0] * (n - 408)\n"
+        "predictions = predict(500)\n"
         "correct = sum(predictions)\n"
         "test_acc = correct / len(predictions)\n"
         "record_metadata('seed', 0)\n"
@@ -658,8 +709,9 @@ def test_value_laundered_through_a_variable_warns_but_does_not_block(config):
 def test_a_real_measurement_is_not_called_constant(config):
     src = (
         "record_metadata('seed', 0)\n"
-        "predictions = [1] * 408 + [0] * 92\n"
-        "record_result('exp1.K2.test_acc', sum(predictions) / len(predictions))\n"
+        "def evaluate(preds):\n"
+        "    return sum(preds) / len(preds)\n"
+        "record_result('exp1.K2.test_acc', evaluate([1] * 408 + [0] * 92))\n"
     )
     report = run_gate1(src, config())
     traced = next(c for c in report.checks if c.id == "results.values_traced")
@@ -669,8 +721,10 @@ def test_a_real_measurement_is_not_called_constant(config):
 def test_keys_the_plan_never_declared_are_reported(config):
     src = (
         "record_metadata('seed', 0)\n"
-        "record_result('exp1.acc', sum([1]) / 2)\n"
-        "record_result('leftover.from_earlier_phase', sum([3]) / 2)\n"
+        "def measure(v):\n"
+        "    return v\n"
+        "record_result('exp1.acc', measure(1) / 2)\n"
+        "record_result('leftover.from_earlier_phase', measure(3) / 2)\n"
     )
     report = run_gate1(src, config(expected_keys=("exp1.acc",)))
 
@@ -682,7 +736,7 @@ def test_keys_the_plan_never_declared_are_reported(config):
 
 
 def test_exactly_the_declared_keys_raises_nothing(config):
-    src = "record_metadata('seed', 0)\nrecord_result('exp1.acc', sum([1]) / 2)\n"
+    src = "record_metadata('seed', 0)\ndef measure(v):\n    return v\nrecord_result('exp1.acc', measure(1) / 2)\n"
     report = run_gate1(src, config(expected_keys=("exp1.acc",)))
     declared = next(c for c in report.checks if c.id == "results.declared_keys_only")
     assert declared.passed
@@ -713,8 +767,9 @@ def test_a_statically_rejected_run_still_gets_a_registry(config):
 def test_registry_binds_each_value_to_the_run(config, tmp_path):
     src = (
         "record_metadata('seed', 0)\n"
-        "predictions = [1] * 408 + [0] * 92\n"
-        "acc = sum(predictions) / len(predictions)\n"
+        "def evaluate(preds):\n"
+        "    return sum(preds) / len(preds)\n"
+        "acc = evaluate([1] * 408 + [0] * 92)\n"
         "record_result('exp1.K2.test_acc', acc, unit='ratio')\n"
     )
     report = run_gate1(src, config(task_ref="reproduce SGC on Cora"), attempt=1)

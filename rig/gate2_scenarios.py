@@ -61,7 +61,9 @@ class Turn:
 
     def code(self) -> str:
         """The experiment, written so Gate 1 classifies each value as its kind."""
-        lines = ['record_metadata("seed", 0)']
+        # A call into the run's own code stands for a measurement; the
+        # static pass does not look inside it (the limit in classify_record_calls).
+        lines = ['record_metadata("seed", 0)', "def measure(v):", "    return v"]
         read: list[str] = []
         for key, (value, unit, kind) in self.values.items():
             unit_arg = f", unit={unit!r}" if unit else ""
@@ -70,7 +72,7 @@ class Turn:
                 continue
             name = key.replace(".", "_")
             if kind == "computed":
-                lines.append(f"{name} = sum([{value!r}])")
+                lines.append(f"{name} = measure({value!r})")
             else:
                 lines.append(f"{name} = {value!r}")
             if kind == "constant":

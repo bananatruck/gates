@@ -19,6 +19,22 @@ _CONSTANT_CONVERTERS = frozenset(
     {"float", "int", "round", "abs", "str", "bool", "complex", "len"}
 )
 
+#: Calls whose result is fixed by their arguments, so all-constant arguments
+#: give a constant: ``sum([0.95])`` is as typed as ``0.95``. Called bare, on a
+#: module (``np.mean``, ``statistics.mean``) or on a constant receiver.
+_PURE_CALLS = frozenset(
+    {
+        "sum", "min", "max", "sorted", "mean", "median", "fmean", "average",
+        "std", "var", "stdev", "pstdev", "array", "asarray", "tensor",
+    }
+)
+
+#: Methods that read a container without changing it. Any other method called
+#: on a container may fill it, so the container stops reading as constant.
+_READ_METHODS = frozenset(
+    {"get", "copy", "keys", "values", "items", "index", "count", "item", "tolist"}
+) | _PURE_CALLS
+
 #: How measured a call site is. A line holding several ``record_result``
 #: calls takes the highest, so one real measurement is never hidden behind a
 #: constant recorded on the same line.
@@ -235,10 +251,16 @@ def classify_record_calls(
 
     The name resolution is deliberately shallow. A name that is ever bound by
     anything other than a plain assignment is treated as computed, so the pass
-    under-reports rather than accusing a real measurement.
+    under-reports rather than accusing a real measurement. A literal kept in a
+    dict or list, or passed through ``sum``, ``max``, ``np.mean`` and the other
+    :data:`_PURE_CALLS`, is followed; a container the run fills after binding
+    it is not constant (:func:`_filled_containers`).
     """
+    # limit: a function the program defines is never looked inside, so
+    # def measure(): return 0.95 launders a literal as computed; following
+    # returns would need interprocedural analysis this pass does not attempt.
     tree = parse(source, filename)
-    bindings = _constant_bindings(tree)
+    bindings = _constant_bindings(tree, func_name)
     kinds: dict[int, str] = {}
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
@@ -371,15 +393,59 @@ def _is_literal_derived(
         )
     if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
         return all(_is_literal_derived(e, bindings, seen) for e in node.elts)
+    if isinstance(node, ast.Dict):
+        return all(
+            k is None or _is_literal_derived(k, bindings, seen) for k in node.keys
+        ) and all(_is_literal_derived(v, bindings, seen) for v in node.values)
+    if isinstance(node, ast.Subscript):
+        return _is_literal_derived(node.value, bindings, seen) and _is_literal_derived(
+            node.slice, bindings, seen
+        )
+    if isinstance(node, ast.Slice):
+        parts = (node.lower, node.upper, node.step)
+        return all(p is None or _is_literal_derived(p, bindings, seen) for p in parts)
     if isinstance(node, ast.Call):
-        name = _called_name(node.func)
-        if name in _CONSTANT_CONVERTERS and not node.keywords:
-            return all(_is_literal_derived(a, bindings, seen) for a in node.args)
-        return False
+        return _is_constant_call(node, bindings, seen)
     return False
 
 
-def _constant_bindings(tree: ast.AST) -> dict[str, list[ast.expr]]:
+def _is_constant_call(
+    node: ast.Call, bindings: dict[str, list[ast.expr]], seen: frozenset[str]
+) -> bool:
+    """True when the call's result is fixed by arguments that are all constant."""
+    name = _called_name(node.func)
+    args = all(_is_literal_derived(a, bindings, seen) for a in node.args)
+    keywords = all(_is_literal_derived(k.value, bindings, seen) for k in node.keywords)
+    if isinstance(node.func, ast.Name):
+        if name in _CONSTANT_CONVERTERS:
+            return args and keywords
+        return name in _PURE_CALLS and bool(node.args) and args and keywords
+    if not isinstance(node.func, ast.Attribute) or name not in _READ_METHODS:
+        return False
+    receiver = node.func.value
+    if _is_literal_derived(receiver, bindings, seen):
+        return args and keywords
+    # A module, such as np or statistics: the arguments alone decide.
+    namespace = _is_dotted_name(receiver) and _root_name(receiver) not in bindings
+    return namespace and name in _PURE_CALLS and bool(node.args) and args and keywords
+
+
+def _is_dotted_name(node: ast.expr) -> bool:
+    while isinstance(node, ast.Attribute):
+        node = node.value
+    return isinstance(node, ast.Name)
+
+
+def _root_name(node: ast.expr) -> str | None:
+    """The name at the bottom of ``a.b[c].d``, or ``None`` when there is none."""
+    while isinstance(node, (ast.Attribute, ast.Subscript, ast.Starred)):
+        node = node.value
+    return node.id if isinstance(node, ast.Name) else None
+
+
+def _constant_bindings(
+    tree: ast.AST, record_name: str = "record_result"
+) -> dict[str, list[ast.expr]]:
     """Every name bound only by plain assignment, mapped to what it was assigned.
 
     A name bound by anything this pass cannot evaluate — a loop target, a
@@ -427,7 +493,56 @@ def _constant_bindings(tree: ast.AST) -> dict[str, list[ast.expr]]:
             opaque.add(node.name)
         elif isinstance(node, (ast.Global, ast.Nonlocal)):
             opaque.update(node.names)
+    opaque |= _filled_containers(tree, values, record_name)
     return {name: exprs for name, exprs in values.items() if name not in opaque}
+
+
+_CONTAINER_DISPLAYS = (ast.List, ast.Dict, ast.Set, ast.ListComp, ast.DictComp, ast.SetComp)
+
+
+def _filled_containers(
+    tree: ast.AST, values: dict[str, list[ast.expr]], record_name: str
+) -> set[str]:
+    """Names bound to a container the run may fill after binding it.
+
+    ``results = {}`` then ``results["acc"] = evaluate()`` is a measurement,
+    though every assignment to the name itself is a literal. A container
+    changes through an item or attribute store, a method call other than a
+    read, or being passed to a call that could fill it; any of them makes the
+    name opaque. A float cannot change that way, so only names bound to a
+    container display are dropped; an alias of one then reads as computed
+    through the binding it follows.
+    """
+    touched: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Subscript, ast.Attribute)) and isinstance(
+            node.ctx, (ast.Store, ast.Del)
+        ):
+            touched.add(_root_name(node.value))
+        elif isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Attribute) and func.attr not in _READ_METHODS:
+                touched.add(_root_name(func.value))
+            name = _called_name(func)
+            if name == record_name or name in _PURE_CALLS or name in _CONSTANT_CONVERTERS:
+                continue
+            for arg in [*node.args, *(k.value for k in node.keywords)]:
+                touched.add(_root_name(arg))
+    # An alias shares the container: r = results; r["acc"] = x fills results.
+    changed = True
+    while changed:
+        changed = False
+        for name in list(touched):
+            for expr in values.get(name, []):
+                if isinstance(expr, ast.Name) and expr.id not in touched:
+                    touched.add(expr.id)
+                    changed = True
+    return {
+        name
+        for name in touched
+        if name in values
+        and any(isinstance(e, _CONTAINER_DISPLAYS) for e in values[name])
+    }
 
 
 def _stored_names(target: ast.expr) -> set[str]:

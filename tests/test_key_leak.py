@@ -31,7 +31,9 @@ EXPERIMENT = (
     "import os\n"
     "print(dict(os.environ))\n"
     "record_metadata('seed', 0)\n"
-    "acc = sum([0.812])\n"
+    "def measure(v):\n"
+    "    return v\n"
+    "acc = measure(0.812)\n"
     "record_result('exp1.acc', acc, unit='ratio')\n"
 )
 
