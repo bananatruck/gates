@@ -35,7 +35,13 @@ no row in results.csv is reported and not written: the plan and the runs
 disagree, and that is for a person to settle.
 
 Cost is measured, not capped: costs.csv holds each cell's runs, total and mean
-dollars, and mean wallclock, which is M6's input.
+dollars, mean wallclock, mean tokens, and the dollars per accepted paper (one
+the judges scored and did not flag), which is M6's input.
+
+Crashes are deterministic and need no judging, so crashes.csv, written beside
+costs.csv, counts every non-pilot, non-void run: each execution that raised or
+timed out, by cause, with the harness's causes apart from the agent's, and how
+many papers were written on a run that crashed (09-29 review, issue 3 and Q7).
 """
 
 from __future__ import annotations
@@ -43,6 +49,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -59,6 +66,36 @@ COSTS = HERE / "costs.csv"
 MEAN_SCORED = {"MLR-Bench"}
 
 REQUIRED = ("benchmark", "task", "system", "level", "seed")
+
+#: A crashed execution's cause, from its record alone.
+#: ``oom_at_cap``: out of memory under the runner's per-run GPU share, which
+#: PyTorch reports as "N GiB allowed"; ``oom``: out of memory with no cap named;
+#: ``timeout``: killed at the execution limit; ``environment``: a package the
+#: environment should provide failed to import; ``agent_code``: anything else.
+CRASH_CAUSES = ("oom_at_cap", "oom", "timeout", "environment", "agent_code")
+
+#: Causes that belong to the harness rather than to the agent's code. Plain
+#: ``oom`` is not among them: without a cap in the message, the model the
+#: agent chose may simply not fit the card.
+HARNESS_CAUSES = {"oom_at_cap", "timeout", "environment"}
+
+_ALLOWED = re.compile(r"GiB allowed")
+_ENVIRONMENT = re.compile(r"Failed to import|No module named|cannot import name")
+
+
+def crash_cause(exception: dict | None, timed_out: bool) -> str | None:
+    """Why an execution crashed, or ``None`` when it did not."""
+    if timed_out:
+        return "timeout"
+    if not exception:
+        return None
+    kind = str(exception.get("type", ""))
+    message = str(exception.get("message", ""))
+    if kind == "OutOfMemoryError" or "out of memory" in message:
+        return "oom_at_cap" if _ALLOWED.search(message) else "oom"
+    if kind in {"ModuleNotFoundError", "ImportError"} or _ENVIRONMENT.search(message):
+        return "environment"
+    return "agent_code"
 
 
 def load_runs(root: Path) -> tuple[list[dict], list[str]]:
@@ -85,6 +122,84 @@ def load_runs(root: Path) -> tuple[list[dict], list[str]]:
         metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
         runs.append({**manifest, **metrics, "folder": str(folder)})
     return runs, skipped
+
+
+def load_crash_runs(root: Path) -> list[dict]:
+    """Every run the crash table counts: finished or not judged, never pilot or void."""
+    runs: list[dict] = []
+    for manifest_path in sorted(root.rglob("manifest.json")):
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if manifest.get("phase") == "pilot" or manifest.get("status") == "void":
+            continue
+        if any(k not in manifest for k in REQUIRED):
+            continue
+        runs.append({**manifest, "folder": str(manifest_path.parent)})
+    return runs
+
+
+def _executions(folder: Path) -> list[dict]:
+    """Each execution a run made, in order: its cause, and whether Gate 1 passed it."""
+    artifacts = folder / "gate_artifacts"
+    out: list[dict] = []
+    for results in sorted(artifacts.glob("ungated_*/results.json")):
+        record = json.loads(results.read_text(encoding="utf-8"))
+        out.append({"cause": crash_cause(record.get("exception"), False), "passed": None})
+    for report_path in sorted((artifacts / "gate1").glob("attempt_*/gate1_report.json")):
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        execution = report.get("execution") or {}
+        out.append({
+            "cause": crash_cause(execution.get("exception"), bool(execution.get("timed_out"))),
+            "passed": report.get("verdict") == "PASS",
+        })
+    return out
+
+
+def _paper_run(executions: list[dict]) -> dict | None:
+    """The execution a paper was written from: the last Gate 1 passed, else the last."""
+    passed = [e for e in executions if e["passed"]]
+    if passed:
+        return passed[-1]
+    return executions[-1] if executions else None
+
+
+def crash_table(runs: list[dict]) -> dict[tuple[str, str, str], dict[str, int]]:
+    """Per cell: executions, crashes by cause, harness against agent, papers on a crash."""
+    table: dict[tuple[str, str, str], dict[str, int]] = {}
+    for run in runs:
+        key = (run["benchmark"], run["system"], f"L{int(run['level'])}")
+        row = table.setdefault(key, {
+            "runs": 0, "executions": 0, "crashed": 0, "harness": 0, "agent": 0,
+            **dict.fromkeys(CRASH_CAUSES, 0),
+            "papers": 0, "papers_on_crashed_run": 0, "papers_on_harness_crash": 0,
+        })
+        executions = _executions(Path(run["folder"]))
+        row["runs"] += 1
+        row["executions"] += len(executions)
+        for execution in executions:
+            cause = execution["cause"]
+            if cause is None:
+                continue
+            row["crashed"] += 1
+            row[cause] += 1
+            row["harness" if cause in HARNESS_CAUSES else "agent"] += 1
+        if run.get("paper_present"):
+            row["papers"] += 1
+            source = _paper_run(executions)
+            if source is not None and source["cause"] is not None:
+                row["papers_on_crashed_run"] += 1
+                if source["cause"] in HARNESS_CAUSES:
+                    row["papers_on_harness_crash"] += 1
+    return table
+
+
+def write_crashes(table: dict[tuple[str, str, str], dict[str, int]], path: Path) -> None:
+    columns = ["runs", "executions", "crashed", "harness", "agent", *CRASH_CAUSES,
+               "papers", "papers_on_crashed_run", "papers_on_harness_crash"]
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f, lineterminator="\n")
+        writer.writerow(["benchmark", "system", "arm", *columns])
+        for key in sorted(table):
+            writer.writerow([*key, *(table[key][c] for c in columns)])
 
 
 def cells(runs: list[dict]) -> dict[tuple[str, str, str], list[dict]]:
@@ -161,18 +276,35 @@ def write_costs(grouped: dict[tuple[str, str, str], list[dict]], path: Path = CO
         writer = csv.writer(f, lineterminator="\n")
         writer.writerow([
             "benchmark", "system", "arm", "runs", "cost_usd_total", "cost_usd_mean",
-            "wallclock_s_mean", "runs_missing_cost",
+            "wallclock_s_mean", "runs_missing_cost", "tokens_prompt_mean",
+            "tokens_completion_mean", "tokens_reasoning_mean", "accepted_papers",
+            "cost_usd_per_accepted_paper",
         ])
         for (benchmark, system, arm), runs in sorted(grouped.items()):
             costs = [float(r["cost_usd"]) for r in runs if r.get("cost_usd") is not None]
             clocks = [float(r["wallclock_s"]) for r in runs if r.get("wallclock_s") is not None]
+            # Accepted: the judges scored the paper and did not flag it (D63).
+            accepted = sum(
+                1 for r in runs if r.get("task_score") is not None and not r.get("integrity_event")
+            )
             writer.writerow([
                 benchmark, system, arm, len(runs),
                 f"{sum(costs):.4f}" if costs else "",
                 f"{sum(costs) / len(costs):.4f}" if costs else "",
                 f"{sum(clocks) / len(clocks):.1f}" if clocks else "",
                 len(runs) - len(costs),
+                *(_mean_tokens(runs, kind) for kind in ("prompt", "completion", "reasoning")),
+                accepted,
+                f"{sum(costs) / accepted:.4f}" if costs and accepted else "",
             ])
+
+
+def _mean_tokens(runs: list[dict], kind: str) -> str:
+    counts = [
+        ((r.get("usage") or {}).get("tokens") or {}).get(kind) for r in runs
+    ]
+    counts = [c for c in counts if c is not None]
+    return f"{sum(counts) / len(counts):.0f}" if counts else ""
 
 
 def main(argv: list[str] | None = None, *, results: Path = RESULTS, costs: Path = COSTS) -> int:
@@ -184,6 +316,7 @@ def main(argv: list[str] | None = None, *, results: Path = RESULTS, costs: Path 
     grouped = cells(runs)
     written, unmatched = update_results(grouped, results)
     write_costs(grouped, costs)
+    write_crashes(crash_table(load_crash_runs(args.runs_root)), costs.with_name("crashes.csv"))
 
     print(f"{len(runs)} finished runs in {len(grouped)} cells; {written} rows of {results.name} now measured")
     for note in skipped:
