@@ -225,10 +225,15 @@ def plan_field_instructions(fields: tuple[PlanField, ...]) -> str:
     lines = [
         "============= PLAN SETTINGS (RECORD THESE) =============",
         "The plan commits to these settings. Record the value your code actually",
-        "uses for each, passing the variable that holds it:",
+        "uses for each with record_setting, not record_result, passing the variable",
+        "that holds it. A configured value is a setting, not a measured result:",
         "",
     ]
-    lines += [f'    record_result("{f.key}", <variable>)   # plan: {f.declared!r}' for f in fields]
+    lines += [f'    record_setting("{f.key}", <variable>)   # plan: {f.declared!r}' for f in fields]
+    lines += [
+        "",
+        "The paper writer cites a recorded setting as \\setting{<key>}, never as \\result{}.",
+    ]
     return "\n".join(lines) + "\n"
 
 

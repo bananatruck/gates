@@ -511,8 +511,48 @@ def test_the_engineer_is_told_to_record_every_extracted_setting():
     from gates.adapters.agentlab import plan_field_instructions
 
     fields = (PlanField("config.epochs", 10, model_authored=True),)
-    assert 'record_result("config.epochs"' in plan_field_instructions(fields)
+    assert 'record_setting("config.epochs"' in plan_field_instructions(fields)
     assert plan_field_instructions(()) == ""
+
+
+def test_the_plan_settings_prompt_asks_for_record_setting():
+    """B14: a configured value is a setting, so the prompt must not ask for
+    record_result, which D75 rejects as a constant result."""
+    from gates.adapters.agentlab import plan_field_instructions
+
+    text = plan_field_instructions((PlanField("config.epochs", 10, model_authored=True),))
+    assert 'record_setting("config.epochs"' in text
+    assert 'record_result("config.epochs"' not in text
+    assert "\\setting{" in text
+
+
+def test_the_code_the_plan_settings_prompt_asks_for_passes_gate_1_and_gate_2(tmp_path):
+    """Follow the prompt literally: use the value, then record_setting it."""
+    from gates import Gate1Config, run_gate1
+    from gates.adapters.agentlab import plan_field_instructions
+
+    field = PlanField("config.epochs", 10, model_authored=True)
+    import re
+
+    # Build the code from the prompt's own example line, not from what we
+    # believe it says, so a stale prompt fails here.
+    call = re.search(r"^\s+(record_\w+)\(\"config\.epochs\", <variable>\)", plan_field_instructions((field,)), re.M)
+    assert call, "the prompt has no example line for config.epochs"
+    code = (
+        "epochs = 10\n"
+        "steps = [epochs * t for t in range(2)]\n"
+        f"{call.group(1)}('config.epochs', epochs)\n"
+        "acc = sum(steps) / 7\n"
+        "record_result('exp1.acc', acc)\n"
+    )
+    g1 = run_gate1(code, Gate1Config(artifact_root=str(tmp_path / "g1"), timeout_s=30))
+    assert g1.verdict is Verdict.PASS, [c.id for c in g1.checks if c.severity is Severity.FAIL]
+
+    from gates import load_registry
+
+    reg = load_registry(pathlib.Path(g1.artifact_dir) / "registry.json")
+    report = run_gate2(reg, config(tmp_path / "g2", plan_fields=(field,)))
+    assert conformance(report).evidence["conforming"] == ["config.epochs"]
 
 
 def test_a_field_the_run_never_recorded_is_unverifiable_not_conforming(tmp_path):
