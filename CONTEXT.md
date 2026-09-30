@@ -9,6 +9,10 @@ _Avoid_: arm, which is one level of one experiment, and mode.
 
 **Gate 0** - level 0 on a figure: the host exactly as shipped, the control.
 
+**L0'** - `GATES_LEVEL=0d`: level 0 in every decision, but Gate 1 runs and its evidence (registry, settings, warnings, exception, full output) reaches the agent in place of upstream's 1,000 characters; its verdict decides nothing (D77).
+It separates delivering the values from rejecting runs.
+_Avoid_: calling it level 1 without enforcement; no gate is open at L0'.
+
 **Host** - a research scaffold G.A.T.E.S. installs into: Agent Laboratory today, AI Scientist v2 later.
 _Avoid_: system, when the gates are in it.
 

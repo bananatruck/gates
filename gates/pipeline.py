@@ -219,12 +219,15 @@ class GatedExecution:
     feedback: str
     evidence_bundle: str
     code: str = ""
-    #: Set only on the bypass path, where there is no report to ask.
+    #: Set only where upstream's rule decides: the bypass, and L0'.
     ungated_passed: bool | None = None
+    #: False at L0': Gate 1 ran and its evidence was delivered, but its verdict
+    #: decides nothing, so ``passed`` is upstream's rule as at level 0.
+    enforced: bool = True
 
     @property
     def passed(self) -> bool:
-        if self.report is None:
+        if self.report is None or not self.enforced:
             # Bypass: upstream's rule, which is a substring search over the
             # already-truncated view. Not a stand-in for it — the same test.
             return bool(self.ungated_passed)
@@ -274,9 +277,25 @@ def gate_level() -> int:
         return 0 if legacy_off else 3
     if legacy is not None:
         raise GateError("set GATES_LEVEL or GATES_GATE1, not both")
+    if level.strip() == EVIDENCE_ONLY_LEVEL:
+        return 0
     if level.strip() not in {"0", "1", "2", "3"}:
-        raise GateError(f"GATES_LEVEL must be 0, 1, 2 or 3, not {level!r}")
+        raise GateError(
+            f"GATES_LEVEL must be 0, {EVIDENCE_ONLY_LEVEL}, 1, 2 or 3, not {level!r}"
+        )
     return int(level)
+
+
+#: L0' (09-29 review): level 0 in every decision, but Gate 1 runs and its
+#: evidence reaches the agent in place of upstream's 1,000 characters. It
+#: separates delivering the values from rejecting runs, which is the thesis's
+#: own question: is the defect the channel or the missing verdict?
+EVIDENCE_ONLY_LEVEL = "0d"
+
+
+def evidence_only() -> bool:
+    """Whether this is L0': Gate 1's evidence delivered, its verdict not enforced."""
+    return (os.environ.get("GATES_LEVEL") or "").strip() == EVIDENCE_ONLY_LEVEL
 
 
 def gate1_enabled() -> bool:
@@ -313,6 +332,34 @@ def gated_execute(code: str, context: GateContext) -> GatedExecution:
         feedback=render_feedback(report),
         evidence_bundle=build_evidence_bundle(report),
         code=code,
+    )
+
+
+def evidence_only_execute(code: str, context: GateContext) -> GatedExecution:
+    """L0': run Gate 1 for its evidence and let upstream's rule decide.
+
+    The agent and the writer get what Gate 1 delivers at level 1 - the
+    registry, the settings, the warnings, the exception and the full output -
+    but no verdict, no required fixes and no retry budget. Acceptance is level
+    0's: the run is accepted unless the crash marker sits inside upstream's
+    1,000-character view. So a difference between L0' and level 0 is the
+    channel's, and one between L0' and level 1 is enforcement's.
+    """
+    context.attempt += 1
+    report = run_gate1(code, context.config, attempt=context.attempt, rewrite=1)
+    execution = report.execution
+    accepted = execution is not None and LEGACY_MARKER not in upstream_view(execution)
+    bundle = build_evidence_bundle(report, enforced=False)
+    print(f"$$$$ gate 1 EVIDENCE ONLY (L0') - attempt {context.attempt}, "
+          f"{'accepted' if accepted else 'rejected'} by upstream's rule; "
+          f"Gate 1 would have said {report.verdict.value}")
+    return GatedExecution(
+        report=report,
+        feedback=bundle,
+        evidence_bundle=bundle,
+        code=code,
+        ungated_passed=accepted,
+        enforced=False,
     )
 
 
@@ -585,14 +632,20 @@ def report_loop(
     return result
 
 
-def build_evidence_bundle(report: GateReport, budget: int = STDOUT_BUDGET_CHARS) -> str:
+def build_evidence_bundle(
+    report: GateReport, budget: int = STDOUT_BUDGET_CHARS, *, enforced: bool = True
+) -> str:
     """The evidence handed downstream in place of a 1000-character prefix.
 
     The verified registry comes first and is complete. Raw stdout follows, and
     is the only part subject to a budget — no citable value lives there that is
     not already in the registry above it.
+
+    ``enforced=False`` is L0': the same evidence for any verdict, with no
+    verdict in it, and the exception the run raised, which level 0's view
+    carries when it fits and a passed bundle never needs.
     """
-    if not report.passed:
+    if enforced and not report.passed:
         return f"[GATE 1 REJECTED THIS RUN]\n\n{render_feedback(report)}"
 
     metrics = report.metrics()
@@ -603,6 +656,12 @@ def build_evidence_bundle(report: GateReport, budget: int = STDOUT_BUDGET_CHARS)
         "Every value below was recorded by record_result() during the run that",
         "produced the code above, and traced back to the line that computed it.",
         "These are the only numbers that may be reported.",
+        "",
+    ] if enforced else [
+        f"RECORDED RESULTS (attempt {report.attempt})",
+        "",
+        "Every value below was recorded by record_result() during the run that",
+        "produced the code above.",
         "",
     ]
     if execution_ and execution_.run_id:
@@ -655,6 +714,9 @@ def build_evidence_bundle(report: GateReport, budget: int = STDOUT_BUDGET_CHARS)
             "PROVENANCE",
             f"  registry: {os.path.join(report.artifact_dir, REGISTRY_FILENAME)}",
         ]
+
+    if not enforced and execution and execution.exception:
+        lines += ["", "EXCEPTION", execution.exception.traceback.rstrip()]
 
     if execution:
         stdout = execution.stdout_text()

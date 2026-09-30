@@ -377,8 +377,14 @@ def _ungated_execute(code: str, context: GateContext) -> GatedExecution:
 
 
 def gated_execute(code: str, context: GateContext) -> GatedExecution:
-    """Gate 1 when it is on, and this host's original path when it is off."""
+    """Gate 1 when it is on, and this host's original path when it is off.
+
+    At L0' (``GATES_LEVEL=0d``) Gate 1 runs for its evidence only, and the
+    host's original rule still decides (``pipeline.evidence_only_execute``).
+    """
     if not gate1_enabled():
+        if pipeline.evidence_only():
+            return pipeline.evidence_only_execute(code, context)
         return _ungated_execute(code, context)
     return pipeline.gated_execute(code, context)
 
