@@ -108,11 +108,17 @@ SETTING_TOKEN = re.compile(r"\\setting\{([^}]+)\}")
 #: Either token. Group 1 is the kind, group 2 the key.
 TOKEN = re.compile(r"\\(result|setting)\{([^}]+)\}")
 
+#: A sign that starts a value rather than joining a word or two tokens.
+_TYPED_SIGN_BEFORE_TOKEN = re.compile(r"(?<![\w\-−}])[+\-−]$")
+
 #: Typed notation that scales a token's rendered value. The scanner cannot
 #: judge its small integer parts, so the token boundary has to retain them.
 _TOKEN_SCALE = re.compile(
-    r"(?:\\times|×)\s*10\s*\^\s*\{[+\-−]?\d+\}|"
-    r"[eE][+\-−]?\d+"
+    r"\s*(?:"
+    r"(?:\\times|\\cdot|×)\s*10\s*\^\s*"
+    r"(?:\{\s*[+\-−]?\s*[0-9]+\s*\}|[+\-−]?\s*[0-9]+)"
+    r"|[eE][+\-−]?[0-9]+"
+    r")"
 )
 
 #: Where the writer places Gate 2's declared limitations (D28). Empty braces,
@@ -341,19 +347,27 @@ def _check_token_adjacency(source: str) -> CheckResult | None:
 
     details: list[dict[str, str]] = []
     for token in tokens:
+        prefix = source[: token.start()]
         before = source[token.start() - 1 : token.start()]
         after = source[token.end() :]
-        if before in {"+", "-", "−"}:
+        before_digits = re.search(r"[0-9]+$", prefix)
+        after_digits = re.match(r"[0-9]+", after)
+        sign = _TYPED_SIGN_BEFORE_TOKEN.search(prefix)
+        if sign:
+            details.append({"token": token.group(0), "typed": sign.group(0)})
+        elif before_digits:
+            details.append(
+                {"token": token.group(0), "typed": before_digits.group(0)}
+            )
+        elif before and not before.isascii() and before.isdigit():
             details.append({"token": token.group(0), "typed": before})
-        elif before.isdigit():
-            typed = re.search(r"\d+$", source[: token.start()])
-            details.append({"token": token.group(0), "typed": typed.group(0)})
         scale = _TOKEN_SCALE.match(after)
         if scale:
             details.append({"token": token.group(0), "typed": scale.group(0)})
-        elif after[:1].isdigit():
-            typed = re.match(r"\d+", after)
-            details.append({"token": token.group(0), "typed": typed.group(0)})
+        elif after_digits:
+            details.append({"token": token.group(0), "typed": after_digits.group(0)})
+        elif after[:1] and not after[0].isascii() and after[0].isdigit():
+            details.append({"token": token.group(0), "typed": after[0]})
 
     modified = list(dict.fromkeys(row["token"] for row in details))
     return CheckResult(
