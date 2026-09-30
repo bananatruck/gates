@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import signal
 import subprocess
 import sys
 from collections.abc import Callable
@@ -53,25 +54,31 @@ def _run_agent(
     command: tuple[str, ...], *, prompt: str | None = None,
     timeout_s: float = DEFAULT_AGENT_TIMEOUT_S,
 ) -> str:
+    # Its own session, so a timeout kills the helpers an agent CLI starts too,
+    # not only the CLI: a helper left running could still call a model.
     try:
-        completed = subprocess.run(
+        process = subprocess.Popen(
             command,
-            input=prompt,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            capture_output=True,
-            check=False,
-            timeout=timeout_s,
+            start_new_session=True,
         )
+    except OSError as error:
+        raise AgentCLIError(f"could not run {command[0]}: {error}") from error
+    try:
+        stdout, stderr = process.communicate(prompt, timeout=timeout_s)
     except subprocess.TimeoutExpired as error:
+        os.killpg(process.pid, signal.SIGKILL)
+        process.communicate()
         raise AgentCLIError(
             f"{command[0]} timed out after {timeout_s:g} seconds"
         ) from error
-    except OSError as error:
-        raise AgentCLIError(f"could not run {command[0]}: {error}") from error
-    if completed.returncode:
-        detail = completed.stderr.strip() or completed.stdout.strip() or "no error output"
-        raise AgentCLIError(f"{command[0]} exited {completed.returncode}: {detail}")
-    return completed.stdout
+    if process.returncode:
+        detail = stderr.strip() or stdout.strip() or "no error output"
+        raise AgentCLIError(f"{command[0]} exited {process.returncode}: {detail}")
+    return stdout
 
 
 @dataclass(frozen=True)

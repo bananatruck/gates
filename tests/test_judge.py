@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from rig import judge, review_flags
-from rig.live import AgentCLIError, agent_model
+from rig.live import AgentCLIError, _run_agent, agent_model
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "mlrbench"
 TASK = (FIXTURE / "tasks" / "iclr2025_scsl.md").read_bytes()
@@ -208,6 +208,35 @@ def test_agent_timeout_kills_a_hung_cli_and_leaves_the_judge_for_retry(
     summary = json.loads((folder / "judge" / "summary.json").read_text())
     assert summary["complete"] is False
     assert not (folder / "metrics.json").exists()
+
+
+def test_agent_timeout_also_ends_the_clis_own_children(tmp_path):
+    # An agent CLI starts helpers of its own. Killing only the CLI would leave
+    # them running, still able to call a model, after the judge gave up.
+    pid_file = tmp_path / "child.pid"
+    cli = tmp_path / "hung-cli"
+    cli.write_text(f"#!/bin/sh\nsleep 30 &\necho $! > {pid_file}\nsleep 30\n")
+    cli.chmod(0o755)
+
+    started = time.monotonic()
+    with pytest.raises(AgentCLIError, match="timed out"):
+        _run_agent((str(cli),), prompt="x", timeout_s=0.5)
+
+    assert time.monotonic() - started < 5
+    child = int(pid_file.read_text())
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline and _alive(child):
+        time.sleep(0.05)
+    assert not _alive(child)
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    stat = Path(f"/proc/{pid}/stat")
+    return not (stat.exists() and stat.read_text().split(")")[-1].split()[0] == "Z")
 
 
 def test_a_changed_mlrbench_file_is_refused(tmp_path):
