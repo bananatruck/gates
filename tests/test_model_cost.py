@@ -58,7 +58,7 @@ def test_a_passing_run_spends_at_most_one_call(config):
     src = (
         "print('epoch 0 loss 1.2')\n"
         "record_metadata('seed', 0)\n"
-        "v = 0.8\n"
+        "def measure(v):\n    return v\nv = measure(0.8)\n"
         "record_result('a', v * 1.0)\n"
     )
     report = run_gate1(src, config(consult_model=stub))

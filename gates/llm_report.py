@@ -40,6 +40,7 @@ from .schema import CheckResult, GateReport, Severity
 _ALWAYS_ALLOWED = frozenset(
     {
         "record_result",
+        "record_setting",
         "record_metadata",
         "results.json",
         "seed",
@@ -72,7 +73,7 @@ _STRING_LITERAL = re.compile(r"'[^']*'|\"[^\"]*\"")
 #: `record_result("exp1.acc", acc)` proposes a key and a variable; it does not
 #: claim either is already there, so grounding it against the current source
 #: would make the one fix `results.contract_present` needs impossible to write.
-_TEMPLATE_APIS = ("record_result", "record_metadata")
+_TEMPLATE_APIS = ("record_result", "record_setting", "record_metadata")
 
 _SYSTEM = (
     "You write the REQUIRED FIXES section of a code-validity gate's feedback "

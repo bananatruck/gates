@@ -163,7 +163,7 @@ def test_a_failing_scan_does_not_stop_the_gate(config):
 
     report = run_gate1(
         "print('training finished')\n"
-        "v = 1.0\nrecord_metadata('seed', 0)\nrecord_result('a', v * 2)\n",
+        "def measure(v):\n    return v\nv = measure(1.0)\nrecord_metadata('seed', 0)\nrecord_result('a', v * 2)\n",
         config(consult_model=explode),
     )
     assert report.passed
@@ -180,7 +180,7 @@ def test_a_silent_run_costs_no_model_call(config):
         return "[]"
 
     report = run_gate1(
-        "v = 1.0\nrecord_metadata('seed', 0)\nrecord_result('a', v * 2)\n",
+        "def measure(v):\n    return v\nv = measure(1.0)\nrecord_metadata('seed', 0)\nrecord_result('a', v * 2)\n",
         config(consult_model=count),
     )
     assert report.passed
@@ -197,7 +197,7 @@ def test_model_findings_reach_the_feedback_report(config):
     src = (
         "print('Skipping 3 of 10 folds that raised during fitting')\n"
         "record_metadata('seed', 0)\n"
-        "v = 0.5\n"
+        "def measure(v):\n    return v\nv = measure(0.5)\n"
         "record_result('a', v * 2)\n"
     )
     report = run_gate1(
@@ -218,7 +218,7 @@ def test_model_findings_are_warn_and_never_block(config):
         "for i in range(5):\n"
         "    print(f'line {i}')\n"
         "record_metadata('seed', 0)\n"
-        "v = 0.5\n"
+        "def measure(v):\n    return v\nv = measure(0.5)\n"
         "record_result('a', v * 2)\n"
     )
     report = run_gate1(src, config(consult_model=model_returning(f"[{every}]")))
@@ -287,7 +287,7 @@ def test_the_writer_receives_the_warning_evidence_not_just_the_count(config):
     src = (
         "print('Skipping 2 of 10 folds that raised during fitting')\n"
         "record_metadata('seed', 0)\n"
-        "v = 0.5\n"
+        "def measure(v):\n    return v\nv = measure(0.5)\n"
         "record_result('a', v * 2)\n"
     )
     report = run_gate1(src, config(consult_model=smart))
@@ -303,7 +303,7 @@ def test_deterministic_log_findings_also_reach_the_writer(config):
     src = (
         "print('RuntimeWarning: invalid value encountered in true_divide')\n"
         "record_metadata('seed', 0)\n"
-        "v = 0.5\n"
+        "def measure(v):\n    return v\nv = measure(0.5)\n"
         "record_result('a', v * 2)\n"
     )
     bundle = build_evidence_bundle(run_gate1(src, config()))
@@ -347,7 +347,7 @@ def test_findings_still_resolve_to_the_real_file_line(config):
         "    print(f'epoch {i}')\n"
         "print('Skipping 2 of 10 folds that raised')\n"
         "record_metadata('seed', 0)\n"
-        "v = 0.5\n"
+        "def measure(v):\n    return v\nv = measure(0.5)\n"
         "record_result('a', v * 2)\n"
     )
 

@@ -33,8 +33,8 @@ from gates.gate3 import (
     render_result_tokens,
     run_gate3,
 )
-from gates.registry import CHAIN_LINKS, CLAIM_LINK, build_registry
-from gates.prose import Claim, claim_sections
+from gates.registry import CHAIN_LINKS, CLAIM_LINK, build_registry, citable_settings, citable_values
+from gates.prose import claim_sections
 from gates.report import render_feedback
 from gates.schema import PaperRecord, Severity, Verdict
 from gates.setup import defaults
@@ -42,7 +42,9 @@ from gates.setup import defaults
 REPO = pathlib.Path(__file__).resolve().parents[1]
 
 
-def registry(values: dict[str, tuple], *, citable: bool = True) -> dict:
+def registry(
+    values: dict[str, tuple], *, citable: bool = True, settings: dict | None = None
+) -> dict:
     """A minimal registry of the shape ``gates.registry.build_registry`` emits."""
     return {
         "gate": "GATE 1 — EXECUTION VALIDITY",
@@ -52,6 +54,7 @@ def registry(values: dict[str, tuple], *, citable: bool = True) -> dict:
             key: {"value": value, "unit": unit, "trace_id": f"t-{key}"}
             for key, (value, unit) in values.items()
         },
+        "settings": {key: {"value": value} for key, value in (settings or {}).items()},
     }
 
 
@@ -155,134 +158,76 @@ def test_an_unreadable_structure_is_degraded_not_green(tmp_path):
     assert literals.evidence["sections_scanned"] == []
 
 
-#: A sweep as the wave 3 experiments recorded it: the setting lives in the key
-#: the program built, not in a value.
+#: A sweep as the wave 3 experiments recorded it: the setting lived in the key
+#: the program built, not in a value (D71). From D75 it is recorded as well.
 SWEPT = {
     "exp1.lam0.5.clean_acc": (0.781, "ratio"),
     "exp1.lam0.9.clean_acc": (0.742, "ratio"),
     "exp1.ttest_0.5_vs_0.9.p": (0.031, "p"),
 }
+SWEPT_SETTINGS = {"exp1.lam_a": 0.5, "exp1.lam_b": 0.9}
 
 
-def test_a_setting_the_program_recorded_is_not_a_typed_result(tmp_path):
-    """The false positive that rejected 11 of wave 3's 12 level 3 manuscripts.
-
-    Every numeral Gate 3 flagged there was a sweep setting, such as the lambda
-    of a row, and every one of them was in the registry's keys. Naming the
-    setting a result belongs to is not typing a result.
-    """
+def test_a_setting_cited_as_a_token_passes_and_renders(tmp_path):
+    """The shape that rejected 11 of wave 3's 12 level 3 manuscripts, written with D75's token."""
     paper = (
         "\\section{Results}\n"
-        "Clean accuracy is \\result{exp1.lam0.5.clean_acc} at $\\lambda=0.5$ and "
-        "\\result{exp1.lam0.9.clean_acc} at $\\lambda=0.9$, a difference with "
-        "$p=\\result{exp1.ttest_0.5_vs_0.9.p}$.\n"
-        "\\begin{tabular}{cc}\n0.5 & \\result{exp1.lam0.5.clean_acc} \\\\\n"
-        "\\end{tabular}\n"
+        "Clean accuracy is \\result{exp1.lam0.5.clean_acc} at $\\lambda=\\setting{exp1.lam_a}$ and "
+        "\\result{exp1.lam0.9.clean_acc} at $\\lambda=\\setting{exp1.lam_b}$.\n"
     )
-    report = run_gate3(paper, registry(SWEPT), config(tmp_path))
-    literals = check(report, "report.no_numeric_literals_in_results")
-    assert literals.passed
-    assert {row["value"] for row in literals.evidence["recorded_settings"]} == {
-        0.5, 0.9
-    }
-
-
-def test_a_setting_no_key_records_is_still_typed(tmp_path):
-    """The exemption is the registry's, never the writer's to claim."""
-    paper = (
-        "\\section{Results}\n"
-        "Clean accuracy is \\result{exp1.lam0.5.clean_acc} at $\\lambda=0.5$ "
-        "and falls further at $\\lambda=0.7$.\n"
+    reg = registry(SWEPT, settings=SWEPT_SETTINGS)
+    report = run_gate3(paper, reg, config(tmp_path))
+    assert report.passed, [c.message for c in report.failed_checks()]
+    rendered = check(report, "report.rendered_values_match_registry")
+    assert rendered.evidence["substituted"] == 4
+    text, subs = render_result_tokens(
+        paper, citable_values(reg), settings=citable_settings(reg)
     )
-    report = run_gate3(paper, registry(SWEPT), config(tmp_path))
-    literals = check(report, "report.no_numeric_literals_in_results")
-    assert not literals.passed
-    assert [row["value"] for row in literals.evidence["literals"]] == [0.7]
-
-
-def test_a_typed_result_beside_a_recorded_setting_still_fails(tmp_path):
-    paper = (
-        "\\section{Results}\n"
-        "At $\\lambda=0.5$ clean accuracy is 0.78.\n"
-    )
-    report = run_gate3(paper, registry(SWEPT), config(tmp_path))
-    literals = check(report, "report.no_numeric_literals_in_results")
-    assert not literals.passed
-    assert [row["value"] for row in literals.evidence["literals"]] == [0.78]
-
-
-def test_a_typed_result_equal_to_a_setting_in_value_is_still_typed(tmp_path):
-    """The exemption matches the numeral as written, not its value.
-
-    Compared by value, a result typed to two places equalled a setting for 49
-    of wave 3's 201 recorded values. A key writes a setting as ``0.5``; a
-    typed result reads ``0.50``, and only the key's own spelling is exempt.
-    """
-    paper = (
-        "\\section{Results}\n"
-        "At $\\lambda=0.5$ clean accuracy is 0.50.\n"
-    )
-    report = run_gate3(paper, registry(SWEPT), config(tmp_path))
-    literals = check(report, "report.no_numeric_literals_in_results")
-    assert not literals.passed
-    assert [row["context"] for row in literals.evidence["literals"]] == [
-        "At =0.5 clean accuracy is 0.50."
-    ]
-    assert [row["value"] for row in literals.evidence["recorded_settings"]] == [0.5]
-
-
-def test_a_setting_written_shorter_than_its_key_is_still_the_setting(tmp_path):
-    """Wave 2's program spelled its sweep ``lam0.50``; the writer wrote ``0.5``.
-
-    Fewer places than the key is the same setting. More places than the key,
-    as in the test above, is a claim to precision the setting never had.
-    """
-    padded = {"exp1.lam0.50.clean_acc": (0.781, "ratio")}
-    paper = (
-        "\\section{Results}\n"
-        "Clean accuracy is \\result{exp1.lam0.50.clean_acc} at $\\lambda=0.5$.\n"
-    )
-    report = run_gate3(paper, registry(padded), config(tmp_path))
-    literals = check(report, "report.no_numeric_literals_in_results")
-    assert literals.passed
-    assert [row["value"] for row in literals.evidence["recorded_settings"]] == [0.5]
+    assert "$\\lambda=0.5$" in text
+    assert [s.kind for s in subs] == ["result", "setting", "result", "setting"]
 
 
 @pytest.mark.parametrize(
-    "typed",
+    "typed, keys",
     [
-        "$0.5e-3$", "0.5E+2", "$0.5\\times10^{-3}$", "$0.5 \\cdot 10^{2}$",
-        "$0.5\\,\\times 10^{3}$", "0.5~\\times~10^3", "0.5 \u00d7 10^3",
-        "$-0.5$", "+0.5", "\u22120.5",
+        # D71's exemption let each of these through; it is gone (D75)
+        ("at $\\lambda=0.5$", SWEPT),
+        ("0.5e-3", SWEPT),
+        ("-0.5", SWEPT),
+        ("1.2", {"exp1.2.acc": (0.7, "ratio")}),
+        ("5000", {"resnet5000.acc": (0.7, "ratio")}),
     ],
 )
-def test_a_signed_or_scaled_numeral_is_not_the_setting_it_contains(tmp_path, typed):
-    """``0.5e-3`` is 0.0005 and ``-0.5`` is below zero: neither is the setting 0.5.
-
-    The scanner reads the digits ``0.5`` out of both, so before this D71's
-    exemption let a typed result through as the recorded ``lam0.5``.
-    """
-    paper = f"\\section{{Results}}\nThe clean error rate is {typed} on the held-out split.\n"
-    report = run_gate3(paper, registry(SWEPT), config(tmp_path))
+def test_a_bare_numeral_is_typed_whatever_the_keys_contain(tmp_path, typed, keys):
+    paper = f"\\section{{Results}}\nThe held-out error is {typed} here.\n"
+    report = run_gate3(paper, registry(keys), config(tmp_path))
     literals = check(report, "report.no_numeric_literals_in_results")
     assert not literals.passed
-    assert literals.evidence["recorded_settings"] == []
+    assert "recorded_settings" not in literals.evidence
 
 
-def test_a_range_ending_at_a_setting_is_still_the_setting(tmp_path):
-    """The hyphen in ``0.1-0.5`` joins a range; it is not a minus sign."""
-    wide = {**SWEPT, "exp1.lam0.1.clean_acc": (0.79, "ratio")}
-    paper = "\\section{Results}\nAcross $\\lambda$ in 0.1-0.5 accuracy is \\result{exp1.lam0.5.clean_acc}.\n"
-    report = run_gate3(paper, registry(wide), config(tmp_path))
-    literals = check(report, "report.no_numeric_literals_in_results")
-    assert literals.passed
-    assert {row["value"] for row in literals.evidence["recorded_settings"]} == {0.1, 0.5}
+def test_a_token_resolves_only_in_its_own_section(tmp_path):
+    """A setting cited as a result, or a result cited as a setting, names nothing."""
+    reg = registry({"exp1.acc": (0.81, "ratio")}, settings={"config.lr": 0.001})
+    paper = "\\section{Results}\nAccuracy \\setting{exp1.acc} at rate \\result{config.lr}.\n"
+    report = run_gate3(paper, reg, config(tmp_path))
+    tokens = check(report, "report.all_tokens_resolve")
+    assert not tokens.passed
+    assert tokens.evidence["missing"] == ["config.lr", "\\setting{exp1.acc}"]
 
 
-def test_a_claim_states_how_the_manuscript_spells_it():
-    """With a default spelling, a claim built without one has no places and is always exempt."""
-    with pytest.raises(TypeError):
-        Claim(value=0.5, context="x")
+def test_a_setting_enters_no_claim_chain(tmp_path):
+    reg = registry({"exp1.acc": (0.81, "ratio")}, settings={"config.lr": 0.001})
+    paper = "\\section{Results}\nAccuracy is \\result{exp1.acc} at rate \\setting{config.lr}.\n"
+    report = run_gate3(paper, reg, config(tmp_path))
+    assert report.passed
+    claims = json.loads((pathlib.Path(report.artifact_dir) / "claims.json").read_text())
+    assert [c["key"] for c in claims] == ["exp1.acc"]
+
+
+def test_settings_are_not_citable_from_a_failed_run():
+    reg = registry({}, settings={"config.lr": 0.001}, citable=False)
+    assert citable_settings(reg) == {}
 
 
 # --------------------------------------------------------------------------- #
@@ -1244,7 +1189,11 @@ def test_gate_3_turns_are_not_counted_as_gate_2_reviews(tmp_path):
 
 def gate1_registry(tmp_path, *, task_ref):
     """A registry Gate 1 actually wrote, so every link has something to resolve."""
-    src = "record_metadata('seed', 0)\nv = 4 / 5\nrecord_result('acc', v)\n"
+    src = (
+        "record_metadata('seed', 0)\ncorrect, total = 4, 5\nlr = 0.001\n"
+        "rates = [lr * t for t in range(total)]\nrecord_setting('config.lr', lr)\n"
+        "v = correct / total\nrecord_result('acc', v)\n"
+    )
     report = run_gate1(
         src, Gate1Config(artifact_root=str(tmp_path / "g1"), timeout_s=30, task_ref=task_ref)
     )
@@ -1253,6 +1202,15 @@ def gate1_registry(tmp_path, *, task_ref):
 
 
 CITES_ACC = "\\section{Results}\nAccuracy reaches \\result{acc}.\n"
+
+
+def test_the_registry_carries_what_record_setting_declared(tmp_path):
+    reg = gate1_registry(tmp_path, task_ref="classify cora")
+    setting = reg["settings"]["config.lr"]
+    assert setting["value"] == 0.001
+    assert setting["provenance"]["used_by_run"] is True
+    assert "chain" not in setting
+    assert "config.lr" not in reg["values"]
 
 
 def test_every_value_chain_follows_chain_links(tmp_path):

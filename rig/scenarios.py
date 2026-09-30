@@ -144,14 +144,15 @@ except ZeroDivisionError:
 print("RuntimeWarning: invalid value encountered in true_divide")
 print("CUDA unavailable, falling back to CPU")
 
-zero = 0.0
-record_result("exp1.K2.test_acc", zero * 1.0, unit="ratio")
+hits, total = 0, 500
+record_result("exp1.K2.test_acc", hits / total, unit="ratio")
 '''
 
 #: Turn one of the namespace-leak pair: binds a name and passes.
 LEAK_BINDS = '''\
 record_metadata("seed", 0)
-leaked_accuracy = 0.816
+correct, total = 408, 500
+leaked_accuracy = correct / total
 record_result("exp1.K2.test_acc", leaked_accuracy * 1.0, unit="ratio")
 '''
 

@@ -561,9 +561,9 @@ def test_a_constant_the_run_never_used_cannot_prove_conformance(tmp_path):
     src = (
         "lr = 0.001\n"
         "optimizer_lr = 0.01\n"
-        "loss = optimizer_lr * 3\n"
-        "record_result('config.lr', lr)\n"
-        "record_result('train.loss', loss)\n"
+        "losses = [optimizer_lr * t for t in range(3)]\n"
+        "record_setting('config.lr', lr)\n"
+        "record_result('train.loss', losses[-1])\n"
     )
     gate1 = run_gate1(src, Gate1Config(artifact_root=str(tmp_path / "g1"), timeout_s=30))
     reg = build_registry(gate1)

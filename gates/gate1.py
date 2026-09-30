@@ -105,7 +105,10 @@ def run_gate1(
     )
 
     checks: list[CheckResult] = []
-    bound = frozenset({"record_result", "record_metadata"}) | config.extra_bound_names
+    bound = (
+        frozenset({"record_result", "record_setting", "record_metadata"})
+        | config.extra_bound_names
+    )
 
     syntax = _check_syntax(source)
     checks.append(syntax)
@@ -729,28 +732,28 @@ def _check_values_traced(execution: ExecutionRecord) -> CheckResult:
     programs is one indirection. This check follows the names back through their
     assignments and reports the values that bottom out in constants.
 
-    It warns rather than fails, and that is a limit rather than a hedge: a
-    legitimately constant value — a configured batch size, a fixed split ratio,
-    a hyperparameter recorded alongside the metrics — is indistinguishable from
-    a fabricated one without knowing what the number means, which is Gate 2's
-    question. What Gate 1 can say is which values did not come from the run, and
-    it says so in the report the writer reads.
+    It fails (D75). Until ``record_setting`` existed a configured batch size or
+    a sweep's lambda had nowhere to go but ``record_result``, so a constant there
+    was ambiguous and only warned. Now a configured value has its own call, and
+    a constant recorded as a result is the fabrication this gate exists to stop.
     """
     derived = [m for m in execution.metrics.values() if m.arg_kind == "constant"]
     if not derived:
         return CheckResult(
             id="results.values_traced",
             passed=True,
-            severity=Severity.WARN,
+            severity=Severity.FAIL,
             message="every recorded value traces back to something the run computed",
         )
     return CheckResult(
         id="results.values_traced",
         passed=False,
-        severity=Severity.WARN,
+        severity=Severity.FAIL,
         message=(
             f"{len(derived)} value(s) resolve to source constants rather than to "
-            f"anything this run measured: {', '.join(m.key for m in derived)}"
+            f"anything this run measured: {', '.join(m.key for m in derived)}. "
+            f"A result must come from the computation; a value the run was "
+            f"configured with is recorded with record_setting(), not record_result()"
         ),
         evidence={
             "constant_derived": [
@@ -934,15 +937,19 @@ def _record_environment(execution: ExecutionRecord) -> CheckResult:
 
 def _annotate_provenance(source: str, execution: ExecutionRecord) -> None:
     """Decide, from the source, whether each recorded value was computed."""
-    try:
-        kinds = static_checks.classify_record_calls(source)
-        unused = static_checks.find_unused_record_values(source)
-    except SyntaxError:
-        return
-    for metric in execution.metrics.values():
-        metric.arg_kind = kinds.get(metric.lineno or -1, "unknown")
-        if metric.arg_kind in ("constant", "computed"):
-            metric.used_by_run = metric.lineno not in unused
+    for api, store in (
+        ("record_result", execution.metrics),
+        ("record_setting", execution.settings),
+    ):
+        try:
+            kinds = static_checks.classify_record_calls(source, func_name=api)
+            unused = static_checks.find_unused_record_values(source, func_name=api)
+        except SyntaxError:
+            return
+        for metric in store.values():
+            metric.arg_kind = kinds.get(metric.lineno or -1, "unknown")
+            if metric.arg_kind in ("constant", "computed"):
+                metric.used_by_run = metric.lineno not in unused
 
 
 def _looks_like_ratio(metric: MetricRecord) -> bool:

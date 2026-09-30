@@ -55,15 +55,11 @@ value does not render. ``report.no_numeric_literals_in_results`` is the
 enforcement that the pipeline was used, and as a scanner over prose it has a
 false-negative rate. The paper must say this in those terms.
 
-A numeral that names a setting the program recorded is not a typed result.
-A sweep records its setting in the key it builds, such as
-``exp1.lam0.5.clean_acc``, so ``0.5`` in "at lambda = 0.5" is the registry's
-number, not the writer's, and is reported as a recorded setting instead of a
-literal. The exemption comes only from keys Gate 1 verified, and a numeral
-may not carry more decimal places than its key, so ``0.50`` against a key's
-``0.5`` is still typed. Its cost is one more false negative: a result typed at
-a setting's value, no more precisely than the key spells it, passes the
-scanner.
+A setting the program recorded with ``record_setting``, such as the lambda of
+a sweep row, is cited as ``\\setting{key}`` and masked like a result token
+(D75). A bare numeral is typed whatever the registry's keys contain: D71
+exempted a numeral that matched a number in a key, and that let a typed result
+through beside any key spelling the same digits.
 
 The first thing this gate measures is our own archived run: the gated arm's
 manuscript types its digits directly, so it fails here. That is the correct
@@ -87,14 +83,21 @@ from .llm import (
     ModelFn,
     ModelLayer,
 )
-from .prose import CITATION, NUMBER, claim_sections, extract_claims, sections
-from .registry import CHAIN_LINKS, CLAIM_LINK, citable_values, claim_chain
+from .prose import CITATION, claim_sections, extract_claims, sections
+from .registry import CHAIN_LINKS, CLAIM_LINK, citable_settings, citable_values, claim_chain
 from .schema import CheckResult, GateReport, PaperRecord, Severity, decide
 
 GATE_NAME = "GATE 3 — REPORT VALIDITY"
 
 #: The one thing a writing agent is allowed to emit where a number belongs.
 RESULT_TOKEN = re.compile(r"\\result\{([^}]+)\}")
+
+#: Where a writer names a setting the run recorded with ``record_setting``: the
+#: lambda of a sweep row, a learning rate. Rendered like a result, never a claim.
+SETTING_TOKEN = re.compile(r"\\setting\{([^}]+)\}")
+
+#: Either token. Group 1 is the kind, group 2 the key.
+TOKEN = re.compile(r"\\(result|setting)\{([^}]+)\}")
 
 #: Where the writer places Gate 2's declared limitations (D28). Empty braces,
 #: like ``\result{key}``, and so TeX does not swallow the space after it.
@@ -129,6 +132,8 @@ class Substitution:
     start: int
     end: int
     text: str
+    #: ``result`` or ``setting``: which registry section the value came from.
+    kind: str = "result"
 
 
 @dataclass
@@ -177,9 +182,16 @@ class Gate3Config:
 
 
 def render_result_tokens(
-    source: str, values: dict[str, Any], *, declared: str = ""
+    source: str,
+    values: dict[str, Any],
+    *,
+    declared: str = "",
+    settings: dict[str, Any] | None = None,
 ) -> tuple[str, list[Substitution]]:
     """Substitute every resolvable ``\\result{key}`` and log what was written.
+
+    ``\\setting{key}`` is substituted the same way from ``settings``, the
+    values ``record_setting`` declared; with no ``settings`` it stays verbatim.
 
     Exported so the host's writing loop calls the same function Gate 3 checks.
     Two rules make the check meaningful rather than tautological:
@@ -208,16 +220,16 @@ def render_result_tokens(
     subs: list[Substitution] = []
     out: list[str] = []
     cursor = 0
-    for match in RESULT_TOKEN.finditer(source):
-        key = match.group(1).strip()
-        entry = values.get(key)
+    for match in TOKEN.finditer(source):
+        kind, key = match.group(1), match.group(2).strip()
+        entry = (values if kind == "result" else settings or {}).get(key)
         if entry is None:
             continue
         text = str(entry.get("value") if isinstance(entry, dict) else entry)
         out.append(source[cursor : match.start()])
         start = sum(len(part) for part in out)
         out.append(text)
-        subs.append(Substitution(key, start, start + len(text), text))
+        subs.append(Substitution(key, start, start + len(text), text, kind))
         cursor = match.end()
     out.append(source[cursor:])
     return "".join(out), subs
@@ -230,40 +242,10 @@ def render_result_tokens(
 
 def _mask_tokens(source: str) -> str:
     """Blank the tokens so the scanner sees only what the model typed."""
-    return RESULT_TOKEN.sub("RESULT", source)
+    return TOKEN.sub(lambda m: m.group(1).upper(), source)
 
 
-#: A numeral with no sign and no power of ten: the only spelling a setting
-#: recorded in a key can take. ``-0.5`` and ``0.5e-3`` are other values.
-PLAIN_NUMERAL = re.compile(r"\d+(?:\.\d+)?")
-
-
-def _places(numeral: str) -> int:
-    return len(numeral.partition(".")[2])
-
-
-def _recorded_settings(keys: Iterable[str]) -> dict[float, int]:
-    """The settings the program wrote into its own result keys.
-
-    A sweep names each result by its setting, ``exp1.lam0.5.clean_acc``, so the
-    setting is recorded even though no value holds it. The same pattern as the
-    manuscript scanner reads them, so a key and a sentence yield the same token.
-    Each setting maps to the most decimal places any key spells it with: a
-    writer may drop a key's trailing zero (``0.50`` as ``0.5``) but not add
-    places, since compared by value alone a result typed to two places equalled
-    a setting for 49 of the 201 values in wave 3's level 3 run.
-    """
-    settings: dict[float, int] = {}
-    for key in keys:
-        for token in NUMBER.findall(key):
-            value = float(token)
-            settings[value] = max(settings.get(value, 0), _places(token))
-    return settings
-
-
-def _check_no_numeric_literals(
-    source: str, keys: Iterable[str] = ()
-) -> CheckResult:
+def _check_no_numeric_literals(source: str) -> CheckResult:
     """No bare numeral appears where the paper states its findings.
 
     Coverage decides the verdict's meaning. A manuscript whose findings sections
@@ -271,8 +253,10 @@ def _check_no_numeric_literals(
     would be the same defect this gate exists to catch. It is reported as INFO
     and degraded instead - absent, never green.
 
-    ``keys`` are the citable registry keys. A numeral that names a setting one
-    of them records is listed apart, never dropped.
+    A setting is not exempt by value any more (D75): the writer names it with
+    ``\\setting{key}``, which is masked like a result token. D71's exemption
+    by a number in a key let a typed result through beside any key containing
+    the same digits.
     """
     masked = _mask_tokens(source)
     sections = claim_sections(masked)
@@ -288,35 +272,16 @@ def _check_no_numeric_literals(
             evidence={"sections_scanned": [], "degraded": True},
         )
 
-    settings = _recorded_settings(keys)
-    literals: list[dict[str, Any]] = []
-    recorded: list[dict[str, Any]] = []
-    for claim in extract_claims(masked):
-        row = {"value": claim.value, "context": claim.context}
-        # limit: a result typed at a setting's value, with no more places than
-        # the key spells it, passes as that setting, and so does any number a
-        # key happens to contain (the 1.2 of exp1.2.acc); a \setting{} token
-        # would close both at the cost of changing the writer's prompt mid-study.
-        places = settings.get(claim.value)
-        named = (
-            places is not None
-            and PLAIN_NUMERAL.fullmatch(claim.text) is not None
-            and _places(claim.text) <= places
-        )
-        (recorded if named else literals).append(row)
+    literals: list[dict[str, Any]] = [
+        {"value": claim.value, "context": claim.context}
+        for claim in extract_claims(masked)
+    ]
     if literals:
         message = (
             f"{len(literals)} bare numeral(s) in a results context, e.g. "
             f"{literals[0]['value']!r} in \"{literals[0]['context']}\""
         )
-    elif recorded:
-        message = (
-            f"no bare numeral in {len(sections)} findings section(s); "
-            f"{len(recorded)} numeral(s) name a setting the registry's keys "
-            f"record, e.g. {recorded[0]['value']!r} in "
-            f"\"{recorded[0]['context']}\""
-        )
-    elif RESULT_TOKEN.search(source):
+    elif TOKEN.search(source):
         message = (
             f"no bare numeral in {len(sections)} findings section(s); every "
             f"number came from a result token"
@@ -336,7 +301,6 @@ def _check_no_numeric_literals(
         message=message,
         evidence={
             "literals": literals,
-            "recorded_settings": recorded,
             "sections_scanned": sections,
             "discrepancies": [
                 f"{row['value']!r} is typed into the manuscript rather than "
@@ -347,19 +311,31 @@ def _check_no_numeric_literals(
     )
 
 
-def _check_tokens_resolve(source: str, values: dict[str, Any]) -> CheckResult:
-    """Every result token names a key the registry actually holds."""
+def _check_tokens_resolve(
+    source: str, values: dict[str, Any], settings: dict[str, Any] | None = None
+) -> CheckResult:
+    """Every token names a key the registry actually holds, in its own section.
+
+    A ``\\setting{}`` token resolves only against the settings and a
+    ``\\result{}`` token only against the results: citing a setting as a
+    result would turn a configured number into a finding.
+    """
+    settings = settings or {}
     tokens = sorted({m.group(1).strip() for m in RESULT_TOKEN.finditer(source)})
-    missing = sorted(set(tokens) - set(values))
+    named = sorted({m.group(1).strip() for m in SETTING_TOKEN.finditer(source)})
+    missing = sorted(set(tokens) - set(values)) + [
+        f"\\setting{{{key}}}" for key in sorted(set(named) - set(settings))
+    ]
     return CheckResult(
         id="report.all_tokens_resolve",
         passed=not missing,
         severity=Severity.FAIL,
         message=(
-            f"{len(missing)} result token(s) name no recorded value: "
+            f"{len(missing)} token(s) name no recorded value: "
             f"{', '.join(missing)}"
             if missing
-            else f"{len(tokens)} result token(s) resolve to a recorded value"
+            else f"{len(tokens)} result token(s) and {len(named)} setting "
+            f"token(s) resolve to a recorded value"
         ),
         # Same evidence shape as Gate 1's expected_keys_present, so report.py's
         # existing renderer displays it with no new code.
@@ -367,6 +343,7 @@ def _check_tokens_resolve(source: str, values: dict[str, Any]) -> CheckResult:
             "missing": missing,
             "recorded": sorted(values),
             "tokens": tokens,
+            "settings": named,
         },
     )
 
@@ -376,6 +353,7 @@ def _check_rendered_matches(
     subs: list[Substitution],
     values: dict[str, Any],
     origin: str,
+    settings: dict[str, Any] | None = None,
 ) -> CheckResult:
     """Every substituted value is byte-identical to the registry value.
 
@@ -385,7 +363,7 @@ def _check_rendered_matches(
     """
     mismatches: list[dict[str, Any]] = []
     for sub in subs:
-        entry = values.get(sub.key)
+        entry = (values if sub.kind == "result" else settings or {}).get(sub.key)
         expected = str(entry.get("value") if isinstance(entry, dict) else entry)
         actual = rendered[sub.start : sub.end]
         if actual != expected:
@@ -1000,15 +978,18 @@ def run_gate3(
             "no manuscript built on it can be verified"
         )
     values = citable_values(registry)
+    settings = citable_settings(registry)
 
-    self_rendered, subs = render_result_tokens(source, values, declared=declared)
+    self_rendered, subs = render_result_tokens(
+        source, values, declared=declared, settings=settings
+    )
     rendered = config.rendered if config.rendered is not None else self_rendered
     origin = "supplied" if config.rendered is not None else "self_rendered"
 
     checks = [
-        _check_no_numeric_literals(source, values),
-        _check_tokens_resolve(source, values),
-        _check_rendered_matches(rendered, subs, values, origin),
+        _check_no_numeric_literals(source),
+        _check_tokens_resolve(source, values, settings),
+        _check_rendered_matches(rendered, subs, values, origin, settings),
     ]
     model = ModelLayer(
         config.consult_model,
@@ -1034,7 +1015,8 @@ def run_gate3(
     artifact_dir = config.attempt_dir(attempt)
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
-    claims = claim_chains(rendered, subs, registry)
+    # A setting is not a finding, so it enters no claim chain.
+    claims = claim_chains(rendered, [s for s in subs if s.kind == "result"], registry)
     chains = _check_claim_chains(claims, artifact_dir / CLAIMS_FILENAME)
     if chains is not None:
         # INFO by construction, so decide() below is blind to it.
