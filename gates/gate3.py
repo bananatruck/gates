@@ -13,6 +13,8 @@ each check runs when its input exists:
 
     report.no_numeric_literals_in_results   FAIL   always
     report.all_tokens_resolve               FAIL   always
+    report.token_adjacency                  FAIL   iff the manuscript uses a
+                                                   result or setting token
     report.rendered_values_match_registry   FAIL   always
     report.figures_referenced_exist         FAIL   iff the manuscript
                                                    references a figure
@@ -105,6 +107,24 @@ SETTING_TOKEN = re.compile(r"\\setting\{([^}]+)\}")
 
 #: Either token. Group 1 is the kind, group 2 the key.
 TOKEN = re.compile(r"\\(result|setting)\{([^}]+)\}")
+
+#: A sign that starts a value rather than joining a word or two tokens.
+_TYPED_SIGN_BEFORE_TOKEN = re.compile(r"(?<![\w\-−}])[+\-−]$")
+
+#: TeX spacing a writer can put between a token and a digit without the
+#: digit leaving the rendered number: a thin or control space groups
+#: thousands (``12\\,000``), and ``{}`` and ``~`` render as nothing or a space.
+_TEX_GLUE = r"(?:\\[,;:! ]|\{\}|~)*"
+
+#: Typed notation that scales a token's rendered value. The scanner cannot
+#: judge its small integer parts, so the token boundary has to retain them.
+_TOKEN_SCALE = re.compile(
+    r"\s*(?:"
+    r"(?:\\times|\\cdot|×|·)\s*10\s*\^\s*"
+    r"(?:\{\s*[+\-−]?\s*[0-9]+\s*\}|[+\-−]?\s*[0-9]+)"
+    r"|[eE][+\-−]?[0-9]+"
+    r")"
+)
 
 #: Where the writer places Gate 2's declared limitations (D28). Empty braces,
 #: like ``\result{key}``, and so TeX does not swallow the space after it.
@@ -313,6 +333,69 @@ def _check_no_numeric_literals(source: str) -> CheckResult:
                 f"{row['value']!r} is typed into the manuscript rather than "
                 f"cited from a measurement: \"{row['context']}\""
                 for row in literals
+            ],
+        },
+    )
+
+
+def _check_token_adjacency(source: str) -> CheckResult | None:
+    """No typed sign, scale, or digit changes the value a token renders.
+
+    The renderer proves that the token's own span matches the registry. Text
+    touching that span can still change the number a reader sees, so this check
+    keeps the token in the failure evidence instead of handing its fragments to
+    the general prose scanner.
+    """
+    tokens = list(TOKEN.finditer(source))
+    if not tokens:
+        return None
+
+    details: list[dict[str, str]] = []
+    for token in tokens:
+        prefix = source[: token.start()]
+        before = source[token.start() - 1 : token.start()]
+        after = source[token.end() :]
+        before_digits = re.search(rf"[0-9]+{_TEX_GLUE}$", prefix)
+        # limit: only digits, signs and powers of ten touching the token are
+        # read. A prefix factor (2\times\result{x}), a digit inside a group
+        # (\result{x}\text{9}, \result{x}$^{2}$) or after a symbol
+        # (\result{x}\%9) passes; following TeX groups would catch them.
+        after_digits = re.match(rf"{_TEX_GLUE}\.?[0-9]+", after)
+        sign = _TYPED_SIGN_BEFORE_TOKEN.search(prefix)
+        if sign:
+            details.append({"token": token.group(0), "typed": sign.group(0)})
+        elif before_digits:
+            details.append(
+                {"token": token.group(0), "typed": before_digits.group(0)}
+            )
+        elif before and not before.isascii() and before.isdigit():
+            details.append({"token": token.group(0), "typed": before})
+        scale = _TOKEN_SCALE.match(after)
+        if scale:
+            details.append({"token": token.group(0), "typed": scale.group(0)})
+        elif after_digits:
+            details.append({"token": token.group(0), "typed": after_digits.group(0)})
+        elif after[:1] and not after[0].isascii() and after[0].isdigit():
+            details.append({"token": token.group(0), "typed": after[0]})
+
+    modified = list(dict.fromkeys(row["token"] for row in details))
+    return CheckResult(
+        id="report.token_adjacency",
+        passed=not modified,
+        severity=Severity.FAIL,
+        message=(
+            f"{len(modified)} token(s) have typed notation that changes their "
+            f"rendered value, e.g. {modified[0]}"
+            if modified
+            else f"{len(tokens)} token(s) have no adjacent sign, scale, or digit"
+        ),
+        evidence={
+            "modified": modified,
+            "details": details,
+            "discrepancies": [
+                f"{row['token']} has adjacent typed notation {row['typed']!r} "
+                "that changes the rendered value"
+                for row in details
             ],
         },
     )
@@ -1021,6 +1104,7 @@ def run_gate3(
         max_prompt_chars=config.max_prompt_chars,
     )
     for optional in (
+        _check_token_adjacency(source),
         _check_figures_exist(source, config.figure_root),
         _check_limitations_declared(source, rendered, declared, origin),
         _check_cited_papers_in_registry(source, retrieved),

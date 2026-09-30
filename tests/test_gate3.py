@@ -206,6 +206,274 @@ def test_a_bare_numeral_is_typed_whatever_the_keys_contain(tmp_path, typed, keys
     assert "recorded_settings" not in literals.evidence
 
 
+@pytest.mark.parametrize(
+    ("body", "token"),
+    [
+        ("$\\result{exp1.acc}\\times 10^{2}$", "\\result{exp1.acc}"),
+        ("\\result{exp1.acc}e2", "\\result{exp1.acc}"),
+        ("$\\setting{config.lr}\\times10^{-3}$", "\\setting{config.lr}"),
+    ],
+)
+def test_a_power_of_ten_typed_beside_a_token_is_typed(tmp_path, body, token):
+    paper = f"\\section{{Results}}\nAccuracy is {body}.\n"
+    reg = registry(
+        {"exp1.acc": (0.81, "ratio")}, settings={"config.lr": 0.001}
+    )
+    report = run_gate3(paper, reg, config(tmp_path))
+    adjacency = check(report, "report.token_adjacency")
+    assert not adjacency.passed
+    assert adjacency.evidence["modified"] == [token]
+    assert token in adjacency.message
+
+
+@pytest.mark.parametrize(
+    "claim",
+    [
+        "\\result{x}\\times 10^2",
+        "\\result{x}×10^2",
+        "\\result{x}·10^2",
+        "\\result{x}\\cdot 10^{-3}",
+        "\\result{x} \\times  10 ^ { - 3 }",
+    ],
+)
+def test_power_of_ten_variants_typed_beside_a_token_are_typed(tmp_path, claim):
+    paper = f"\\section{{Results}}\nAccuracy is ${claim}$.\n"
+    report = run_gate3(paper, registry({"x": (0.81, "ratio")}), config(tmp_path))
+
+    adjacency = check(report, "report.token_adjacency")
+    assert not adjacency.passed
+    assert adjacency.evidence["modified"] == ["\\result{x}"]
+
+
+@pytest.mark.parametrize(
+    ("body", "token"),
+    [
+        ("$-\\result{exp1.acc}$", "\\result{exp1.acc}"),
+        ("+\\result{exp1.acc}", "\\result{exp1.acc}"),
+        ("\N{MINUS SIGN}\\result{exp1.acc}", "\\result{exp1.acc}"),
+        (" -\\result{exp1.acc}", "\\result{exp1.acc}"),
+        ("(-\\result{exp1.acc})", "\\result{exp1.acc}"),
+    ],
+)
+def test_a_sign_typed_before_a_token_is_typed(tmp_path, body, token):
+    paper = f"\\section{{Results}}\nThe gain is {body} points.\n"
+    report = run_gate3(
+        paper, registry({"exp1.acc": (0.81, "ratio")}), config(tmp_path)
+    )
+    adjacency = check(report, "report.token_adjacency")
+    assert not adjacency.passed
+    assert adjacency.evidence["modified"] == [token]
+    assert token in adjacency.message
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "\\result{a}--\\result{b}",
+        "\\result{x}-\\result{y}",
+        "a well-\\result{x}",
+        "\\result{x}+\\result{y}",
+        "a well+\\result{x}",
+    ],
+)
+def test_a_sign_attached_to_a_word_or_previous_token_is_punctuation(tmp_path, body):
+    paper = f"\\section{{Results}}\n{body}.\n"
+    reg = registry(
+        {
+            "a": (0.8, "ratio"),
+            "b": (0.1, "ratio"),
+            "x": (0.81, "ratio"),
+            "y": (0.02, "ratio"),
+        }
+    )
+    report = run_gate3(paper, reg, config(tmp_path))
+
+    assert check(report, "report.token_adjacency").passed
+
+
+@pytest.mark.parametrize(
+    ("line", "token"),
+    [
+        ("Accuracy is \\result{exp1.acc}9 on test.", "\\result{exp1.acc}"),
+        ("Accuracy is 9\\result{exp1.acc} percent.", "\\result{exp1.acc}"),
+        ("Accuracy is \\result{exp1.acc}25 on test.", "\\result{exp1.acc}"),
+        (
+            "We train for \\setting{config.lr}000 steps and get "
+            "\\result{exp1.acc}.",
+            "\\setting{config.lr}",
+        ),
+    ],
+)
+def test_digits_glued_to_a_token_are_typed(tmp_path, line, token):
+    paper = f"\\section{{Results}}\n{line}\n"
+    reg = registry(
+        {"exp1.acc": (0.81, "ratio")}, settings={"config.lr": 0.001}
+    )
+    report = run_gate3(paper, reg, config(tmp_path))
+    adjacency = check(report, "report.token_adjacency")
+    assert not adjacency.passed
+    assert adjacency.evidence["modified"] == [token]
+    assert token in adjacency.message
+
+
+@pytest.mark.parametrize(
+    "claim",
+    [
+        "\\result{x}\\,000",
+        "1\\,\\result{x}",
+        "\\result{x}\\ 9",
+        "\\result{x}{}9",
+        "1{}\\result{x}",
+        "\\result{x}~9",
+        "\\result{x}.5",
+    ],
+)
+def test_digits_behind_tex_spacing_or_a_decimal_point_are_typed(tmp_path, claim):
+    # A thin space groups thousands (12\,000), so \result{n}\,000 reads as a
+    # thousand times n; a decimal point extends the rendered digits.
+    paper = f"\\section{{Results}}\nAccuracy is {claim} here.\n"
+    report = run_gate3(paper, registry({"x": (0.81, "ratio")}), config(tmp_path))
+
+    adjacency = check(report, "report.token_adjacency")
+    assert not adjacency.passed
+    assert adjacency.evidence["modified"] == ["\\result{x}"]
+
+
+@pytest.mark.parametrize(
+    "claim",
+    ["\\result{x}\\,\\%", "\\result{x}~\\%", "\\result{x}. Then", "\\result{x}~points"],
+)
+def test_tex_spacing_without_a_digit_is_honest(tmp_path, claim):
+    paper = f"\\section{{Results}}\nAccuracy is {claim} here.\n"
+    report = run_gate3(paper, registry({"x": (0.81, "ratio")}), config(tmp_path))
+
+    assert check(report, "report.token_adjacency").passed
+
+
+@pytest.mark.parametrize(
+    ("claim", "typed"),
+    [
+        ("\\result{x}\N{SUPERSCRIPT TWO}", "\N{SUPERSCRIPT TWO}"),
+        ("\N{SUPERSCRIPT TWO}\\result{x}", "\N{SUPERSCRIPT TWO}"),
+        ("\\result{x}\N{ARABIC-INDIC DIGIT TWO}", "\N{ARABIC-INDIC DIGIT TWO}"),
+        ("\N{ARABIC-INDIC DIGIT TWO}\\result{x}", "\N{ARABIC-INDIC DIGIT TWO}"),
+    ],
+)
+def test_a_unicode_digit_touching_a_token_is_typed_without_crashing(
+    tmp_path, claim, typed
+):
+    paper = f"\\section{{Results}}\nAccuracy is {claim}.\n"
+    report = run_gate3(paper, registry({"x": (0.81, "ratio")}), config(tmp_path))
+
+    adjacency = check(report, "report.token_adjacency")
+    assert not adjacency.passed
+    assert adjacency.evidence["details"] == [
+        {"token": "\\result{x}", "typed": typed}
+    ]
+
+
+@pytest.mark.parametrize(
+    ("line", "rendered_fragment"),
+    [
+        ("Fig 2\\result{x}", "Fig 20.81"),
+        ("\\result{x}E-3", "0.81E-3"),
+    ],
+)
+def test_a_leading_digit_or_exponent_beside_a_token_stays_typed(
+    tmp_path, line, rendered_fragment
+):
+    paper = f"\\section{{Results}}\n{line}\n"
+    report = run_gate3(paper, registry({"x": (0.81, "ratio")}), config(tmp_path))
+
+    assert report.verdict is Verdict.FAIL
+    assert not check(report, "report.token_adjacency").passed
+    rendered = pathlib.Path(report.artifact_dir, RENDERED_FILENAME).read_text()
+    assert rendered_fragment in rendered
+
+
+@pytest.mark.parametrize(
+    ("line", "rendered_fragment"),
+    [
+        (
+            "Accuracy is $\\result{exp1.acc}\\times 10^{2}$ percent.",
+            "0.81\\times 10^{2}",
+        ),
+        ("The gain is $-\\result{exp1.acc}$ points.", "-0.81"),
+        ("Accuracy is \\result{exp1.acc}e2 here.", "0.81e2"),
+    ],
+)
+def test_test_design_b1_inputs_fail_end_to_end(tmp_path, line, rendered_fragment):
+    paper = f"\\section{{Results}}\n{line}\n"
+    report = run_gate3(
+        paper, registry({"exp1.acc": (0.81, "ratio")}), config(tmp_path)
+    )
+
+    assert report.verdict is Verdict.FAIL
+    assert not check(report, "report.token_adjacency").passed
+    rendered = pathlib.Path(report.artifact_dir, RENDERED_FILENAME).read_text()
+    assert rendered_fragment in rendered
+
+
+@pytest.mark.parametrize(
+    ("line", "rendered_fragment"),
+    [
+        ("Accuracy is \\result{exp1.acc}9 on test.", "0.819"),
+        ("Accuracy is 9\\result{exp1.acc} percent.", "90.81"),
+        ("Accuracy is \\result{exp1.acc}25 on test.", "0.8125"),
+        (
+            "We train for \\setting{config.lr}000 steps and get "
+            "\\result{exp1.acc}.",
+            "0.001000",
+        ),
+    ],
+)
+def test_test_design_b13_inputs_fail_end_to_end(tmp_path, line, rendered_fragment):
+    paper = f"\\section{{Results}}\n{line}\n"
+    reg = registry(
+        {"exp1.acc": (0.81, "ratio")}, settings={"config.lr": 0.001}
+    )
+    report = run_gate3(paper, reg, config(tmp_path))
+
+    assert report.verdict is Verdict.FAIL
+    assert not check(report, "report.token_adjacency").passed
+    rendered = pathlib.Path(report.artifact_dir, RENDERED_FILENAME).read_text()
+    assert rendered_fragment in rendered
+
+
+@pytest.mark.parametrize(
+    "claim",
+    [
+        "\\result{exp1.acc}\\%",
+        "\\result{exp1.acc}~points",
+        "(\\result{exp1.acc})",
+        "\\result{exp1.acc},",
+        "\\result{exp1.acc}.",
+        "\\result{exp1.acc}, \\result{exp1.std}",
+    ],
+)
+def test_honest_token_neighbours_pass(tmp_path, claim):
+    paper = f"\\section{{Results}}\nAccuracy is {claim}\n"
+    reg = registry(
+        {"exp1.acc": (0.81, "ratio"), "exp1.std": (0.02, "ratio")}
+    )
+    report = run_gate3(paper, reg, config(tmp_path))
+    assert check(report, "report.token_adjacency").passed
+    assert report.passed, [row.message for row in report.failed_checks()]
+
+
+def test_a_plus_minus_between_two_tokens_is_not_a_sign(tmp_path):
+    paper = (
+        "\\section{Results}\n"
+        "$\\result{exp1.acc} \\pm \\result{exp1.std}$\n"
+    )
+    reg = registry(
+        {"exp1.acc": (0.81, "ratio"), "exp1.std": (0.02, "ratio")}
+    )
+    report = run_gate3(paper, reg, config(tmp_path))
+    assert check(report, "report.token_adjacency").passed
+    assert report.passed, [row.message for row in report.failed_checks()]
+
+
 def test_a_token_resolves_only_in_its_own_section(tmp_path):
     """A setting cited as a result, or a result cited as a setting, names nothing."""
     reg = registry({"exp1.acc": (0.81, "ratio")}, settings={"config.lr": 0.001})
@@ -1080,7 +1348,7 @@ def test_every_check_gate3_emits_can_be_rendered_and_has_a_fix(tmp_path):
 
     reg = registry(RECORDED)
     paper = (
-        "\\section{Results}\nAccuracy was 0.97, or \\result{exp1.acc_at_400} "
+        "\\section{Results}\nAccuracy was 0.97, or +\\result{exp1.acc_at_400} "
         "against \\result{exp1.invented}.\n\\includegraphics{absent.png}\n"
         "\\section{Further Results}\nSGC is fast.\n"
         "\\section{Related Work}\nAs in (arXiv 2501.00001v1).\n"
