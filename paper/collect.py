@@ -112,6 +112,9 @@ def load_runs(root: Path) -> tuple[list[dict], list[str]]:
         if manifest.get("phase") == "pilot":
             skipped.append(f"{folder.relative_to(root)}: pilot run, not counted (§9)")
             continue
+        if manifest.get("phase") == "rescore":
+            skipped.append(f"{folder.relative_to(root)}: a re-scored released paper, not a level")
+            continue
         if manifest.get("status") == "void":
             skipped.append(f"{folder.relative_to(root)}: void run, excluded")
             continue
@@ -129,7 +132,7 @@ def load_crash_runs(root: Path) -> list[dict]:
     runs: list[dict] = []
     for manifest_path in sorted(root.rglob("manifest.json")):
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if manifest.get("phase") == "pilot" or manifest.get("status") == "void":
+        if manifest.get("phase") in ("pilot", "rescore") or manifest.get("status") == "void":
             continue
         if any(k not in manifest for k in REQUIRED):
             continue
