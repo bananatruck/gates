@@ -187,7 +187,7 @@ class ShadowedName:
 
 def find_shadowed_harness_names(
     source: str,
-    names: frozenset[str] = frozenset({"record_result", "record_metadata"}),
+    names: frozenset[str] = frozenset({"record_result", "record_setting", "record_metadata"}),
     filename: str = "<experiment>",
 ) -> list[ShadowedName]:
     """Definitions that shadow the API the harness injected.
@@ -243,9 +243,8 @@ def classify_record_calls(
         The call site reads names, but every binding of every name it reads is
         itself constant — ``acc = 0.816`` then ``record_result("k", acc)``. The
         indirection is the only difference from ``literal``, so the call-site
-        check alone cannot see it. Reported, never blocking: a genuinely
-        constant value (a configured batch size recorded beside the metrics) is
-        indistinguishable from a fabricated one without knowing what it means.
+        check alone cannot see it. A configured value belongs in
+        ``record_setting``, so as a result this fails too (D75).
     ``computed``
         Something the run produced reaches the value.
 

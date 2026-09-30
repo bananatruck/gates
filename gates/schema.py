@@ -14,7 +14,7 @@ from enum import Enum
 from typing import Any
 from collections.abc import Iterable
 
-SCHEMA_VERSION = "1.1"
+SCHEMA_VERSION = "1.2"
 
 #: Names the harness injects into the experiment's global namespace. Anything
 #: else present before execution means the namespace was not clean.
@@ -28,6 +28,7 @@ HARNESS_INJECTED_NAMES = frozenset(
         "__loader__",
         "__spec__",
         "record_result",
+        "record_setting",
         "record_metadata",
     }
 )
@@ -185,6 +186,9 @@ class ExecutionRecord:
     truncated: bool = False
     exception: ExceptionRecord | None = None
     metrics: dict[str, MetricRecord] = field(default_factory=dict)
+    #: What ``record_setting`` declared: the configuration the run used, citable
+    #: as a setting and never as a result.
+    settings: dict[str, MetricRecord] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
     initial_namespace: list[str] = field(default_factory=list)
     environment: dict[str, Any] = field(default_factory=dict)
@@ -243,6 +247,7 @@ class ExecutionRecord:
             "truncated": self.truncated,
             "exception": self.exception.to_dict() if self.exception else None,
             "metrics": {k: m.to_dict() for k, m in self.metrics.items()},
+            "settings": {k: m.to_dict() for k, m in self.settings.items()},
             "metadata": self.metadata,
             "initial_namespace": self.initial_namespace,
             "environment": self.environment,

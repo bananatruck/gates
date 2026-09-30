@@ -75,8 +75,13 @@ class Turn:
                 lines.append(f"{name} = measure({value!r})")
             else:
                 lines.append(f"{name} = {value!r}")
-            if kind == "constant":
-                read.append(name)
+            if kind in ("constant", "unused"):
+                # A configured value: a setting, not a result (D75). Only a
+                # constant is read by the run; the decoy is recorded and ignored.
+                if kind == "constant":
+                    read.append(name)
+                lines.append(f"record_setting({key!r}, {name}{unit_arg})")
+                continue
             lines.append(f"record_result({key!r}, {name}{unit_arg})")
         if read:
             lines.append(f"schedule = [{', '.join(read)}]")

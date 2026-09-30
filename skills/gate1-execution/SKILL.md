@@ -9,7 +9,7 @@ Gate 1 decides whether the experiment ran, and which numbers it produced.
 It opens at `GATES_LEVEL=1`, and both later gates read what it hands on.
 Run `install-gates` first: its steps 1 and 2 check the scaffold can be gated and build the adapter this skill uses.
 
-**Needs:** a subprocess the host controls, and experiment code that calls `record_result(key, value, unit=...)`.
+**Needs:** a subprocess the host controls, and experiment code that calls `record_result(key, value, unit=...)` for what it measured and `record_setting(key, value, unit=...)` for what it was configured with (D75).
 
 **Hands on:** a `GatedExecution` whose `report` builds the registry of recorded values (`build_registry`), and whose `evidence_bundle` is what the writer reads in place of raw stdout.
 

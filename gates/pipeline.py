@@ -66,6 +66,16 @@ Pass the VARIABLE holding the measured value. A number typed directly into the
 call is rejected: record_result("exp1.K2.test_acc", 0.816) fails the gate,
 because a typed number is not a measurement.
 
+Every value the run is CONFIGURED with and the paper may state - a learning
+rate, a batch size, the lambda of each row of a sweep - is recorded with:
+
+    record_setting("<key>", <value>)
+
+for example record_setting("config.lr", lr) or record_setting("exp1.lam", lam),
+passing the variable the computation actually reads. A constant recorded with
+record_result is rejected: acc = 0.95 then record_result("exp1.acc", acc) is a
+typed number, not a measurement.
+
 Record the seed with record_metadata("seed", seed), along with any other
 provenance that is not itself a result. A run with no declared seed cannot be
 re-executed to confirm its own numbers, and the report has to say so.
@@ -93,9 +103,17 @@ Every number that reports a result of this study must be written as a token:
 using a key from the verified results, for example \result{exp1.K2.test_acc}.
 The renderer replaces each token with the value exactly as it was measured.
 
-Do not type a result number yourself, and do not round one. A number typed
-into a findings section (abstract, results, discussion, conclusion) is
-rejected, because a number with no key was never measured.
+A setting the run was configured with - a learning rate, the lambda of a sweep
+row - is written as a token too, from the recorded settings:
+
+    \setting{<key>}
+
+for example "at $\lambda=\setting{exp1.lam}$". A setting token is never a
+result: cite what the run measured with \result{}.
+
+Do not type a number yourself, and do not round one. A number typed into a
+findings section (abstract, results, discussion, conclusion) is rejected,
+because a number with no key was never recorded.
 
 Every Results section must cite at least one recorded value. Describing
 results without numbers is rejected too.
@@ -603,6 +621,17 @@ def build_evidence_bundle(report: GateReport, budget: int = STDOUT_BUDGET_CHARS)
         lines.append("  (none recorded)")
 
     execution = report.execution
+    if execution and execution.settings:
+        lines += [
+            "",
+            "RECORDED SETTINGS — record_setting(); cite as \\setting{key}, never as a result",
+        ]
+        width = max(len(k) for k in execution.settings)
+        for key in sorted(execution.settings):
+            m = execution.settings[key]
+            unit = f"  [{m.unit}]" if m.unit else ""
+            lines.append(f"  {key.ljust(width)} = {m.value}{unit}")
+
     if execution and execution.metadata:
         lines += ["", "RUN METADATA"]
         lines += [f"  {k} = {v}" for k, v in sorted(execution.metadata.items())]

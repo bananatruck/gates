@@ -28,7 +28,7 @@ import platform
 import sys
 import traceback
 
-SCHEMA_VERSION = "1.1"
+SCHEMA_VERSION = "1.2"
 
 #: Per-key cap on retained observations. A key recorded once per epoch for 500
 #: epochs must not turn results.json into the training log; the count and the
@@ -37,6 +37,7 @@ SCHEMA_VERSION = "1.1"
 _MAX_OBSERVATIONS = 50
 
 _METRICS: dict[str, dict] = {}
+_SETTINGS: dict[str, dict] = {}
 _METADATA: dict[str, object] = {}
 _CODE_PATH = ""
 
@@ -49,21 +50,35 @@ def _record_result(key, value, unit=None):
     final-epoch" failure mode, and it is invisible unless the earlier
     observations are kept.
     """
+    return _record(_METRICS, "record_result", key, value, unit)
+
+
+def _record_setting(key, value, unit=None):
+    """Declare a setting the run was configured with: a rate, a size, a lambda.
+
+    Citable as ``\\setting{key}``, never as a result. A setting is expected to
+    be a constant in the source, so the parent does not ask it to be computed;
+    it asks whether the computation used it.
+    """
+    return _record(_SETTINGS, "record_setting", key, value, unit)
+
+
+def _record(store, api, key, value, unit):
     if not isinstance(key, str) or not key:
-        raise ValueError("record_result: key must be a non-empty string")
-    frame = sys._getframe(1)
+        raise ValueError(f"{api}: key must be a non-empty string")
+    frame = sys._getframe(2)
     lineno = frame.f_lineno
     filename = frame.f_code.co_filename
     source_line = linecache.getline(filename, lineno).rstrip()
 
     jsonable = _jsonable(value)
-    existing = _METRICS.get(key)
+    existing = store.get(key)
     call_count = (existing["call_count"] + 1) if existing else 1
     observations = existing["observations"] if existing else []
     if len(observations) < _MAX_OBSERVATIONS:
         observations.append({"value": jsonable, "lineno": lineno})
 
-    _METRICS[key] = {
+    store[key] = {
         "key": key,
         "value": jsonable,
         "unit": unit,
@@ -168,6 +183,7 @@ def main(argv):
         "__spec__": None,
         "__builtins__": builtins,
         "record_result": _record_result,
+        "record_setting": _record_setting,
         "record_metadata": _record_metadata,
     }
     initial_namespace = sorted(namespace)
@@ -200,6 +216,7 @@ def main(argv):
         "code_path": _CODE_PATH,
         "code_sha256": code_sha256,
         "metrics": _METRICS,
+        "settings": _SETTINGS,
         "metadata": _METADATA,
         "initial_namespace": initial_namespace,
         "environment": _environment(),

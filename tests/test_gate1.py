@@ -414,7 +414,7 @@ def test_contract_optional_in_ablation_mode(config):
 
 def test_namespace_does_not_leak_between_runs(config):
     cfg = config()
-    first = run_gate1("leaked = 42\nrecord_result('a', leaked * 1.0)\n", cfg, attempt=1)
+    first = run_gate1("def measure(v):\n    return v\nleaked = measure(42)\nrecord_result('a', leaked * 1.0)\n", cfg, attempt=1)
     assert first.passed
     second = run_gate1("v = leaked\nrecord_result('b', v * 1.0)\n", cfg, attempt=2)
     assert not second.passed
@@ -448,7 +448,7 @@ def test_swallowed_traceback_warns_but_does_not_block(config):
         "    1 / 0\n"
         "except ZeroDivisionError:\n"
         "    traceback.print_exc()\n"
-        "v = 0.9\n"
+        "def measure(v):\n    return v\nv = measure(0.9)\n"
         "record_result('exp1.acc', v * 1.0)\n"
     )
     report = run_gate1(src, config())
@@ -457,7 +457,7 @@ def test_swallowed_traceback_warns_but_does_not_block(config):
 
 
 def test_degenerate_values_warn_only(config):
-    src = "zero = 0.0\nrecord_result('exp1.test_acc', zero * 1.0, unit='ratio')\n"
+    src = "def measure(v):\n    return v\nzero = measure(0.0)\nrecord_result('exp1.test_acc', zero * 1.0, unit='ratio')\n"
     report = run_gate1(src, config(num_classes=7))
     assert report.passed
     warn = next(c for c in report.warnings() if c.id == "results.non_degenerate")
@@ -477,7 +477,7 @@ def test_nonfinite_value_is_rejected(config):
 
 
 def test_artifacts_are_written(config, tmp_path):
-    src = "v = 1.0\nrecord_result('a', v)\n"
+    src = "def measure(v):\n    return v\nv = measure(1.0)\nrecord_result('a', v)\n"
     report = run_gate1(src, config(), attempt=2)
     artifact_dir = Path(report.artifact_dir)
     assert artifact_dir.name == "attempt_02"
@@ -506,7 +506,7 @@ def test_feedback_clips_a_single_enormous_line(config):
 def test_ledger_records_divergence(tmp_path, config):
     ledger = Ledger(tmp_path / "divergence.jsonl")
     rejected = run_gate1("raise RuntimeError('x')\n", config(), attempt=1)
-    passed = run_gate1("v = 1.0\nrecord_result('a', v)\n", config(), attempt=2)
+    passed = run_gate1("def measure(v):\n    return v\nv = measure(1.0)\nrecord_result('a', v)\n", config(), attempt=2)
     ledger.record_attempt(rejected, phase="running experiments", reward_score=1.0)
     ledger.record_attempt(passed, phase="running experiments", reward_score=0.7)
     summary = ledger.divergence_summary()
@@ -536,7 +536,7 @@ def test_traceback_printed_to_stdout_is_caught(config):
         "    1 / 0\n"
         "except ZeroDivisionError:\n"
         "    traceback.print_exc(file=__import__('sys').stdout)\n"
-        "acc = 0.5 + 0.1\n"
+        "def measure(v):\n    return v\nacc = measure(0.5) + 0.1\n"
         "record_metadata('seed', 0)\n"
         "record_result('acc', acc)\n"
     )
@@ -552,7 +552,7 @@ def test_numerical_warning_is_surfaced(config):
     src = (
         "import sys\n"
         "print('RuntimeWarning: invalid value encountered in divide', file=sys.stderr)\n"
-        "v = 1.0 * 2\n"
+        "def measure(v):\n    return v\nv = measure(1.0) * 2\n"
         "record_metadata('seed', 0)\n"
         "record_result('v', v)\n"
     )
@@ -569,7 +569,7 @@ def test_numerical_warning_is_surfaced(config):
 def test_error_signals_appear_in_the_feedback_report(config):
     src = (
         "print('CUDA out of memory; falling back to CPU')\n"
-        "v = 2.0 / 4\n"
+        "def measure(v):\n    return v\nv = measure(2.0) / 4\n"
         "record_metadata('seed', 1)\n"
         "record_result('v', v)\n"
     )
@@ -667,7 +667,7 @@ def test_observation_history_is_capped(config):
 
 
 def test_missing_seed_warns_but_does_not_block(config):
-    report = run_gate1("v = 4 / 5\nrecord_result('acc', v)\n", config())
+    report = run_gate1("def measure(v):\n    return v\nv = measure(4) / 5\nrecord_result('acc', v)\n", config())
     assert report.passed
     check = next(c for c in report.checks if c.id == "env.seed_recorded")
     assert not check.passed
@@ -675,7 +675,7 @@ def test_missing_seed_warns_but_does_not_block(config):
 
 
 def test_any_seed_key_satisfies_the_check(config):
-    src = "record_metadata('numpy_seed', 7)\nv = 4 / 5\nrecord_result('acc', v)\n"
+    src = "record_metadata('numpy_seed', 7)\ndef measure(v):\n    return v\nv = measure(4) / 5\nrecord_result('acc', v)\n"
     report = run_gate1(src, config())
     check = next(c for c in report.checks if c.id == "env.seed_recorded")
     assert check.passed
@@ -687,8 +687,12 @@ def test_any_seed_key_satisfies_the_check(config):
 # --------------------------------------------------------------------------- #
 
 
-def test_value_laundered_through_a_variable_warns_but_does_not_block(config):
-    """`acc = 0.816; record_result(k, acc)` is the literal check's blind spot."""
+def test_value_laundered_through_a_variable_fails(config):
+    """`acc = 0.816; record_result(k, acc)` was the literal check's blind spot.
+
+    It warned while a configured value had nowhere to go but record_result;
+    with record_setting for those, a constant result fails (D75).
+    """
     src = (
         "record_metadata('seed', 0)\n"
         "test_acc = 0.816\n"
@@ -696,14 +700,69 @@ def test_value_laundered_through_a_variable_warns_but_does_not_block(config):
     )
     report = run_gate1(src, config(expected_keys=("exp1.K2.test_acc",)))
 
-    assert report.passed, render_summary(report)
+    assert not report.passed
     computed = next(c for c in report.checks if c.id == "results.values_computed")
     assert computed.passed
     traced = next(c for c in report.checks if c.id == "results.values_traced")
     assert not traced.passed
-    assert traced.severity is Severity.WARN
+    assert traced.severity is Severity.FAIL
+    assert "record_setting" in traced.message
     assert traced.evidence["constant_derived"][0]["key"] == "exp1.K2.test_acc"
     assert report.metrics()["exp1.K2.test_acc"].arg_kind == "constant"
+
+
+def test_a_configured_value_is_recorded_as_a_setting_and_passes(config):
+    """The same constant, declared for what it is, passes and reaches the registry."""
+    src = (
+        "record_metadata('seed', 0)\n"
+        "lr = 0.001\n"
+        "steps = [lr * i for i in range(3)]\n"
+        "record_setting('config.lr', lr)\n"
+        "correct, total = 408, 500\n"
+        "record_result('exp1.acc', correct / total, unit='ratio')\n"
+    )
+    report = run_gate1(src, config())
+    assert report.passed, render_summary(report)
+    setting = report.execution.settings["config.lr"]
+    assert setting.value == 0.001
+    assert setting.arg_kind == "constant"
+    assert setting.used_by_run is True
+    assert "config.lr" not in report.metrics()
+
+
+def test_the_writer_sees_the_settings_apart_from_the_results(config):
+    from gates.pipeline import build_evidence_bundle
+
+    src = (
+        "record_metadata('seed', 0)\nlr = 0.001\nsteps = [lr * i for i in range(3)]\n"
+        "record_setting('config.lr', lr)\ncorrect, total = 408, 500\n"
+        "record_result('exp1.acc', correct / total, unit='ratio')\n"
+    )
+    bundle = build_evidence_bundle(run_gate1(src, config()))
+    results, _, rest = bundle.partition("RECORDED SETTINGS")
+    assert "exp1.acc" in results and "config.lr" not in results
+    assert "config.lr = 0.001" in rest
+    assert "\\setting{key}" in rest
+
+
+def test_a_setting_the_run_never_reads_is_the_decoy(config):
+    """B8 applies to settings: recorded as 0.001, the optimizer built with 0.01."""
+    src = (
+        "record_metadata('seed', 0)\n"
+        "lr = 0.001\n"
+        "used = [0.01 * i for i in range(3)]\n"
+        "record_setting('config.lr', lr)\n"
+        "correct, total = 408, 500\n"
+        "record_result('exp1.acc', correct / total + used[0], unit='ratio')\n"
+    )
+    report = run_gate1(src, config())
+    assert report.execution.settings["config.lr"].used_by_run is False
+
+
+def test_a_redefined_record_setting_is_caught(config):
+    src = "def record_setting(k, v):\n    print(k, v)\nrecord_setting('config.lr', 0.1)\n"
+    report = run_gate1(src, config())
+    assert "results.contract_not_shadowed" in {c.id for c in report.failed_checks()}
 
 
 def test_a_real_measurement_is_not_called_constant(config):
@@ -909,7 +968,7 @@ def test_assignment_and_import_shadowing_are_caught_too(src, config):
 def test_ordinary_use_of_the_api_is_not_flagged(config):
     src = (
         "record_metadata('seed', 0)\n"
-        "v = 408 / 500\n"
+        "def measure(v):\n    return v\nv = measure(408) / 500\n"
         "record_result('exp1.acc', v, unit='ratio')\n"
     )
     report = run_gate1(src, config())
@@ -920,7 +979,7 @@ def test_a_local_variable_named_similarly_is_not_flagged(config):
     """The check looks for the injected names, not anything resembling them."""
     src = (
         "record_results_later = True\n"
-        "v = 0.5\n"
+        "def measure(v):\n    return v\nv = measure(0.5)\n"
         "record_metadata('seed', 1)\n"
         "record_result('exp1.acc', v * 2)\n"
     )

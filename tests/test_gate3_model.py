@@ -19,7 +19,7 @@ import pytest
 
 from gates import llm_claims
 from gates.adapters.agentlab import REPORT_GATE_INSTRUCTIONS, make_report_context
-from gates.gate3 import LIMITATIONS_TOKEN, RESULT_TOKEN, Gate3Config, run_gate3
+from gates.gate3 import LIMITATIONS_TOKEN, RESULT_TOKEN, SETTING_TOKEN, Gate3Config, run_gate3
 from gates.report import render_feedback
 from gates.schema import Severity, Verdict
 
@@ -262,8 +262,16 @@ def test_the_writer_prompt_names_the_tokens_the_gate_reads():
     """The prompt and the gate cannot drift apart: each example in it is a token
     the gate's own pattern matches."""
     assert RESULT_TOKEN.search(REPORT_GATE_INSTRUCTIONS)
+    assert SETTING_TOKEN.search(REPORT_GATE_INSTRUCTIONS)
     assert LIMITATIONS_TOKEN.search(REPORT_GATE_INSTRUCTIONS)
     assert "rejected" in REPORT_GATE_INSTRUCTIONS
+
+
+def test_the_engineer_prompt_names_record_setting():
+    """D75 moves configured values to record_setting; the engineer must be told."""
+    from gates.pipeline import MLE_GATE_INSTRUCTIONS
+
+    assert 'record_setting("config.lr", lr)' in MLE_GATE_INSTRUCTIONS
 
 
 def test_a_fix_citing_a_paper_nobody_retrieved_is_dropped_whole(tmp_path):

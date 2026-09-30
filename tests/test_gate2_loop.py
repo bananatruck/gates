@@ -387,4 +387,4 @@ def test_the_outcome_names_the_run_it_reviewed(tmp_path):
 
 def test_a_proceeded_run_cites_the_registry_it_declared(played):
     registry = played["divergence-exhausts"].registry
-    assert registry["values"]["config.lr"]["value"] == 0.01
+    assert registry["settings"]["config.lr"]["value"] == 0.01

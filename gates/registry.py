@@ -108,6 +108,26 @@ def build_registry(report: GateReport, *, task_ref: str | None = None) -> dict[s
         "task_ref_sha256": task_hash,
         "run": run,
         "values": values,
+        # What record_setting declared. Citable as \setting{key}, never as a
+        # result, and outside every claim chain: a setting is not a finding.
+        "settings": {
+            key: {
+                "trace_id": setting.trace_id,
+                "value": setting.value,
+                "unit": setting.unit,
+                "type": type(setting.value).__name__,
+                "provenance": {
+                    "run_id": run["run_id"],
+                    "code_sha256": parent_hash,
+                    "lineno": setting.lineno,
+                    "source_line": setting.source_line,
+                    "arg_kind": setting.arg_kind,
+                    "used_by_run": setting.used_by_run,
+                    "call_count": setting.call_count,
+                },
+            }
+            for key, setting in (execution.settings if execution else {}).items()
+        },
         "chain_integrity": _integrity(values),
     }
 
@@ -133,6 +153,13 @@ def citable_values(registry: dict[str, Any]) -> dict[str, Any]:
     if not registry.get("citable"):
         return {}
     return {k: v["value"] for k, v in (registry.get("values") or {}).items()}
+
+
+def citable_settings(registry: dict[str, Any]) -> dict[str, Any]:
+    """The settings a manuscript may cite as ``\\setting{key}``: none, unless the gate passed."""
+    if not registry.get("citable"):
+        return {}
+    return {k: v["value"] for k, v in (registry.get("settings") or {}).items()}
 
 
 def resolve_trace(registry: dict[str, Any], trace_id: str) -> dict[str, Any] | None:

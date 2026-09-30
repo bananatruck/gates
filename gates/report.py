@@ -512,7 +512,8 @@ _FIXES = {
         "Add a record_result call for each missing key listed above."
     ),
     "results.contract_not_shadowed": (
-        "Delete your own definition of record_result / record_metadata. They "
+        "Delete your own definition of record_result / record_setting / "
+        "record_metadata. They "
         "are already available in your namespace. Values passed to a function "
         "you defined yourself are printed, not recorded, and the paper cannot "
         "cite them."
@@ -521,6 +522,14 @@ _FIXES = {
         "Pass the variable holding the measured value, not a number you typed. "
         "record_result(\"k\", test_acc) is valid; record_result(\"k\", 0.816) "
         "is not."
+    ),
+    "results.values_traced": (
+        "A recorded result resolves to a number typed into the source, so the "
+        "run never measured it. Compute it from the data and record the "
+        "variable that holds the measurement. If the value is something the run "
+        "was configured with - a learning rate, a batch size, a sweep's lambda - "
+        "record it with record_setting(\"<key>\", <value>) instead; a setting "
+        "is cited as \\setting{<key>}, never as a result."
     ),
     "results.values_finite": (
         "A metric is NaN or infinite. Check for division by zero, an empty "
@@ -551,9 +560,10 @@ _FIXES = {
     ),
     "coherence.method_traceable": (
         "The plan declared something the run cannot be checked against. Record "
-        "the value the run actually used, passing the variable rather than "
-        "retyping the number: record_result(\"config.lr\", lr) is evidence, "
-        "record_result(\"config.lr\", 0.001) is the same claim twice."
+        "the value the run actually used with record_setting, passing the "
+        "variable the computation reads rather than retyping the number: "
+        "record_setting(\"config.lr\", lr) is evidence, "
+        "record_setting(\"config.lr\", 0.001) is the same claim twice."
     ),
     "coherence.reference_interval": (
         "A result disagrees with every comparable number in the retrieved "

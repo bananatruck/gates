@@ -146,7 +146,8 @@ def test_a_results_section_that_cites_nothing_is_sent_back(played):
     assert outcome.outcome == "pass"
     assert [turn.passed for turn in outcome.turns] == [False, True]
     assert {c.id for c in first.report.failed_checks()} == {"style.claim_sections_bound"}
-    assert "recorded: config.epochs, config.lr, exp1.acc" in first.feedback
+    # config.lr and config.epochs are settings since D75, and a setting binds no results section.
+    assert "recorded: exp1.acc" in first.feedback
 
 
 def test_a_limitation_gate_2_declared_must_reach_the_paper(played):

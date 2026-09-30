@@ -31,7 +31,7 @@ Returning `None` means the paper does not exist, which is a different answer, an
 
 ## Wire it
 
-1. **Prompt.** Add `REPORT_GATE_INSTRUCTIONS` from `gates/pipeline.py` to the writer's notes. It asks for `\result{key}` tokens in place of typed numbers, and `\limitations{}` where the paper discusses its limitations. The renderer substitutes both. Below level 3 the host's writer runs without it, because the tokens are Gate 3's treatment.
+1. **Prompt.** Add `REPORT_GATE_INSTRUCTIONS` from `gates/pipeline.py` to the writer's notes. It asks for `\result{key}` tokens in place of typed results, `\setting{key}` for a value the run recorded with `record_setting` (D75), and `\limitations{}` where the paper discusses its limitations. The renderer substitutes all three. Below level 3 the host's writer runs without it, because the tokens are Gate 3's treatment.
 2. **Context.** Build it with your adapter's `make_report_context(...)`.
 3. **Call site.** When `gate_level() >= 3`: `written = report_loop(ctx, write, registry=outcome.registry, declared=outcome.declared, retrieved=...)`.
 4. **`write(feedback)`** returns the next manuscript with its tokens intact, or `None` to stop.

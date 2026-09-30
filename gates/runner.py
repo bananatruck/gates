@@ -186,6 +186,8 @@ def run_experiment(
     _load_results(results_path, record)
     for key, metric in record.metrics.items():
         metric.trace_id = make_trace_id(run_id, key, metric.lineno)
+    for key, setting in record.settings.items():
+        setting.trace_id = make_trace_id(run_id, f"setting:{key}", setting.lineno)
     return record
 
 
@@ -301,17 +303,18 @@ def _load_results(results_path: Path, record: ExecutionRecord) -> None:
         record.harness_error = f"results.json is unreadable: {exc}"
         return
 
-    for key, raw in (payload.get("metrics") or {}).items():
-        record.metrics[key] = MetricRecord(
-            key=raw.get("key", key),
-            value=raw.get("value"),
-            unit=raw.get("unit"),
-            lineno=raw.get("lineno"),
-            source_line=raw.get("source_line", ""),
-            call_count=raw.get("call_count", 1),
-            observations=list(raw.get("observations") or []),
-            observations_truncated=bool(raw.get("observations_truncated")),
-        )
+    for section, store in (("metrics", record.metrics), ("settings", record.settings)):
+        for key, raw in (payload.get(section) or {}).items():
+            store[key] = MetricRecord(
+                key=raw.get("key", key),
+                value=raw.get("value"),
+                unit=raw.get("unit"),
+                lineno=raw.get("lineno"),
+                source_line=raw.get("source_line", ""),
+                call_count=raw.get("call_count", 1),
+                observations=list(raw.get("observations") or []),
+                observations_truncated=bool(raw.get("observations_truncated")),
+            )
 
     record.code_sha256 = payload.get("code_sha256")
     record.metadata = payload.get("metadata") or {}

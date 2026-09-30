@@ -73,10 +73,6 @@ _MD_HEADING = re.compile(r"^#{1,2}\s+(.+?)\s*#*\s*$")
 class Claim:
     value: float
     context: str
-    #: The numeral as the manuscript spells it, with any sign or power of ten
-    #: around the digits, so ``0.5``, ``0.50``, ``-0.5`` and ``0.5e-3`` differ.
-    #: Required: a default spelling would read as a plain numeral with no places.
-    text: str
     status: str = "unsourced"
     source: str = ""
 
@@ -166,8 +162,7 @@ def extract_claims(paper_text: str) -> list[Claim]:
         if not any(s in section for s in CLAIM_SECTIONS):
             continue
         line = CITATION.sub(" ", line)
-        for match in NUMBER.finditer(line):
-            token = match.group()
+        for token in NUMBER.findall(line):
             if not is_claim(token):
                 continue
             value = float(token)
@@ -175,36 +170,8 @@ def extract_claims(paper_text: str) -> list[Claim]:
             if (token, context) in seen:
                 continue
             seen.add((token, context))
-            claims.append(Claim(value=value, context=context, text=spelled(line, match)))
+            claims.append(Claim(value=value, context=context))
     return claims
-
-
-#: A sign directly before a numeral, unless the character before the sign is
-#: part of a word or number: the hyphen in ``0.1-0.5`` joins a range.
-_SIGN = re.compile(r"(?:^|(?<=[^\w.]))[-+\u2212]$")
-
-#: LaTeX or plain spacing between a numeral and its power of ten: ``\,``, ``~``.
-_GAP = r"(?:\s|~|\\[,;:! ])*"
-
-#: A power of ten directly after a numeral: ``e-3``, ``E+2``, ``\times10^{-3}``,
-#: ``\,\times 10^{3}``, ``× 10^3``.
-_EXPONENT = re.compile(
-    r"[eE][-+\u2212]?\d"
-    rf"|{_GAP}(?:\\times|\\cdot|\u00d7|\u22c5){_GAP}\{{?{_GAP}10{_GAP}\}}?{_GAP}\^"
-)
-
-
-def spelled(line: str, match: re.Match) -> str:
-    """The numeral :data:`NUMBER` matched, with the sign and power of ten around it.
-
-    :data:`NUMBER` reads only the digits, so ``-0.5`` and ``0.5e-3`` both yield
-    ``0.5``. A check that compares spellings needs what the writer typed.
-    """
-    sign = _SIGN.search(line, 0, match.start())
-    start = sign.start() if sign else match.start()
-    power = _EXPONENT.match(line, match.end())
-    end = power.end() if power else match.end()
-    return line[start:end]
 
 
 def context_of(line: str, token: str) -> str:

@@ -345,8 +345,11 @@ def run_gate2(
 
     # Tier B — only with a declared plan. Deterministic once the plan exists;
     # the judgement was made by whoever declared the fields, at wiring time.
+    # A plan declares settings, so a field resolves against what record_setting
+    # declared as well as against the results (D75); a key is in one or the other.
+    declared = {**(registry.get("settings") or {}), **values}
     for build in (_check_method_conformance, _check_method_traceable):
-        emitted = build(values, config)
+        emitted = build(declared, config)
         if emitted is not None:
             checks.append(emitted)
 
