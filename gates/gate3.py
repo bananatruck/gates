@@ -356,6 +356,10 @@ def _check_token_adjacency(source: str) -> CheckResult | None:
         before = source[token.start() - 1 : token.start()]
         after = source[token.end() :]
         before_digits = re.search(rf"[0-9]+{_TEX_GLUE}$", prefix)
+        # limit: only digits, signs and powers of ten touching the token are
+        # read. A prefix factor (2\times\result{x}), a digit inside a group
+        # (\result{x}\text{9}, \result{x}$^{2}$) or after a symbol
+        # (\result{x}\%9) passes; following TeX groups would catch them.
         after_digits = re.match(rf"{_TEX_GLUE}\.?[0-9]+", after)
         sign = _TYPED_SIGN_BEFORE_TOKEN.search(prefix)
         if sign:
