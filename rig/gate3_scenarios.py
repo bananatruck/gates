@@ -57,8 +57,8 @@ WITH_LIMITATIONS = CLEAN + "\n\\section{Discussion}\n\\limitations{}\n"
 WITH_DISCUSSION = CLEAN + "\n\\section{Discussion}\nThe label budget matters less than expected.\n"
 
 #: A figure reference with no \label to resolve against, and the fix. The
-#: reference sits on its own line because prose.SKIP_LINE drops any line
-#: holding \ref, and the accuracy above it must stay visible to the scanner.
+#: reference sits on its own line, which predates D76: prose.SKIP_LINE dropped
+#: any line holding \ref until then, and the accuracy had to stay visible.
 DANGLING_REF = CLEAN + "\nAccuracy is plotted in Figure \\ref{fig:acc}.\n"
 LABELLED_REF = DANGLING_REF + "\\begin{figure}\\label{fig:acc}\\end{figure}\n"
 

@@ -40,17 +40,20 @@ def test_the_measured_totals_are_the_ones_the_paper_will_quote(results):
     missed = sum(len(results[a].missed) for a in ARMS)
     false_positives = sum(len(results[a].false_positives) for a in ARMS)
 
-    assert (claims, detected, missed) == (49, 34, 15)
-    assert false_positives == 6
-    assert results["gated"].claims == 39 and results["gated"].detected == 28
-    assert results["ungated"].claims == 10 and results["ungated"].detected == 6
+    # D48 measured 34 of 49 with 6 false positives while a \ref skipped its
+    # whole line; D76 masks the reference instead and recovers all 12 of those.
+    assert (claims, detected, missed) == (49, 46, 3)
+    assert false_positives == 8
+    assert results["gated"].claims == 39 and results["gated"].detected == 36
+    assert results["ungated"].claims == 10 and results["ungated"].detected == 10
 
 
-def test_most_misses_have_a_single_cause(results):
-    """12 of 15. The headline is not the rate, it is that one line-level rule
-    accounts for four fifths of everything the scanner cannot see."""
+def test_no_miss_is_a_skipped_line_any_more(results):
+    """D48: 12 of 15 misses came from one line-level rule. D76 removed the rule
+    for references and citations, so what is left is the scanner's by design:
+    small integers and a value repeated on one line."""
     causes = [f.cause for a in ARMS for f in results[a].missed]
-    assert causes.count("skipped_line") == 12
+    assert causes.count("skipped_line") == 0
     assert causes.count("small_integer") == 2
     assert causes.count("duplicate_context") == 1
 

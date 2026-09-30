@@ -652,7 +652,7 @@ State as of 2026-09-26.
 | 4 | Fix `run_experiments.py --yaml-location` and re-run the archive for a real n | CLI fixed. The re-run is replaced by the benchmark evaluation (D60) |
 | 5 | The channel-fidelity experiment: fabrication rate against `MAX_LEN` | Detector arm measured offline by `rig/reward.py`. Writer arm not scheduled |
 | 6 | Gate 2 | Built: tiers A and B, and the loop through Gate 1. Evaluated offline: tier A 27/27 and 0/18, tier B 29/29 |
-| 7 | Gate 3 | Built: `report.*` with claim chains, `source.*`, `style.*`, the loop and the model layer. Scanner miss measured, 34 of 49 |
+| 7 | Gate 3 | Built: `report.*` with claim chains, `source.*`, `style.*`, the loop and the model layer. Scanner miss measured, 34 of 49 (D48), 46 of 49 after per-token reference masking (D76) |
 | 8 | `GATES_LEVEL`, the shared loops in `gates/pipeline.py`, per-gate install skills | done (D58, D59) |
 | 9 | The benchmark evaluation: CORE-Bench, MLR-Bench and BadScientist at four levels (D60) | Planned in `paper/PLAN.md`. Its tooling is built (`paper/collect.py`, `rig/posthoc_audit.py`, `rig/stats.py`); the host's four-level runner is next, then the pilot |
 

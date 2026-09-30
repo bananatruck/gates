@@ -102,6 +102,13 @@ FALSE_POSITIVES: dict[str, dict[int, tuple[tuple[str, str], ...]]] = {
             ("0.99", "decision threshold fixed before the run"),
             ("0.95", "decision threshold fixed before the run"),
         ),
+        # The same thresholds restated beside Section~\ref{sec:setup}; visible
+        # once D76 masked the reference instead of skipping the line. Added
+        # 09-29 by the same rule as line 305, pending Kesh's review (D37).
+        320: (
+            ("0.99", "decision threshold fixed before the run"),
+            ("0.95", "decision threshold fixed before the run"),
+        ),
         322: (("1500", "step count the paper specifies"),),
         326: (("1500", "step count the paper specifies"),),
     },
@@ -121,6 +128,8 @@ MISS_CAUSE: dict[tuple[str, int], str] = {
     ("gated", 254): "small_integer",     # "more than 91\%"
     ("ungated", 280): "skipped_line",    # "Table~\ref{tab:observed-loss}"
 }
+# Since D76 every skipped_line entry above is detected: a reference is masked
+# per token, not the whole line. The entries stay as D48's record of the causes.
 
 #: What each cause is, for the readout. ``skipped_line`` and ``small_integer``
 #: are the readout's; ``duplicate_context`` is not, and is the one this

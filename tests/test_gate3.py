@@ -34,7 +34,7 @@ from gates.gate3 import (
     run_gate3,
 )
 from gates.registry import CHAIN_LINKS, CLAIM_LINK, build_registry, citable_settings, citable_values
-from gates.prose import claim_sections
+from gates.prose import claim_sections, extract_claims
 from gates.report import render_feedback
 from gates.schema import PaperRecord, Severity, Verdict
 from gates.setup import defaults
@@ -1305,4 +1305,38 @@ def test_the_archived_manuscript_types_its_own_numbers(tmp_path):
     assert literals.evidence["sections_scanned"] == [
         "abstract", "results", "discussion"
     ]
-    assert len(literals.evidence["literals"]) == 29
+    # 29 while any \ref skipped its whole line; 37 once the reference is masked (D76).
+    assert len(literals.evidence["literals"]) == 37
+
+
+# --------------------------------------------------------------------------- #
+# the scanner masks references per token (D76)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    "line, found",
+    [
+        ("As Table~\\ref{tab:2} shows, accuracy reaches 0.91.", [0.91]),
+        ("Accuracy reaches 0.91 \\citep[p.~12]{smith2020}.", [0.91]),
+        ("Loss falls to 1.25 (Figure~\\ref{fig:1.5}, Eq.~\\eqref{eq:2024}).", [1.25]),
+        ("\\label{tab:3.14}Accuracy is 0.88.", [0.88]),
+        ("See \\autoref{sec:4.2} and \\cite{a2019,b2020}.", []),
+    ],
+)
+def test_a_reference_is_masked_and_the_rest_of_its_line_is_read(line, found):
+    """D48: 12 of G3-M4's 15 misses sat on a line carrying a \\ref."""
+    claims = extract_claims(f"\\section{{Results}}\n{line}\n")
+    assert [c.value for c in claims] == found
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "\\includegraphics[width=0.85\\linewidth]{fig.png}",
+        "\\subsection{Results at 0.5}",
+        "\\usepackage[margin=1.25in]{geometry}",
+    ],
+)
+def test_a_structural_line_is_still_skipped_whole(line):
+    assert extract_claims(f"\\section{{Results}}\n{line}\n") == []

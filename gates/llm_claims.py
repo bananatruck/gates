@@ -2,8 +2,8 @@
 
 Gate 1's log scan reads the log lines its patterns did not flag. This reads the
 findings prose the number scanner did not flag. ``prose.NUMBER`` needs a
-decimal point or four digits, ``SKIP_LINE`` drops whole ``\\cite`` lines, and
-``\\begin{abstract}`` is not a heading, so all of these pass it clean:
+decimal point or four digits, and ``\\begin{abstract}`` is not a heading, so
+all of these pass it clean:
 
     accuracy improves by 9 points
     eighty-one percent of the test nodes
