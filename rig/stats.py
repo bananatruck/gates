@@ -103,6 +103,27 @@ def non_inferior(ci_low: float, margin: float) -> bool:
     return ci_low > -margin
 
 
+def cohen_kappa(a: Sequence[bool], b: Sequence[bool]) -> float | None:
+    """Cohen's kappa for two raters' yes/no labels on the same items.
+
+    ``(po - pe) / (1 - pe)``: observed agreement over what the raters' own
+    base rates would give by chance. ``None`` when chance agreement is 1 (both
+    raters gave every item one label), where kappa is undefined. Unstable on a
+    handful of items, so a report shows the raw agreement beside it.
+    """
+    if len(a) != len(b):
+        raise ValueError("both raters must label the same items")
+    n = len(a)
+    if n == 0:
+        return None
+    po = sum(x == y for x, y in zip(a, b, strict=True)) / n
+    pa, pb = sum(a) / n, sum(b) / n
+    pe = pa * pb + (1 - pa) * (1 - pb)
+    if pe == 1:
+        return None
+    return (po - pe) / (1 - pe)
+
+
 def mcnemar_pairs_needed(
     p_first_only: float,
     p_second_only: float,

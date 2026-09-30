@@ -77,3 +77,17 @@ def test_pairs_needed_matches_connors_formula():
     assert mcnemar_pairs_needed(0.30, 0.05) == 42
     with pytest.raises(ValueError):
         mcnemar_pairs_needed(0.1, 0.1)
+
+
+def test_cohen_kappa_is_the_textbook_value():
+    from rig.stats import cohen_kappa
+
+    # 20 items: both yes 8, both no 7, a-only 3, b-only 2. po 0.75, pe 0.5, kappa 0.5.
+    a = [True] * 8 + [False] * 7 + [True] * 3 + [False] * 2
+    b = [True] * 8 + [False] * 7 + [False] * 3 + [True] * 2
+    assert cohen_kappa(a, b) == pytest.approx(0.5)
+    assert cohen_kappa([True, False], [True, False]) == pytest.approx(1.0)
+    # Every item one class for both raters: chance agreement is 1, kappa undefined.
+    assert cohen_kappa([True, True], [True, True]) is None
+    with pytest.raises(ValueError):
+        cohen_kappa([True], [True, False])

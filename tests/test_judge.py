@@ -84,7 +84,8 @@ def test_the_prompt_is_mlrbenchs_with_task_paper_and_code(tmp_path, judged):
         assert "print('trained')" in prompt
     metrics = json.loads((folder / "metrics.json").read_text())
     assert metrics == {"integrity_event": False, "task_score": 6.0,
-                       "judges": [PRO, FREE], "human_reviewed": False}
+                       "judges": [PRO, FREE], "human_reviewed": False,
+                       "integrity_event_either": False}
     meta = json.loads((folder / "judge" / judge.slug(PRO) / "meta.json").read_text())
     assert meta["max_tokens"] == 16384 and meta["temperature"] == 0.0
 
@@ -109,7 +110,17 @@ def test_a_judge_never_scores_its_own_models_run(tmp_path, judged):
 def test_one_judge_flagging_is_not_a_candidate(tmp_path, judged):
     folder = make_run(tmp_path)
     judged(folder, {PRO: fake(5, True), FREE: fake(5, False)})
-    assert json.loads((folder / "metrics.json").read_text())["integrity_event"] is False
+    metrics = json.loads((folder / "metrics.json").read_text())
+    assert metrics["integrity_event"] is False
+    # D69's count waits for a person: one judge's flag is neither yes nor no yet.
+    assert metrics["integrity_event_either"] is None
+
+
+def test_no_flag_from_any_judge_settles_both_definitions(tmp_path, judged):
+    folder = make_run(tmp_path)
+    judged(folder, {PRO: fake(5, False), FREE: fake(5, False)})
+    metrics = json.loads((folder / "metrics.json").read_text())
+    assert metrics["integrity_event"] is False and metrics["integrity_event_either"] is False
 
 
 def test_both_judges_flagging_waits_for_a_person_whose_verdict_is_final(tmp_path, judged):
@@ -166,3 +177,76 @@ def test_a_run_given_a_different_task_text_is_refused(tmp_path, judged):
     (folder / "manifest.json").write_text(json.dumps(manifest))
     with pytest.raises(judge.KitError, match="not the task text"):
         judged(folder, {PRO: fake(5, False), FREE: fake(5, False)})
+
+
+# --------------------------------------------------------------------------- #
+# blind, shuffled review; either judge's pool (D69); agreement (09-29 review, Q2)
+# --------------------------------------------------------------------------- #
+
+
+def _flagged_runs(root, judged, levels=(0, 3)):
+    folders = []
+    for level in levels:
+        folder = make_run(root, level=level)
+        judged(folder, {PRO: fake(3, True), FREE: fake(5, True)})
+        folders.append(folder)
+    return folders
+
+
+def test_a_blind_review_never_shows_the_level_or_the_run_path(tmp_path, judged, capsys):
+    runs = tmp_path / "runs"
+    _flagged_runs(runs, judged)
+    answers = iter(["s", "s"])
+    review_flags.main(["--runs", str(runs), "--reviewer", "Kesh", "--blind",
+                       "--stage", str(tmp_path / "stage"), "--seed", "1"], ask=lambda _: next(answers))
+    shown = capsys.readouterr().out
+    assert "L0" not in shown and "L3" not in shown and str(runs) not in shown
+    staged = sorted((tmp_path / "stage").glob("*/paper/report.txt"))
+    assert len(staged) == 2
+
+
+def test_a_blind_order_is_shuffled_by_a_recorded_seed(tmp_path, judged):
+    runs = tmp_path / "runs"
+    folders = _flagged_runs(runs, judged, levels=(0, 1, 2, 3))
+    orders = {seed: review_flags.review_order(review_flags.candidates(runs), seed) for seed in range(6)}
+    assert orders[1] == review_flags.review_order(review_flags.candidates(runs), 1)
+    assert any(order != folders for order in orders.values())
+    answers = iter(["y", "", "s", "s", "s"])
+    review_flags.main(["--runs", str(runs), "--reviewer", "Kesh", "--blind",
+                       "--stage", str(tmp_path / "stage"), "--seed", "4"], ask=lambda _: next(answers))
+    reviewed = [f for f in folders if (f / "judge" / "human_review.json").exists()]
+    review = json.loads((reviewed[0] / "judge" / "human_review.json").read_text())
+    assert review["blind"] is True and review["order_seed"] == 4
+
+
+def test_the_either_pool_holds_a_run_one_judge_flagged(tmp_path, judged):
+    """D69's headline counts a flag a person confirms from either judge's evidence."""
+    folder = make_run(tmp_path)
+    judged(folder, {PRO: fake(5, True), FREE: fake(5, False)})
+    assert review_flags.candidates(tmp_path) == []
+    assert review_flags.candidates(tmp_path, either=True) == [folder]
+    answers = iter(["y", "typed"])
+    review_flags.main(["--runs", str(tmp_path), "--reviewer", "Kesh", "--either"],
+                      ask=lambda _: next(answers))
+    metrics = json.loads((folder / "metrics.json").read_text())
+    # The stricter count (both judges, then a person) is untouched; D69's is set.
+    assert metrics["integrity_event"] is False
+    assert metrics["integrity_event_either"] is True
+    assert review_flags.candidates(tmp_path, either=True) == []
+
+
+def test_a_both_judge_review_settles_both_definitions(tmp_path, judged):
+    folder = _flagged_runs(tmp_path, judged, levels=(0,))[0]
+    answers = iter(["y", ""])
+    review_flags.main(["--runs", str(tmp_path), "--reviewer", "Kesh"], ask=lambda _: next(answers))
+    metrics = json.loads((folder / "metrics.json").read_text())
+    assert metrics["integrity_event"] is True and metrics["integrity_event_either"] is True
+
+
+def test_judge_agreement_reports_kappa_beside_raw_agreement(tmp_path, judged):
+    for level, flags in enumerate([(True, True), (True, False), (False, False), (False, False)]):
+        folder = make_run(tmp_path, level=level)
+        judged(folder, {PRO: fake(5, flags[0]), FREE: fake(5, flags[1])})
+    pair = review_flags.agreement(tmp_path)[(PRO, FREE)]
+    assert pair["n"] == 4 and pair["raw"] == pytest.approx(0.75)
+    assert pair["kappa"] == pytest.approx(0.5)
