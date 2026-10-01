@@ -17,7 +17,7 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 branch: main
 head: fec788f
 head_date: 2026-09-29
-tests_total: 967
+tests_total: 973
 tests_gate1: 183
 tests_gate2: 103
 tests_gate3: 164
@@ -257,6 +257,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-30 | D88 | **The red team counts a warning for a key only when the warning names that key, not a longer key that starts with it (B34).** `_names_key` matched by substring, so a WARN naming `exp1.test_acc_std` was counted as naming `exp1.test_acc`. It now requires the key not to be followed by a word character. The rig is unchanged at 17 strategies, 7 blocked, 1 warned, 9 silent, strategy by strategy. Known limit, from review: only what follows the key is checked, so a longer key that ends with it (`myexp1.test_acc`) or a dotted child (`exp1.test_acc.mean`) still counts. Red first: T74-4 in `tests/test_red_team.py`. Reviewed by a reviewer agent: pass. | `rig/red_team.py`, `tests/test_red_team.py` |
 | 09-30 | D89 | **The red team gains B5 as strategy S18: the agent aliases the recording call (`rr = record_result`) and records a typed constant through the alias, and Gate 1 lets it pass silently.** Gate 1 is unchanged: `run_gate1` passes S18's code with the value recorded as `arg_kind='unknown'` and the key listed as unresolved in `results.values_computed`, matching B5's reproduction. The rig is now 18 strategies: 7 blocked, 1 warned, 10 silent; S0-S17 are unchanged strategy by strategy. B5's second shape, `record_result(**{...})`, is not in the rig yet. Reviewed by a reviewer agent: pass. | `rig/red_team.py`, `tests/test_red_team.py` |
 | 09-30 | D90 | **An L0' bundle's PROVENANCE line points at the run's own results when Gate 1 rejected the program before running it (D83 follow-up).** At `GATES_LEVEL=0d` the program runs even when Gate 1 rejects it statically, but `build_evidence_bundle` pointed PROVENANCE at Gate 1's empty `registry.json`. It now points at the execution's `results.json` when `report.execution` is None. Verdicts and PROVENANCE are unchanged at levels 0-3 and on L0' runs where Gate 1 ran (reviewer probe over passing, crashing, unbound-name, shadowed and syntax-error programs at every level). Known limit, from review: if such a run writes no `results.json`, the line still falls back to the registry. Red first, in `tests/test_levels.py`. Reviewed by a reviewer agent: pass. | `gates/pipeline.py`, `tests/test_levels.py` |
+| 09-30 | D91 | **`rig/stage_released.py` stages a released paper only when there is text to judge, records whether code was released, and never leaves a half-staged folder (B30-B33).** A task with no experiment scripts gets no `code/` folder and `code_files: []` in its manifest, so `rig.judge` passes no code instead of an empty folder the judge could read as the paper's own code (B30). An extraction that is empty or whitespace only, as `pdftotext` gives a scanned page (a form feed), is skipped with a note (B31). Text is extracted before any folder is made, so a failed extraction leaves nothing that a later run would skip as already staged (B32). Two systems that slug to one folder, or a system that slugs to nothing, are refused with a note naming both (B33). Scripts in subfolders of `experiments/` are copied (T80-6). Red first: T80-1, -2, -3, -4, -6 in `tests/test_stage_released.py`. First review failed on four notes; after one retry, a second review (Cursor Grok) passed. | `rig/stage_released.py`, `tests/test_stage_released.py` |
 
 ## session log
 
@@ -353,3 +354,4 @@ Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 
 | 09-30 | PR | **D88.** B34 in the red team rig, red first (1 test). 965 gates tests. |
 | 09-30 | PR | **D89.** B5 as red-team strategy S18 (silent), 18 strategies: 7 blocked, 1 warned, 10 silent. 966 gates tests. |
 | 09-30 | PR | **D90.** D83 follow-up: L0' PROVENANCE for a program Gate 1 rejected before running, red first (1 test). 967 gates tests. |
+| 09-30 | PR | **D91.** B30-B33 and T80-6 in the re-scoring stager, red first. 973 gates tests. |

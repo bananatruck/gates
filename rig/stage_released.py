@@ -1,4 +1,4 @@
-"""Lay released papers out as run folders, so rig.judge re-scores them (D70 item 3).
+"""Lay released papers out as run folders, and rig.judge re-scores them (D70 item 3).
 
     python -m rig.stage_released --papers <mlrbench>/ai_scientist_v2_papers/o4-mini \\
         --tasks <kit>/mlrbench/tasks --system "AI Scientist v2" --model o4-mini \\
@@ -8,17 +8,25 @@ Then, on machine A, ``python -m rig.judge --runs ~/gates-runs/runs-rescore ...``
 exactly as for our own runs, so the released papers meet D63's judges and
 MLR-Bench's prompts with nothing else changed.
 
-Each task folder holds ``<task>.pdf`` and ``experiments/*.py``, as MLR-Bench
-released AI Scientist v2's papers at ``f728d57``. The stager writes, per task,
-``<out>/MLR-Bench/<task>/<system>/released/seed0/`` with:
+Each task folder holds ``<task>.pdf`` and optionally ``experiments/*.py``, as
+MLR-Bench released AI Scientist v2's papers at ``f728d57``. The stager writes,
+per task, ``<out>/MLR-Bench/<task>/<system-slug>/released/seed0/`` with:
 
 ``manifest.json``
     task, model, ``phase: rescore``, the task text's hash (which ``rig.judge``
-    checks), the PDF's hash, and the text extractor and its version;
+    checks), the PDF's hash, the text extractor and its version, and
+    ``code_files`` (relative paths under ``experiments/``, possibly empty);
 ``paper/report.txt``
     the PDF's text; ``paper/source.pdf`` beside it;
 ``code/``
-    the released experiment scripts.
+    only when ``code_files`` is non-empty: the released experiment scripts.
+
+A task with no task text or no PDF is named and skipped. Whitespace-only PDF
+text (including a lone form feed from ``pdftotext`` on a scan) is treated as
+empty extraction and skipped with nothing written. Failed extraction is skipped
+the same way. A system name that slugs to an empty path is refused. Two
+different systems that share a slug refuse the second with both names in the
+note. A folder already staged is never overwritten.
 
 One difference from MLR-Bench, stated rather than hidden: its judge reads a
 PDF through ``pymupdf4llm``'s Markdown, which the host's environment does not
@@ -27,8 +35,7 @@ carry and ``rig.judge`` stubs out. The text here comes from poppler's
 one on MLR-Bench's extraction. ``paper/collect.py`` skips ``phase: rescore``:
 a released paper is never a level of ours.
 
-A task with no task text or no PDF is named and skipped; a folder already
-staged is never overwritten. Stdlib only, no model.
+Stdlib only, no model.
 """
 
 from __future__ import annotations
@@ -65,6 +72,30 @@ def _slug(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "-", name).strip("-")
 
 
+def _experiment_scripts(source: Path) -> list[Path]:
+    root = source / "experiments"
+    if not root.is_dir():
+        return []
+    return sorted(p for p in root.rglob("*.py") if p.is_file())
+
+
+def _run_folder(out: Path, task: str, system: str) -> Path:
+    return out / "MLR-Bench" / task / _slug(system) / "released" / "seed0"
+
+
+def _folder_skip_note(folder: Path, task: str, system: str) -> str:
+    manifest_path = folder / "manifest.json"
+    if manifest_path.is_file():
+        existing = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if existing.get("system") == system:
+            return f"{task}: already staged at {folder}"
+        other = existing.get("system", "?")
+        slug = _slug(system)
+        return (f"{task}: slug clash between {other!r} and {system!r} "
+                f"(both map to {slug}) at {folder}")
+    return f"{task}: already staged at {folder}"
+
+
 def stage_all(
     papers: Path,
     *,
@@ -77,6 +108,7 @@ def stage_all(
 ) -> tuple[list[Path], list[str]]:
     """Stage every task folder under ``papers``. Returns the folders and a note per skip."""
     extractor = extractor or default_extractor()
+    slug = _slug(system)
     staged: list[Path] = []
     skipped: list[str] = []
     for source in sorted(p for p in papers.iterdir() if p.is_dir()):
@@ -89,16 +121,32 @@ def stage_all(
         if not pdf.is_file():
             skipped.append(f"{task}: no pdf at {pdf}")
             continue
-        folder = out / "MLR-Bench" / task / _slug(system) / "released" / "seed0"
-        if folder.exists():
-            skipped.append(f"{task}: already staged at {folder}")
+        if not slug:
+            skipped.append(f"{task}: system {system!r} slugs to an empty path")
             continue
+        folder = _run_folder(out, task, system)
+        if folder.exists():
+            skipped.append(_folder_skip_note(folder, task, system))
+            continue
+        try:
+            report = extract(pdf)
+        except Exception as exc:
+            skipped.append(f"{task}: extraction failed ({exc})")
+            continue
+        if not report.strip():
+            skipped.append(f"{task}: empty extraction from {pdf}")
+            continue
+        scripts = _experiment_scripts(source)
+        code_files = [str(p.relative_to(source / "experiments")) for p in scripts]
         (folder / "paper").mkdir(parents=True)
-        (folder / "code").mkdir()
         shutil.copyfile(pdf, folder / "paper" / "source.pdf")
-        (folder / "paper" / "report.txt").write_text(extract(pdf), encoding="utf-8")
-        for script in sorted((source / "experiments").glob("*.py")):
-            shutil.copyfile(script, folder / "code" / script.name)
+        (folder / "paper" / "report.txt").write_text(report, encoding="utf-8")
+        if code_files:
+            for script in scripts:
+                rel = script.relative_to(source / "experiments")
+                dest = folder / "code" / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(script, dest)
         manifest = {
             "benchmark": "MLR-Bench",
             "task": task,
@@ -111,6 +159,7 @@ def stage_all(
             "source_pdf_sha256": hashlib.sha256(pdf.read_bytes()).hexdigest(),
             "text_extractor": extractor,
             "source": str(source),
+            "code_files": code_files,
         }
         (folder / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         staged.append(folder)
