@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -104,9 +105,9 @@ def fake(answers=None, prompts=None):
     return model
 
 
-def audit(folder, models, judges=(CLAUDE,), opinions=()):
+def audit(folder, models, judges=(CLAUDE,), opinions=(), **kwargs):
     return pa.audit_run(folder, judges=list(judges), opinions=list(opinions),
-                        models=models, tasks=FIXTURE / "tasks")
+                        models=models, tasks=FIXTURE / "tasks", **kwargs)
 
 
 def out_dir(folder, judge="agent_claude_sonnet"):
@@ -178,7 +179,10 @@ def test_meta_records_judge_hashes_cli_version_and_the_review_tag(tmp_path):
         key: hashlib.sha256(text.encode()).hexdigest() for key, text in prompts}
     assert meta["template_sha256"] == {
         p.key: hashlib.sha256(p.template.encode()).hexdigest() for p in pa.PITFALLS}
-    assert set(meta["deviations"]) == {"auditor_model", "paper_format", "output_format"}
+    assert set(meta["deviations"]) == {
+        "auditor_model", "paper_format", "output_format", "truncation"}
+    assert meta["deviations"]["truncation"] == {
+        "max_chars": pa.DEFAULT_MAX_CHARS, "cut_characters": {}}
 
 
 def test_a_judge_whose_audit_exists_is_not_asked_again(tmp_path):
@@ -212,9 +216,10 @@ def test_an_unreadable_answer_is_retried_then_recorded_as_an_error_and_asked_aga
 
     healed = []
     audit(folder, {CLAUDE: fake({"metric_misuse": ("YES", "cherry-picked")}, prompts=healed)})
-    assert [key for key, _ in healed] == KEYS
+    assert [key for key, _ in healed] == ["metric_misuse"]
     again = json.loads((out_dir(folder) / "audit.json").read_text())
     assert again["pitfalls"]["metric_misuse"]["label"] == "YES"
+    assert again["pitfalls"]["data_leakage"]["label"] == "NO"
 
 
 def test_an_opinion_is_recorded_with_its_role(tmp_path):
@@ -256,6 +261,111 @@ def test_a_run_given_a_different_task_text_is_refused(tmp_path):
 
     with pytest.raises(pa.TaskTextError):
         audit(folder, {CLAUDE: fake()})
+
+
+def failing(prompt, system):
+    raise pa.AgentCLIError("cursor-agent exited 1: boom")
+
+
+def test_a_failing_opinion_cli_is_recorded_and_never_makes_the_run_incomplete(tmp_path):
+    folder = make_run(tmp_path)
+
+    outcome = audit(folder, {CLAUDE: fake(), CURSOR: failing}, opinions=[CURSOR])
+
+    assert outcome == "audited by 1 judge(s)"
+    bad = json.loads((out_dir(folder, "agent_cursor_gpt-5") / "audit.json").read_text())
+    assert list(bad["pitfalls"]) == KEYS
+    assert bad["pitfalls"]["data_leakage"] == {
+        "label": None, "error": "cursor-agent exited 1: boom"}
+    assert json.loads((out_dir(folder) / "audit.json").read_text())["pitfalls"][
+        "data_leakage"]["label"] == "NO"
+
+
+def test_a_failing_judge_leaves_the_run_incomplete_and_resume_retries_only_what_failed(
+        tmp_path):
+    folder = make_run(tmp_path)
+
+    def flaky(prompt, system):
+        if category_of(prompt) == "data_leakage":
+            return failing(prompt, system)
+        return fake()(prompt, system)
+
+    assert audit(folder, {CLAUDE: flaky}) == "incomplete: rerun to retry"
+    calls = []
+    assert audit(folder, {CLAUDE: fake(prompts=calls)}) == "audited by 1 judge(s)"
+    assert [key for key, _ in calls] == ["data_leakage"]
+
+
+def test_the_cli_goes_on_to_later_runs_after_a_failed_judge(tmp_path, capsys):
+    make_run(tmp_path / "runs", level=0)
+    later = make_run(tmp_path / "runs", level=1)
+    argv = ["--runs", str(tmp_path / "runs"), "--mlrbench", str(FIXTURE),
+            "--judge", CLAUDE, "--opinion", CURSOR]
+
+    assert pa.main(argv, model_for=lambda name: failing if name == CURSOR else fake()) == 0
+
+    assert (out_dir(later) / "audit.json").exists()
+    assert capsys.readouterr().out.count("audited by 1 judge(s)") == 2
+
+
+def test_the_budget_keeps_the_paper_whole_and_marks_every_cut(tmp_path):
+    folder = make_run(tmp_path)
+    (folder / "code" / "run_experiments.py").write_text("CODE-" + "c" * 3000)
+    (folder / "agent_log.txt").write_text("OLD-LOG" + "l" * 3000 + "NEW-LOG")
+    (folder / "gate_artifacts" / "gate1" / "attempt_01" / "stdout.txt").write_text("e" * 6000)
+    prompts = []
+    audit(folder, {CLAUDE: fake(prompts=prompts)}, max_chars=len(TASK) + 6000)
+
+    sent = dict(prompts)
+    for text in sent.values():
+        assert "accuracy 99.9" in text
+        assert len(text) <= len(TASK) + 6000
+    assert "[truncated" in sent["data_leakage"]
+    assert "NEW-LOG" not in sent["data_leakage"] or "OLD-LOG" not in sent["data_leakage"]
+    meta = json.loads((out_dir(folder) / "meta.json").read_text())
+    cut = meta["deviations"]["truncation"]
+    assert cut["max_chars"] == len(TASK) + 6000
+    assert set(cut["cut_characters"]["data_leakage"]) <= {"code", "logs"}
+    assert cut["cut_characters"]["post_hoc_selection"]["attempts"] > 0
+
+
+def test_a_cut_names_its_size_and_keeps_the_latest_attempts_and_the_log_tail(tmp_path):
+    folder = make_run(tmp_path)
+    (folder / "agent_log.txt").write_text("HEAD-LOG " + "l" * 4000 + " TAIL-LOG")
+    prompts = []
+    audit(folder, {CLAUDE: fake(prompts=prompts)}, max_chars=len(TASK) + 3000)
+    sent = dict(prompts)
+
+    assert "TAIL-LOG" in sent["data_leakage"] and "HEAD-LOG" not in sent["data_leakage"]
+    assert re.search(r"\[truncated \d+ characters\]", sent["data_leakage"])
+    assert "ATTEMPT-TWO-CODE" in sent["post_hoc_selection"]
+
+
+def test_the_cli_takes_a_max_chars_and_states_a_default(tmp_path, monkeypatch):
+    _fake_agent_clis(tmp_path, monkeypatch)
+    folder = make_run(tmp_path / "runs")
+    assert pa.DEFAULT_MAX_CHARS == 400_000
+
+    pa.main(["--runs", str(tmp_path / "runs"), "--mlrbench", str(FIXTURE),
+             "--judge", CLAUDE, "--max-chars", "9000"])
+
+    meta = json.loads((out_dir(folder) / "meta.json").read_text())
+    assert meta["deviations"]["truncation"]["max_chars"] == 9000
+
+
+def test_the_task_text_is_hashed_as_bytes(tmp_path):
+    tasks = tmp_path / "tasks"
+    tasks.mkdir()
+    crlf = b"line one\r\nline two\r\n"
+    (tasks / "iclr2025_scsl.md").write_bytes(crlf)
+    folder = make_run(tmp_path / "runs")
+    manifest = json.loads((folder / "manifest.json").read_text())
+    manifest["task_file_sha256"] = hashlib.sha256(crlf).hexdigest()
+    (folder / "manifest.json").write_text(json.dumps(manifest))
+
+    pa.audit_run(folder, judges=[CLAUDE], models={CLAUDE: fake()}, tasks=tasks)
+
+    assert (out_dir(folder) / "audit.json").exists()
 
 
 def _fake_agent_clis(tmp_path, monkeypatch):
@@ -310,7 +420,7 @@ def test_the_cli_drives_agent_clis_through_stdin_and_resumes(tmp_path, monkeypat
     meta = json.loads((audit_json.parent / "meta.json").read_text())
     assert meta["cli_version"] == "fake codex 1.2.3"
     assert meta["effort"] == "high"
-    assert "L0/seed1: audited by 2 judge(s)" in capsys.readouterr().out.replace("\\", "/")
+    assert "L0/seed1: audited by 1 judge(s)" in capsys.readouterr().out.replace("\\", "/")
 
     assert pa.main(argv) == 0
     assert len(log.read_text().splitlines()) == 10

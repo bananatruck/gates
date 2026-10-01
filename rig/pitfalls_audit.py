@@ -27,7 +27,13 @@ Where this differs from the paper, ``meta.json`` says so:
 * the paper attached the PDF; the judge here receives the text of
   ``paper/report.txt``, appended after the prompt;
 * the prompt asks for YES or NO with evidence in free text; a short output
-  format instruction is appended so the answer can be read without guessing.
+  format instruction is appended so the answer can be read without guessing;
+* the authors gave their auditor whole files. Here each prompt is held to
+  ``--max-chars`` (default 400,000, a conservative choice of ours, not a
+  documented CLI limit): the paper stays whole, then code, then the experiment
+  attempts (latest first), then logs (tail first) are fitted, and every cut is
+  marked ``[truncated N characters]``. Truncation is a further deviation from
+  the paper; the budget and what was cut per prompt are in ``meta.json``.
 
 Per run, beside the run's other judge outputs:
 
@@ -39,8 +45,11 @@ Per run, beside the run's other judge outputs:
 
 An opinion is recorded exactly like a judge and nothing reads the difference
 back into a count: ``meta.json`` carries its ``role``. A judge never audits a
-run of its own model. The tool resumes: a judge whose audit exists with no
-error is not asked again.
+run of its own model. A CLI that fails is recorded as an error for that
+prompt and the tool moves on. A run is complete only when every judge gave a
+valid answer to every prompt (an opinion's failure never matters); otherwise
+it prints ``incomplete: rerun to retry``. The tool resumes: only the answers
+that are missing or errored are asked again.
 """
 
 from __future__ import annotations
@@ -66,6 +75,10 @@ from rig.live import (
 )
 
 ATTEMPTS = 3
+# A choice, not a documented limit: no agent CLI's input limit in characters was
+# looked up for this tool. 400,000 characters is about 100,000 tokens at four
+# characters per token, well inside a 200,000-token context.
+DEFAULT_MAX_CHARS = 400_000
 SETTING = "paper plus logs plus code (Table 11, p.18)"
 OUTPUT_FORMAT = (
     "\n\nOutput format: after your analysis, end your reply with one JSON object in a "
@@ -207,7 +220,7 @@ def _block(title: str, body: str) -> str:
     return f"===== {title} =====\n{body.rstrip()}\n"
 
 
-def run_inputs(folder: Path, task: str) -> dict[str, str]:
+def run_inputs(folder: Path, task: str) -> dict:
     """What the prompts' placeholders stand for in one run folder."""
     code_dir = folder / "code"
     code = "\n".join(
@@ -226,7 +239,7 @@ def run_inputs(folder: Path, task: str) -> dict[str, str]:
                 parts.append(_block(f"{here}/{name}", _read(script.parent / name)))
         attempts.append("\n".join(parts))
     return {
-        "task": task, "code": code, "logs": logs, "attempts": "\n".join(attempts),
+        "task": task, "code": code, "logs": logs, "attempts": attempts,
         "paper": _read(folder / "paper" / "report.txt"),
     }
 
@@ -236,17 +249,82 @@ _ATTEMPT_SLOT = (
 )
 
 
-def render(pitfall: Pitfall, inputs: dict[str, str]) -> str:
-    """The verbatim template with its placeholders filled, then paper and format."""
-    text = pitfall.template.replace(_ATTEMPT_SLOT, inputs["attempts"])
-    logs = inputs["logs"]
+def _marker(count: int) -> str:
+    return f"[truncated {count} characters]\n"
+
+
+def _fit_text(text: str, room: int, *, keep: str) -> tuple[str, int]:
+    """``text`` cut to ``room`` characters (marker included), and how much was cut."""
+    if len(text) <= room:
+        return text, 0
+    kept = max(room - len(_marker(len(text))) - 1, 0)
+    piece = text[:kept] if keep == "head" else text[len(text) - kept:]
+    marker = _marker(len(text) - kept)
+    return (marker + piece if keep == "tail" else piece + "\n" + marker), len(text) - kept
+
+
+def _fit_attempts(blocks: list[str], room: int) -> tuple[str, int]:
+    """Latest attempts first; the oldest are dropped, and the one that straddles is tailed."""
+    joined = "\n".join(blocks)
+    if len(joined) <= room:
+        return joined, 0
+    left = max(room - len(_marker(len(joined))), 0)
+    kept: list[str] = []
+    for block in reversed(blocks):
+        if len(block) + 1 <= left:
+            kept.append(block)
+            left -= len(block) + 1
+            continue
+        if left > 1:
+            kept.append(block[len(block) - (left - 1):])
+        break
+    body = "\n".join(reversed(kept))
+    return _marker(len(joined) - len(body)) + body, len(joined) - len(body)
+
+
+def _fill(pitfall: Pitfall, inputs: dict, code: str, attempts: str, logs: str) -> str:
+    text = pitfall.template.replace(_ATTEMPT_SLOT, attempts)
     if pitfall.key == "dataset_fabrication":
-        logs += "\n" + inputs["attempts"]
+        logs = logs + "\n" + attempts
     text = (text.replace("<Task description>", inputs["task"])
-            .replace("<Generated code>", inputs["code"])
+            .replace("<Generated code>", code)
             .replace("<Code execution logs>", logs))
     paper = _block("ATTACHED: the final paper (text of paper/report.txt)", inputs["paper"])
     return text + "\n" + paper + OUTPUT_FORMAT
+
+
+def render(pitfall: Pitfall, inputs: dict, max_chars: int = DEFAULT_MAX_CHARS,
+           ) -> tuple[str, dict[str, int]]:
+    """The verbatim template with its placeholders filled, then paper and format.
+
+    The prompt is held to ``max_chars``: the paper stays whole, then code, then
+    the experiment attempts (latest first), then logs (tail first) take what is
+    left. Returns the prompt and the characters cut from each part.
+    """
+    uses = {"code": pitfall.key in {"benchmark_selection", "data_leakage", "metric_misuse"},
+            "attempts": pitfall.key in {"post_hoc_selection", "dataset_fabrication"},
+            "logs": pitfall.key != "post_hoc_selection"}
+    room = max_chars - len(_fill(pitfall, inputs, "", "", ""))
+    cut: dict[str, int] = {}
+    code = attempts = logs = ""
+
+    def reserve(*parts: str) -> int:
+        # each later part keeps room for its own cut marker, so the budget holds
+        return sum(len(_marker(len(part))) + 2 for part in parts if part)
+
+    if uses["code"]:
+        # limit: the budget is the only guard on prompt size; the authors sent whole files, so any cut here is a deviation from the paper (the cut is marked and recorded in meta.json).
+        code, cut["code"] = _fit_text(
+            inputs["code"], room - reserve(inputs["logs"]), keep="head")
+        room -= len(code)
+    if uses["attempts"]:
+        later = inputs["logs"] if uses["logs"] else ""
+        attempts, cut["attempts"] = _fit_attempts(
+            inputs["attempts"], room - reserve(later))
+        room -= len(attempts)
+    if uses["logs"]:
+        logs, cut["logs"] = _fit_text(inputs["logs"], room, keep="tail")
+    return _fill(pitfall, inputs, code, attempts, logs), {k: v for k, v in cut.items() if v}
 
 
 def parse_answer(reply: str) -> tuple[str, str] | None:
@@ -264,61 +342,77 @@ def parse_answer(reply: str) -> tuple[str, str] | None:
     return None
 
 
-def _complete(out: Path) -> bool:
-    if not (out / "audit.json").exists() or not (out / "meta.json").exists():
-        return False
-    pitfalls = json.loads((out / "audit.json").read_text(encoding="utf-8"))["pitfalls"]
-    return len(pitfalls) == len(PITFALLS) and all("error" not in p for p in pitfalls.values())
+def _ask(model: ModelFn, prompt: str) -> dict:
+    """One pitfall: a label and evidence, or an error. A failing CLI is an error, not a crash."""
+    try:
+        for _ in range(ATTEMPTS):
+            parsed = parse_answer(model(prompt, ""))
+            if parsed:
+                return {"label": parsed[0], "evidence": parsed[1]}
+    except AgentCLIError as error:
+        return {"label": None, "error": str(error)}
+    return {"label": None, "error": f"no valid YES or NO answer after {ATTEMPTS} attempts"}
 
 
 def audit_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn], tasks: Path,
-              opinions: list[str] | None = None) -> str:
-    """Audit one run folder with every eligible judge and opinion."""
+              opinions: list[str] | None = None, max_chars: int = DEFAULT_MAX_CHARS) -> str:
+    """Audit one run folder with every eligible judge and opinion.
+
+    The run is complete when every eligible judge gave a valid answer for every
+    prompt; an opinion's failure never makes it incomplete. A rerun asks only
+    for the answers that are missing or errored.
+    """
     manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
     if manifest.get("status") == "void":
         return "skipped: void"
     if not (folder / "paper" / "report.txt").is_file():
         return "skipped: no paper"
     task_file = tasks / f"{manifest['task']}.md"
-    if _sha(_read(task_file)) != manifest.get("task_file_sha256"):
+    if hashlib.sha256(task_file.read_bytes()).hexdigest() != manifest.get("task_file_sha256"):
         raise TaskTextError(f"{task_file} is not the task text this run was given")
     opinions = opinions or []
     roles = [("judge", name) for name in eligible(judges, manifest["model"])]
     roles += [("opinion", name) for name in eligible(opinions, manifest["model"])]
     inputs = run_inputs(folder, _read(task_file))
+    rendered = {p.key: render(p, inputs, max_chars) for p in PITFALLS}
     asked = 0
+    complete = True
     for role, name in roles:
         out = folder / "judge" / "pitfalls_audit" / slug(name)
-        if _complete(out):
-            continue
-        model = models[name]
-        results, prompt_hashes = {}, {}
-        for pitfall in PITFALLS:
-            prompt = render(pitfall, inputs)
-            prompt_hashes[pitfall.key] = _sha(prompt)
-            parsed = None
-            for _ in range(ATTEMPTS):
-                parsed = parse_answer(model(prompt, ""))
-                if parsed:
-                    break
-            results[pitfall.key] = (
-                {"label": parsed[0], "evidence": parsed[1]} if parsed else
-                {"label": None, "error": f"no valid YES or NO answer after {ATTEMPTS} attempts"}
-            )
-        _write(out / "audit.json", {"pitfalls": results})
-        meta = {
-            "judge": name, "role": role, "source": SOURCE, "setting": SETTING,
-            "template_sha256": {p.key: _sha(p.template) for p in PITFALLS},
-            "prompt_sha256": prompt_hashes,
-            "deviations": DEVIATIONS,
-            "review_tag": AGENT_REVIEW_TAG,
-            "at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-        }
-        if isinstance(model, AgentModel):
-            meta.update({"command": list(model.command), "cli": model.cli, "model": model.model,
-                         "effort": model.effort, "cli_version": model.cli_version})
-        _write(out / "meta.json", meta)
-        asked += 1
+        before = {}
+        if (out / "audit.json").exists() and (out / "meta.json").exists():
+            before = json.loads((out / "audit.json").read_text(encoding="utf-8"))["pitfalls"]
+        todo = [p for p in PITFALLS if "error" in before.get(p.key, {"error": 1})]
+        if todo:
+            model = models[name]
+            results = {p.key: (_ask(model, rendered[p.key][0]) if p in todo else before[p.key])
+                       for p in PITFALLS}
+            _write(out / "audit.json", {"pitfalls": results})
+            meta = {
+                "judge": name, "role": role, "source": SOURCE, "setting": SETTING,
+                "template_sha256": {p.key: _sha(p.template) for p in PITFALLS},
+                "prompt_sha256": {key: _sha(prompt) for key, (prompt, _) in rendered.items()},
+                "deviations": DEVIATIONS | {"truncation": {
+                    "max_chars": max_chars,
+                    "cut_characters": {key: cut for key, (_, cut) in rendered.items() if cut},
+                }},
+                "review_tag": AGENT_REVIEW_TAG,
+                "at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(
+                    timespec="seconds"),
+            }
+            if isinstance(model, AgentModel):
+                meta.update({"command": list(model.command), "cli": model.cli,
+                             "model": model.model, "effort": model.effort,
+                             "cli_version": model.cli_version})
+            _write(out / "meta.json", meta)
+            asked += role == "judge"
+            before = results
+        if role == "judge" and any("error" in v for v in before.values()):
+            complete = False
+    if not any(role == "judge" for role, _ in roles):
+        return "skipped: no eligible judge"
+    if not complete:
+        return "incomplete: rerun to retry"
     return f"audited by {asked} judge(s)" if asked else "nothing to ask: audits exist"
 
 
@@ -333,6 +427,10 @@ def main(argv: list[str] | None = None, *, model_for=None) -> int:
                              "agent:codex/<model>[:<effort>]; repeatable")
     parser.add_argument("--opinion", action="append", default=[],
                         help="a recorded, never counted judge in the same forms; repeatable")
+    parser.add_argument("--max-chars", type=int, default=DEFAULT_MAX_CHARS,
+                        help="size budget for each prompt in characters; the paper stays whole, "
+                             "then code, attempts (latest first) and logs (tail first) are fitted "
+                             f"(default: {DEFAULT_MAX_CHARS:,}, a conservative choice)")
     parser.add_argument("--agent-timeout", type=float, default=DEFAULT_AGENT_TIMEOUT_S,
                         help="seconds allowed for each agent CLI call (default: 1800)")
     args = parser.parse_args(argv)
@@ -357,7 +455,7 @@ def main(argv: list[str] | None = None, *, model_for=None) -> int:
     for manifest_path in sorted(args.runs.rglob("manifest.json")):
         folder = manifest_path.parent
         outcome = audit_run(folder, judges=args.judge, opinions=args.opinion, models=models,
-                            tasks=args.mlrbench / "tasks")
+                            tasks=args.mlrbench / "tasks", max_chars=args.max_chars)
         print(f"{folder.relative_to(args.runs)}: {outcome}", flush=True)
     return 0
 
