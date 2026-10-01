@@ -169,11 +169,210 @@ def _write(path: Path, data) -> None:
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
+def _output_needs_prompt(path: Path) -> bool:
+    if not path.is_file():
+        return True
+    return "error" in json.loads(path.read_text(encoding="utf-8"))
+
+
 def _judge_outputs_complete(folder: Path) -> bool:
     paths = (folder / "overall.json", folder / "hallucination.json")
-    if not all(path.exists() for path in paths):
-        return False
-    return all("error" not in json.loads(path.read_text(encoding="utf-8")) for path in paths)
+    return all(not _output_needs_prompt(path) for path in paths)
+
+
+def _read_meta(path: Path) -> dict:
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _judge_identity(model: ModelFn) -> dict:
+    """What produced an answer: kept inside each prompt entry, so a kept answer
+    stays credited to the CLI version that gave it even after a rerun."""
+    if isinstance(model, AgentModel):
+        return {
+            "command": list(model.command),
+            "cli": model.cli,
+            "model": model.model,
+            "effort": model.effort,
+            "cli_version": model.cli_version,
+        }
+    return {}
+
+
+def _prompt_provenance(
+    client: Client,
+    model: ModelFn,
+    *,
+    start_prompts: int,
+    start_images: int,
+    at_utc: str,
+) -> dict:
+    hashes = client.prompts[start_prompts:]
+    return {
+        "prompt_sha256": list(hashes),
+        "attempts": len(hashes),
+        "at_utc": at_utc,
+        "images_dropped": client.images_dropped - start_images,
+        **_judge_identity(model),
+    }
+
+
+def _judge_shared_meta(judge_name: str, model: ModelFn) -> dict:
+    meta = {
+        "judge": judge_name,
+        "system_message": "",
+        "json_mode": False,
+    }
+    if isinstance(model, AgentModel):
+        meta.update({
+            "judge_kind": "agent",
+            **_judge_identity(model),
+            "review_tag": AGENT_REVIEW_TAG,
+            "mlr_bench_deviations": {
+                "temperature": (
+                    "the agent CLI does not expose temperature control; "
+                    "MLR-Bench uses 0"
+                ),
+                "max_tokens": (
+                    "the agent CLI does not expose max-token control; "
+                    "MLR-Bench uses 16384"
+                ),
+            },
+        })
+    else:
+        meta.update({
+            "judge_kind": "api",
+            "max_tokens": MAX_TOKENS,
+            "temperature": 0.0,
+        })
+    return meta
+
+
+_ROLES = ("overall", "hallucination")
+_LEGACY_IDENTITY = ("command", "cli", "model", "effort", "cli_version")
+_FAILED_ATTEMPTS = 3  # the review functions try 3 times, then the file holds an error
+
+
+def _hashes(entry: dict) -> list[str]:
+    digest = entry.get("prompt_sha256")
+    if not digest:
+        return []
+    return list(digest) if isinstance(digest, list) else [digest]
+
+
+def _legacy_split(n: int, states: dict[str, str]) -> dict[str, int] | None:
+    """Split an old flat hash list between the prompts, or None if it cannot be known.
+
+    An errored file means 3 attempts; a valid file used the rest.
+    """
+    if n == 2:
+        return {"overall": 1, "hallucination": 1}  # one attempt each, whatever the files say now
+    known = {r: _FAILED_ATTEMPTS for r in _ROLES if states[r] == "error"}
+    unknown = [r for r in _ROLES if r not in known]
+    if not unknown:
+        return known if sum(known.values()) == n else None
+    rest = n - sum(known.values())
+    if len(unknown) == 1:
+        return known | {unknown[0]: rest} if rest >= 1 else None
+    return None
+
+
+def _migrate_old_meta(meta: dict, out: Path) -> dict:
+    """Give a pre-"prompts" meta.json the per-prompt shape, losing nothing.
+
+    The old file has one flat prompt_sha256 list (every attempt, overall first),
+    one at_utc and the identity fields at top level. It must be migrated before a
+    partial rerun overwrites those, or the kept prompt's provenance is gone.
+    """
+    if "prompts" in meta or not meta:
+        return meta
+    hashes = _hashes(meta)
+    states = {}
+    for role in _ROLES:
+        path = out / f"{role}.json"
+        states[role] = "missing" if not path.is_file() else (
+            "error" if "error" in json.loads(path.read_text(encoding="utf-8")) else "ok"
+        )
+    split = _legacy_split(len(hashes), states)
+    guessed = split is None
+    if guessed:
+        # limit: attempts per prompt cannot be recovered from this old file; all
+        # hashes are filed under overall, in order, and both entries say so.
+        # Fix: none, the information was never written.
+        split = {"overall": len(hashes), "hallucination": 0}
+    identity = {k: meta[k] for k in _LEGACY_IDENTITY if k in meta}
+    prompts = {}
+    start = 0
+    for role in _ROLES:
+        mine = hashes[start:start + split[role]]
+        start += split[role]
+        entry = {
+            "prompt_sha256": mine,
+            "attempts": len(mine),
+            "at_utc": meta.get("at_utc"),
+            "images_dropped": meta.get("images_dropped", 0) if role == "overall" else 0,
+            **identity,
+        }
+        if guessed:
+            entry["legacy_attempt_split"] = "unknown"
+        prompts[role] = entry
+    return {**meta, "prompts": prompts}
+
+
+def _compat_fields(prompts: dict) -> dict:
+    """Top-level copies of the per-prompt provenance, for readers of the old shape.
+
+    prompt_sha256 is the concatenation of both prompts' attempt hashes, overall
+    first, which is what the old single list held; at_utc is the newest of the two.
+    """
+    ordered: list[str] = []
+    latest_utc = ""
+    images = 0
+    for role in _ROLES:
+        entry = prompts.get(role)
+        if not entry:
+            continue
+        ordered.extend(_hashes(entry))
+        images += int(entry.get("images_dropped") or 0)
+        latest_utc = max(latest_utc, entry.get("at_utc") or "")
+    compat: dict = {"images_dropped": images}
+    if ordered:
+        compat["prompt_sha256"] = ordered
+    if latest_utc:
+        compat["at_utc"] = latest_utc
+    return compat
+
+
+def migrate_meta_file(out: Path) -> None:
+    """Rewrite an old-format meta.json in place, before any prompt is re-asked."""
+    path = out / "meta.json"
+    old = _read_meta(path)
+    new = _migrate_old_meta(old, out)
+    if new is not old:
+        _write(path, new)
+
+
+def _write_judge_meta(
+    out: Path,
+    judge_name: str,
+    model: ModelFn,
+    *,
+    overall: dict | None,
+    hallucination: dict | None,
+) -> None:
+    path = out / "meta.json"
+    prompts = dict(_read_meta(path).get("prompts") or {})
+    if overall is not None:
+        prompts["overall"] = overall
+    if hallucination is not None:
+        prompts["hallucination"] = hallucination
+    # Rebuilt, not updated: nothing of a previous judge kind survives at top level.
+    _write(path, {
+        **_judge_shared_meta(judge_name, model),
+        "prompts": prompts,
+        **_compat_fields(prompts),
+    })
 
 
 def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
@@ -222,6 +421,9 @@ def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
             out = folder / "judge" / slug(judge)
             if not _judge_outputs_complete(out):
                 out.mkdir(parents=True, exist_ok=True)
+                migrate_meta_file(out)
+                need_overall = _output_needs_prompt(out / "overall.json")
+                need_hallucination = _output_needs_prompt(out / "hallucination.json")
                 os.environ[USAGE_ENV] = str(out / "usage.jsonl")
                 model = models[judge]
                 client = Client(model)
@@ -231,55 +433,53 @@ def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
                     task_file=str(task_file),
                     code_path=str(code) if code.is_dir() else None,
                 )
-                overall = overall_fn(**args)
-                hallucination = hallucination_fn(**args)
-                _write(
-                    out / "overall.json",
-                    overall[0] if overall else {"error": "no valid JSON after 3 attempts"},
-                )
-                _write(
-                    out / "hallucination.json",
-                    hallucination[0]
-                    if hallucination
-                    else {"error": "no valid JSON after 3 attempts"},
-                )
-                meta = {
-                    "judge": judge,
-                    "prompt_sha256": client.prompts,
-                    "images_dropped": client.images_dropped,
-                    "system_message": "",
-                    "json_mode": False,
-                    "at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(
+                overall_prov = None
+                hallucination_prov = None
+                if need_overall:
+                    start_prompts = len(client.prompts)
+                    start_images = client.images_dropped
+                    at_utc = datetime.datetime.now(datetime.timezone.utc).isoformat(
                         timespec="seconds"
-                    ),
-                }
-                if isinstance(model, AgentModel):
-                    meta.update({
-                        "judge_kind": "agent",
-                        "command": list(model.command),
-                        "cli": model.cli,
-                        "model": model.model,
-                        "effort": model.effort,
-                        "cli_version": model.cli_version,
-                        "review_tag": AGENT_REVIEW_TAG,
-                        "mlr_bench_deviations": {
-                            "temperature": (
-                                "the agent CLI does not expose temperature control; "
-                                "MLR-Bench uses 0"
-                            ),
-                            "max_tokens": (
-                                "the agent CLI does not expose max-token control; "
-                                "MLR-Bench uses 16384"
-                            ),
-                        },
-                    })
-                else:
-                    meta.update({
-                        "judge_kind": "api",
-                        "max_tokens": MAX_TOKENS,
-                        "temperature": 0.0,
-                    })
-                _write(out / "meta.json", meta)
+                    )
+                    overall = overall_fn(**args)
+                    _write(
+                        out / "overall.json",
+                        overall[0] if overall else {"error": "no valid JSON after 3 attempts"},
+                    )
+                    overall_prov = _prompt_provenance(
+                        client,
+                        model,
+                        start_prompts=start_prompts,
+                        start_images=start_images,
+                        at_utc=at_utc,
+                    )
+                if need_hallucination:
+                    start_prompts = len(client.prompts)
+                    start_images = client.images_dropped
+                    at_utc = datetime.datetime.now(datetime.timezone.utc).isoformat(
+                        timespec="seconds"
+                    )
+                    hallucination = hallucination_fn(**args)
+                    _write(
+                        out / "hallucination.json",
+                        hallucination[0]
+                        if hallucination
+                        else {"error": "no valid JSON after 3 attempts"},
+                    )
+                    hallucination_prov = _prompt_provenance(
+                        client,
+                        model,
+                        start_prompts=start_prompts,
+                        start_images=start_images,
+                        at_utc=at_utc,
+                    )
+                _write_judge_meta(
+                    out,
+                    judge,
+                    model,
+                    overall=overall_prov,
+                    hallucination=hallucination_prov,
+                )
             overall = json.loads((out / "overall.json").read_text(encoding="utf-8"))
             hallucination = json.loads(
                 (out / "hallucination.json").read_text(encoding="utf-8")
