@@ -586,6 +586,57 @@ def test_a_run_without_a_paper_gets_no_score_and_no_judge(tmp_path, judged):
     assert "no_paper:gate" in metrics["no_paper"]
 
 
+def test_rerun_does_not_rewrite_a_valid_overall_when_hallucination_failed(
+    tmp_path, judged
+):
+    folder = make_run(tmp_path)
+    judge_dir = folder / "judge" / judge.slug(PRO)
+    judge_dir.mkdir(parents=True)
+    overall_bytes = (json.dumps(overall(3), indent=2) + "\n").encode()
+    (judge_dir / "overall.json").write_bytes(overall_bytes)
+    (judge_dir / "hallucination.json").write_text(
+        json.dumps({"error": "no valid JSON after 3 attempts"}) + "\n"
+    )
+    prompts = []
+
+    def always_fails(prompt, _system):
+        prompts.append(prompt)
+        return "not JSON"
+
+    judged(folder, {PRO: always_fails}, judges=(PRO,))
+
+    assert (judge_dir / "overall.json").read_bytes() == overall_bytes
+    assert prompts
+    assert all("identifying hallucinations" in prompt for prompt in prompts)
+    assert not any("Soundness (1-10)" in prompt for prompt in prompts)
+    summary = json.loads((folder / "judge" / "summary.json").read_text())
+    assert summary["complete"] is False
+    assert summary["judges"][PRO]["overall"] == 3
+
+
+def test_rerun_completes_hallucination_without_touching_valid_overall(tmp_path, judged):
+    folder = make_run(tmp_path)
+    judge_dir = folder / "judge" / judge.slug(PRO)
+    judge_dir.mkdir(parents=True)
+    overall_bytes = (json.dumps(overall(3), indent=2) + "\n").encode()
+    (judge_dir / "overall.json").write_bytes(overall_bytes)
+    (judge_dir / "hallucination.json").write_text(
+        json.dumps({"error": "no valid JSON after 3 attempts"}) + "\n"
+    )
+    prompts = []
+
+    judged(folder, {PRO: fake(3, False, prompts)}, judges=(PRO,))
+
+    assert (judge_dir / "overall.json").read_bytes() == overall_bytes
+    assert len(prompts) == 1
+    assert "identifying hallucinations" in prompts[0]
+    assert "Soundness (1-10)" not in prompts[0]
+    summary = json.loads((folder / "judge" / "summary.json").read_text())
+    assert summary["complete"] is True
+    assert summary["task_score"] == 3
+    assert json.loads((folder / "metrics.json").read_text())["task_score"] == 3
+
+
 def test_a_judge_error_is_retried_while_a_completed_judge_is_left_alone(
     tmp_path, monkeypatch
 ):

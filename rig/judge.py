@@ -169,11 +169,15 @@ def _write(path: Path, data) -> None:
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
+def _output_needs_prompt(path: Path) -> bool:
+    if not path.is_file():
+        return True
+    return "error" in json.loads(path.read_text(encoding="utf-8"))
+
+
 def _judge_outputs_complete(folder: Path) -> bool:
     paths = (folder / "overall.json", folder / "hallucination.json")
-    if not all(path.exists() for path in paths):
-        return False
-    return all("error" not in json.loads(path.read_text(encoding="utf-8")) for path in paths)
+    return all(not _output_needs_prompt(path) for path in paths)
 
 
 def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
@@ -222,6 +226,8 @@ def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
             out = folder / "judge" / slug(judge)
             if not _judge_outputs_complete(out):
                 out.mkdir(parents=True, exist_ok=True)
+                need_overall = _output_needs_prompt(out / "overall.json")
+                need_hallucination = _output_needs_prompt(out / "hallucination.json")
                 os.environ[USAGE_ENV] = str(out / "usage.jsonl")
                 model = models[judge]
                 client = Client(model)
@@ -231,18 +237,20 @@ def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
                     task_file=str(task_file),
                     code_path=str(code) if code.is_dir() else None,
                 )
-                overall = overall_fn(**args)
-                hallucination = hallucination_fn(**args)
-                _write(
-                    out / "overall.json",
-                    overall[0] if overall else {"error": "no valid JSON after 3 attempts"},
-                )
-                _write(
-                    out / "hallucination.json",
-                    hallucination[0]
-                    if hallucination
-                    else {"error": "no valid JSON after 3 attempts"},
-                )
+                if need_overall:
+                    overall = overall_fn(**args)
+                    _write(
+                        out / "overall.json",
+                        overall[0] if overall else {"error": "no valid JSON after 3 attempts"},
+                    )
+                if need_hallucination:
+                    hallucination = hallucination_fn(**args)
+                    _write(
+                        out / "hallucination.json",
+                        hallucination[0]
+                        if hallucination
+                        else {"error": "no valid JSON after 3 attempts"},
+                    )
                 meta = {
                     "judge": judge,
                     "prompt_sha256": client.prompts,
