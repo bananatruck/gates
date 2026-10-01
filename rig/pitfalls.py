@@ -427,7 +427,8 @@ def _split_of(line: str, sentence_start: int, number: re.Match[str]) -> str | No
     A bracket that holds its own result figure, "(val 75.0)", is an aside: the split it
     names stays inside it. A bracket without one may demote the figure beside it to a
     non-test split ("75% (validation, 3 seeds)", "CWA (dev) 74%") but never promote one to
-    test, except a bare "(test)" or "(test set)" between the metric and its figure.
+    test, except a bare "(test)" or "(test set)" before its figure in the sentence, which counts
+    as the nearest split word does (so it also overrides an earlier split word).
     Otherwise the split named nearest before the figure in its sentence decides.
     A split word joined by a slash ("train/test") names two splits and decides nothing.
     Our rule, not the paper's (p.12 says only which criterion a run recorded).
