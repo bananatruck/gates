@@ -67,6 +67,59 @@ def test_a_released_paper_becomes_a_run_folder_the_judge_reads(tmp_path):
     assert [p.name for p in (folder / "code").iterdir()] == ["best_solution_1.py"]
 
 
+def test_a_released_markdown_paper_stages_without_pdf_extraction(tmp_path):
+    papers = tmp_path / "papers"
+    source = released(papers, pdf=False)
+    markdown = "# Results\n\nMeasured accuracy: 0.91.\n"
+    (source / "paper.md").write_text(markdown, encoding="utf-8")
+
+    def must_not_extract(_path):
+        raise AssertionError("Markdown input must not use the PDF extractor")
+
+    staged, skipped = stage_released.stage_all(
+        papers,
+        tasks=FIXTURE / "tasks",
+        out=tmp_path / "out",
+        benchmark="Hidden-Pitfalls",
+        system="MLR-Agent",
+        model="o4-mini",
+        extract=must_not_extract,
+        extractor="fake 1.0",
+    )
+
+    assert skipped == []
+    [folder] = staged
+    manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+    assert folder.is_relative_to(tmp_path / "out" / "Hidden-Pitfalls")
+    assert manifest["benchmark"] == "Hidden-Pitfalls"
+    assert (folder / "paper" / "report.txt").read_text(encoding="utf-8") == markdown
+    assert (folder / "paper" / "source.md").read_text(encoding="utf-8") == markdown
+    assert manifest["source_paper"] == "paper.md"
+    assert manifest["source_paper_sha256"] == hashlib.sha256(markdown.encode()).hexdigest()
+    assert manifest["source_format"] == "markdown"
+    assert manifest["text_extractor"] == "source markdown"
+    assert "source_pdf_sha256" not in manifest
+
+
+def test_markdown_cli_does_not_require_pdftotext(tmp_path, monkeypatch):
+    papers = tmp_path / "papers"
+    source = released(papers, pdf=False)
+    (source / "paper.md").write_text("# Results\n", encoding="utf-8")
+    monkeypatch.setattr(stage_released, "pdftotext_available", lambda: False)
+
+    result = stage_released.main([
+        "--papers", str(papers),
+        "--tasks", str(FIXTURE / "tasks"),
+        "--benchmark", "Hidden-Pitfalls",
+        "--system", "MLR-Agent",
+        "--model", "o4-mini",
+        "--out", str(tmp_path / "out"),
+    ])
+
+    assert result == 0
+    assert next((tmp_path / "out" / "Hidden-Pitfalls").rglob("report.txt")).is_file()
+
+
 def test_the_judge_scores_a_staged_paper(tmp_path, monkeypatch):
     monkeypatch.setenv(judge.USAGE_ENV, "unset")
     papers = tmp_path / "papers"
@@ -212,4 +265,3 @@ def test_collect_never_puts_a_rescored_paper_in_the_level_table(tmp_path):
     runs, skipped = collect.load_runs(tmp_path / "out")
     assert runs == [] and any("re-scored" in s for s in skipped)
     assert collect.load_crash_runs(tmp_path / "out") == []
-

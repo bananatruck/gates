@@ -1,39 +1,34 @@
-"""Lay released papers out as run folders, and rig.judge re-scores them (D70 item 3).
+"""Lay released papers out as run folders so ``rig.judge`` can score them.
 
-    python -m rig.stage_released --papers <mlrbench>/ai_scientist_v2_papers/o4-mini \\
-        --tasks <kit>/mlrbench/tasks --system "AI Scientist v2" --model o4-mini \\
-        --out ~/gates-runs/runs-rescore
+    python -m rig.stage_released --papers <release>/papers --tasks <kit>/tasks \\
+        --benchmark Hidden-Pitfalls --system "Released system" --model <model> \\
+        --out <runs-rescore>
 
-Then, on machine A, ``python -m rig.judge --runs ~/gates-runs/runs-rescore ...``
-exactly as for our own runs, so the released papers meet D63's judges and
-MLR-Bench's prompts with nothing else changed.
+Run ``python -m rig.judge --runs <runs-rescore> ...`` to score the staged papers.
 
-Each task folder holds ``<task>.pdf`` and optionally ``experiments/*.py``, as
-MLR-Bench released AI Scientist v2's papers at ``f728d57``. The stager writes,
-per task, ``<out>/MLR-Bench/<task>/<system-slug>/released/seed0/`` with:
+Each task folder holds either ``<task>.pdf`` or ``paper.md``.
+It can also hold ``experiments/*.py``.
+The stager writes ``<out>/<benchmark>/<task>/<system-slug>/released/seed0/``.
 
 ``manifest.json``
-    task, model, ``phase: rescore``, the task text's hash (which ``rig.judge``
-    checks), the PDF's hash, the text extractor and its version, and
-    ``code_files`` (relative paths under ``experiments/``, possibly empty);
+    The task, model, source format, source hash, task hash, text extractor, and
+    ``code_files`` relative to ``experiments/``.
 ``paper/report.txt``
-    the PDF's text; ``paper/source.pdf`` beside it;
+    The text sent to the judge.
+    ``paper/source.pdf`` or ``paper/source.md`` preserves the released source.
 ``code/``
-    only when ``code_files`` is non-empty: the released experiment scripts.
+    The released experiment scripts, only when ``code_files`` is non-empty.
 
-A task with no task text or no PDF is named and skipped. Whitespace-only PDF
-text (including a lone form feed from ``pdftotext`` on a scan) is treated as
-empty extraction and skipped with nothing written. Failed extraction is skipped
-the same way. A system name that slugs to an empty path is refused. Two
-different systems that share a slug refuse the second with both names in the
-note. A folder already staged is never overwritten.
+A task with no task text or paper is named and skipped.
+Whitespace-only text is treated as empty and skipped with nothing written.
+Failed extraction or reading is skipped the same way.
+A system name that slugs to an empty path is refused.
+Two different systems that share a slug refuse the second with both names in the note.
+A folder already staged is never overwritten.
 
-One difference from MLR-Bench, stated rather than hidden: its judge reads a
-PDF through ``pymupdf4llm``'s Markdown, which the host's environment does not
-carry and ``rig.judge`` stubs out. The text here comes from poppler's
-``pdftotext -layout``, recorded in each manifest, so a score can differ from
-one on MLR-Bench's extraction. ``paper/collect.py`` skips ``phase: rescore``:
-a released paper is never a level of ours.
+PDF text comes from poppler's ``pdftotext -layout``.
+Markdown text is read directly and records ``source markdown`` as its extractor.
+``paper/collect.py`` skips ``phase: rescore``, so a released paper is never one of our levels.
 
 Stdlib only, no model.
 """
@@ -79,8 +74,8 @@ def _experiment_scripts(source: Path) -> list[Path]:
     return sorted(p for p in root.rglob("*.py") if p.is_file())
 
 
-def _run_folder(out: Path, task: str, system: str) -> Path:
-    return out / "MLR-Bench" / task / _slug(system) / "released" / "seed0"
+def _run_folder(out: Path, benchmark: str, task: str, system: str) -> Path:
+    return out / benchmark / task / _slug(system) / "released" / "seed0"
 
 
 def _folder_skip_note(folder: Path, task: str, system: str) -> str:
@@ -101,13 +96,13 @@ def stage_all(
     *,
     tasks: Path,
     out: Path,
+    benchmark: str = "MLR-Bench",
     system: str,
     model: str,
     extract: Callable[[Path], str] = pdftotext,
     extractor: str | None = None,
 ) -> tuple[list[Path], list[str]]:
     """Stage every task folder under ``papers``. Returns the folders and a note per skip."""
-    extractor = extractor or default_extractor()
     slug = _slug(system)
     staged: list[Path] = []
     skipped: list[str] = []
@@ -115,31 +110,48 @@ def stage_all(
         task = source.name
         task_file = tasks / f"{task}.md"
         pdf = source / f"{task}.pdf"
+        markdown = source / "paper.md"
         if not task_file.is_file():
             skipped.append(f"{task}: no task text at {task_file}")
             continue
-        if not pdf.is_file():
-            skipped.append(f"{task}: no pdf at {pdf}")
+        if pdf.is_file():
+            source_paper = pdf
+            source_format = "pdf"
+        elif markdown.is_file():
+            source_paper = markdown
+            source_format = "markdown"
+        else:
+            skipped.append(f"{task}: no pdf at {pdf} or Markdown paper at {markdown}")
             continue
         if not slug:
             skipped.append(f"{task}: system {system!r} slugs to an empty path")
             continue
-        folder = _run_folder(out, task, system)
+        folder = _run_folder(out, benchmark, task, system)
         if folder.exists():
             skipped.append(_folder_skip_note(folder, task, system))
             continue
-        try:
-            report = extract(pdf)
-        except Exception as exc:
-            skipped.append(f"{task}: extraction failed ({exc})")
-            continue
+        if source_format == "pdf":
+            used_extractor = extractor or default_extractor()
+            try:
+                report = extract(source_paper)
+            except Exception as exc:
+                skipped.append(f"{task}: extraction failed ({exc})")
+                continue
+        else:
+            used_extractor = "source markdown"
+            try:
+                report = source_paper.read_text(encoding="utf-8")
+            except Exception as exc:
+                skipped.append(f"{task}: reading Markdown failed ({exc})")
+                continue
         if not report.strip():
-            skipped.append(f"{task}: empty extraction from {pdf}")
+            skipped.append(f"{task}: empty paper text from {source_paper}")
             continue
         scripts = _experiment_scripts(source)
         code_files = [str(p.relative_to(source / "experiments")) for p in scripts]
         (folder / "paper").mkdir(parents=True)
-        shutil.copyfile(pdf, folder / "paper" / "source.pdf")
+        source_name = "source.pdf" if source_format == "pdf" else "source.md"
+        shutil.copyfile(source_paper, folder / "paper" / source_name)
         (folder / "paper" / "report.txt").write_text(report, encoding="utf-8")
         if code_files:
             for script in scripts:
@@ -147,8 +159,9 @@ def stage_all(
                 dest = folder / "code" / rel
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(script, dest)
+        source_hash = hashlib.sha256(source_paper.read_bytes()).hexdigest()
         manifest = {
-            "benchmark": "MLR-Bench",
+            "benchmark": benchmark,
             "task": task,
             "system": system,
             "model": model,
@@ -156,11 +169,15 @@ def stage_all(
             "status": "released",
             "paper_present": True,
             "task_file_sha256": hashlib.sha256(task_file.read_bytes()).hexdigest(),
-            "source_pdf_sha256": hashlib.sha256(pdf.read_bytes()).hexdigest(),
-            "text_extractor": extractor,
+            "source_paper": source_paper.name,
+            "source_paper_sha256": source_hash,
+            "source_format": source_format,
+            "text_extractor": used_extractor,
             "source": str(source),
             "code_files": code_files,
         }
+        if source_format == "pdf":
+            manifest["source_pdf_sha256"] = source_hash
         (folder / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         staged.append(folder)
     return staged, skipped
@@ -170,15 +187,22 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m rig.stage_released",
                                      description=__doc__.split("\n\n")[0])
     parser.add_argument("--papers", type=Path, required=True, help="one folder per task")
-    parser.add_argument("--tasks", type=Path, required=True, help="the pinned MLR-Bench tasks/")
+    parser.add_argument("--tasks", type=Path, required=True, help="one <task>.md file per paper")
+    parser.add_argument("--benchmark", default="MLR-Bench")
     parser.add_argument("--system", required=True)
     parser.add_argument("--model", required=True, help="the model the released system used")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
-    if not pdftotext_available():
+    has_pdf = any(
+        (source / f"{source.name}.pdf").is_file()
+        for source in args.papers.iterdir()
+        if source.is_dir()
+    )
+    if has_pdf and not pdftotext_available():
         print("pdftotext (poppler) is not installed; nothing staged", file=sys.stderr)
         return 2
     staged, skipped = stage_all(args.papers, tasks=args.tasks, out=args.out,
+                                benchmark=args.benchmark,
                                 system=args.system, model=args.model)
     print(f"{len(staged)} papers staged under {args.out}")
     for note in skipped:
