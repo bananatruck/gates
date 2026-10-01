@@ -261,6 +261,17 @@ KILLED_AT_THE_TIMEOUT = (
 )
 
 
+def test_l0_prime_provenance_points_at_results_when_gate_1_rejects_without_running(
+    monkeypatch, tmp_path,
+):
+    """Gate 1's empty registry is not what the supplemental run produced (D83)."""
+    l0d = _run(monkeypatch, tmp_path, "0d", UNBOUND_IN_AN_UNCALLED_FUNCTION)
+    assert l0d.report is not None and l0d.report.execution is None
+    after_provenance = l0d.evidence_bundle.split("PROVENANCE", 1)[1].split("\n\n", 1)[0]
+    assert "results.json" in after_provenance
+    assert "registry.json" not in after_provenance
+
+
 def test_l0_prime_says_a_run_was_killed_at_the_timeout(monkeypatch, tmp_path):
     """A timeout is accepted, as at level 0, and the bundle says the run was killed."""
     l0 = _run(monkeypatch, tmp_path / "l0", "0", KILLED_AT_THE_TIMEOUT, timeout_s=3)
