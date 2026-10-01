@@ -21,5 +21,5 @@ MLR-Bench,L3,1,agent:claude/claude-opus-5-5,judge,2,true
 MLR-Bench,L3,1,agent:codex/gpt-5.6-sol:high,judge,2,true
 MLR-Bench,L3,1,agent:cursor/grok-4.7-high,opinion,3,true
 MLR-Bench,L3,2,agent:claude/claude-opus-5-5,judge,3,true
-MLR-Bench,L3,2,agent:codex/gpt-5.6-sol:high,judge,3,
+MLR-Bench,L3,2,agent:codex/gpt-5.6-sol:high,judge,,
 MLR-Bench,L3,2,agent:cursor/grok-4.7-high,opinion,3,true
