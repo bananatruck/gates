@@ -299,6 +299,29 @@ def test_a_sota_or_baseline_clause_is_not_the_runs_own_report(tmp_path):
     assert _metrics(tmp_path, "The baseline test SWA was 70.0\\%.\n").reported == "neither"
 
 
+def test_test_carries_across_clauses_of_one_sentence(tmp_path):
+    """A sentence that names the test set once reports every metric figure it gives."""
+    listed = _metrics(tmp_path, "Final test SWA = 71.20\\%, CWA = 69.80\\%.\n")
+    assert listed.reported == "both"
+    assert listed.evidence == (
+        Evidence("SWA", "71.20%", "report.txt", 1), Evidence("CWA", "69.80%", "report.txt", 1),
+    )
+    fronted = _metrics(tmp_path, "On the test set, SWA reached 71.2\\% and CWA 69.8\\%.\n")
+    assert fronted.reported == "both"
+
+
+def test_a_clause_naming_another_split_does_not_inherit_test(tmp_path):
+    split = _metrics(tmp_path, "Train SWA is 80.0\\%, test SWA is 71.0\\%.\n")
+    assert split.evidence == (Evidence("SWA", "71.0%", "report.txt", 1),)
+    assert _metrics(tmp_path, "The test set is held out, validation SWA is 75.0\\%.\n").reported == "neither"
+
+
+def test_the_runs_own_figure_before_a_cited_one_is_kept(tmp_path):
+    against = _metrics(tmp_path, "test SWA 71.2\\% vs baseline 65\\%.\n")
+    assert against.reported == "SWA only"
+    assert against.evidence == (Evidence("SWA", "71.2%", "report.txt", 1),)
+
+
 def test_a_table_cell_after_the_metric_name_is_a_report(tmp_path):
     assert _metrics(tmp_path, "Test results: SWA 68.03\\%\n").reported == "SWA only"
     assert _metrics(tmp_path, "Test SWA & 68.03\\%\\\\\n").reported == "SWA only"

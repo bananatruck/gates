@@ -78,6 +78,9 @@ _RESULT_NUMBER = re.compile(r"(?<![\w.])(?:(\d+(?:\.\d+)?)(\\?%)|(\d+\.\d+))")
 _REFERENCE_NUMBER = re.compile(r"(?:Table|Figure|Fig\.|Section|Eq\.|Appendix)\s*$", re.IGNORECASE)
 _CITED = re.compile(r"\bSOTA\b|\bbaselines?\b|state[- ]of[- ]the[- ]art", re.IGNORECASE)
 _CLAUSE_BREAK = re.compile(r";|(?<![\d])\.(?=\s|$)|,(?=\s+[^\d\s])")
+_SENTENCE_END = re.compile(r"(?<![\d])\.(?=\s|$)")
+_TEST = re.compile(r"\btest\b", re.IGNORECASE)
+_OTHER_SPLIT = re.compile(r"\b(?:train(?:ing)?|validation|val|dev(?:elopment)?)\b", re.IGNORECASE)
 _LOG = Path("src/experiment_output.log")
 SUBSTITUTION = "data substitution (our addition, not the paper's leakage)"
 _SPLIT_SLICE = re.compile(r"""split\s*=\s*(['"])([^'"\[]*)\[:""")
@@ -172,10 +175,7 @@ def _test_accuracy_on_line(line: str) -> tuple[str | None, str | None, str | Non
     named = _TEST_ACCURACY_OF.search(line)
     if named:
         return None, None, _percent(named.group(1))
-    # limit: a latex results table that labels the column "Test Accuracy" but
-    # puts the figure in a later row of bare numbers is not read. The prose
-    # statement of the same figure is.
-    if re.search(r"\btest\b", line, re.IGNORECASE) and (only := _ACCURACY_OF_ONLY.search(line)):
+    if re.search(r"\btest\b", line, re.IGNORECASE) and (only := _ACCURACY_OF_ONLY.search(line)):  # limit: same line only, so a latex table labelling the column "Test Accuracy" with the figure in a later row of bare numbers is not read (the prose statement of it is). Fix: read the table as a grid.
         return None, None, _percent(only.group(1))
     logged = _FINAL_TEST_ACCURACY.search(line)
     if logged:
@@ -274,13 +274,9 @@ def _is_data_name(text: str) -> bool:
 
 
 def _is_subsample(line: str) -> bool:
-    """A line that keeps a subset of a provided split.
-
-    # limit: ``train_test_split`` on a concatenated frame re-splits the data
-    # rather than taking a subset of one provided split, so it is not flagged.
-    """
+    """A line that keeps a subset of a provided split."""
     code = _code_body(line, drop_strings=False)
-    split = _SPLIT_SLICE.search(code)
+    split = _SPLIT_SLICE.search(code)  # limit: train_test_split on a concatenated frame re-splits the data rather than taking a subset of one provided split, so it is not flagged. Fix: follow the frame through the concatenation with ast.
     # limit: a slice of the train split (split="train[:1000]", X_train[:1000]) is read as a train/validation carve, so a subsampled training set is not flagged. Fix: flag it only when the file never takes the complementary slice.
     if split and split.group(2).strip() != "train":
         return True
@@ -429,14 +425,29 @@ def _metrics_in_text(text: str) -> list[tuple[str, str, int]]:
     found: list[tuple[str, str, int]] = []
     seen: set[str] = set()
     for lineno, line in enumerate(text.splitlines(), 1):
-        # limit: a table whose header row names the metrics and whose next row holds the numbers is not read, and a clause split at "test SWA, at 68%" loses the figure. Fix: read the table as a grid.
         starts = [0]
         starts += [match.end() for match in _CLAUSE_BREAK.finditer(line)]
         ends = [*(start for start in starts[1:]), len(line)]
+        sentence_ends = [match.end() for match in _SENTENCE_END.finditer(line)]
         for begin, end in zip(starts, ends, strict=True):
+            sentence = line[
+                max([0, *(e for e in sentence_ends if e <= begin)]):
+                min([len(line), *(e for e in sentence_ends if e >= end)])
+            ]
             clause = line[begin:end]
-            if not re.search(r"\btest\b", clause, re.IGNORECASE) or _CITED.search(clause):
+            # A clause inherits "test" from its sentence unless it names another split itself.
+            # limit: "test" is carried only within one sentence on one line, so a sentence wrapped
+            # across lines, or "test" named in the sentence before, is not read; a table whose
+            # header row names the metrics and whose next row holds the numbers is not read either.
+            # Fix: join wrapped lines into sentences, and read tables as a grid.
+            if not _TEST.search(clause) and (
+                not _TEST.search(sentence) or _OTHER_SPLIT.search(clause)
+            ):
                 continue
+            cited = _CITED.search(clause)
+            if cited:
+                # Only the run's own figures, before the first cited or baseline word, count.
+                clause = clause[:cited.start()]
             tokens = list(_METRIC_TOKEN.finditer(clause))
             for index, token in enumerate(tokens):
                 kind = _metric_kind(token.group(0))
