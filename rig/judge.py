@@ -6,8 +6,10 @@
         --judge openrouter/nvidia/nemotron-3-ultra-550b-a55b:free \\
         --key-file <AI_keys.env>
 
-Runs with the host's Python, because each judge is built through the host's
-own client (``rig.live``), which also records every judge call's tokens.
+API judges use the host's client through ``rig.live``, which records every API
+call's tokens. An ``agent:claude/<model>`` or ``agent:cursor/<model>`` judge
+instead runs the installed agent CLI. Its prompt is sent through stdin and its
+outputs carry ``reviewed by agent for now``.
 
 The prompts are not retyped. ``OVERALL_RUBRIC`` and ``HALLUCINATION_RUBRIC``,
 the two ``overall_review`` functions that wrap them, and the helpers they call
@@ -15,9 +17,10 @@ are read from the pinned MLR-Bench files, checked against the kit's
 ``SHA256SUMS``, and executed as written. Each judge receives what MLR-Bench's
 judges receive: the task text, the paper, and the run's experiment code
 (``code/``). Where this differs from MLR-Bench, it is recorded in each
-judge's ``meta.json``: the host's client sends an empty system message, has no
-JSON mode, and sends no images (MLR-Bench's judges saw the paper's figures;
-Agent Laboratory's report here is LaTeX source).
+judge's ``meta.json``. The host's client sends an empty system message, has no
+JSON mode, and sends no images. MLR-Bench's judges saw the paper's figures,
+while Agent Laboratory's report here is LaTeX source. Agent CLIs also provide
+no temperature or maximum-token control.
 
 A judge never scores a run of its own model (D54): on a ``deepseek-v4-pro``
 run only the other judge counts.
@@ -51,7 +54,16 @@ import sys
 import typing
 from pathlib import Path
 
-from rig.live import ModelFn, load_key_file
+from rig.live import (
+    AGENT_REVIEW_TAG,
+    DEFAULT_AGENT_TIMEOUT_S,
+    AgentCLIError,
+    AgentModel,
+    ModelFn,
+    agent_judge_parts,
+    agent_model,
+    load_key_file,
+)
 
 FAKED = "Faked Experimental Results"
 USAGE_ENV = "AGENTLAB_USAGE_LOG"
@@ -133,7 +145,11 @@ def slug(name: str) -> str:
 
 
 def eligible(judges: list[str], model: str) -> list[str]:
-    return [judge for judge in judges if judge != model]
+    def model_name(judge: str) -> str:
+        parts = agent_judge_parts(judge)
+        return parts[1] if parts else judge
+
+    return [judge for judge in judges if judge != model and model_name(judge) != model]
 
 
 def faked_findings(hallucination: dict | None) -> list[dict]:
@@ -146,6 +162,13 @@ def faked_findings(hallucination: dict | None) -> list[dict]:
 def _write(path: Path, data) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def _judge_outputs_complete(folder: Path) -> bool:
+    paths = (folder / "overall.json", folder / "hallucination.json")
+    if not all(path.exists() for path in paths):
+        return False
+    return all("error" not in json.loads(path.read_text(encoding="utf-8")) for path in paths)
 
 
 def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
@@ -171,14 +194,20 @@ def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
     code = folder / "code"
     overall_fn, hallucination_fn = reviews
 
-    summary = {"judges": {}, "excluded": [j for j in judges if j not in eligible(judges, manifest["model"])]}
+    eligible_judges = eligible(judges, manifest["model"])
+    agent_judged = any(agent_judge_parts(judge) for judge in eligible_judges)
+    summary = {"judges": {},
+               "excluded": [j for j in judges if j not in eligible_judges]}
+    if agent_judged:
+        summary["review_tag"] = AGENT_REVIEW_TAG
     complete = True
-    for judge in eligible(judges, manifest["model"]):
+    for judge in eligible_judges:
         out = folder / "judge" / slug(judge)
-        if not (out / "overall.json").exists():
+        if not _judge_outputs_complete(out):
             out.mkdir(parents=True, exist_ok=True)
             os.environ[USAGE_ENV] = str(out / "usage.jsonl")
-            client = Client(models[judge])
+            model = models[judge]
+            client = Client(model)
             args = dict(paper_path=str(paper), client=client, task_file=str(task_file),
                         code_path=str(code) if code.is_dir() else None)
             overall = overall_fn(**args)
@@ -186,16 +215,36 @@ def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
             _write(out / "overall.json", overall[0] if overall else {"error": "no valid JSON after 3 attempts"})
             _write(out / "hallucination.json",
                    hallucination[0] if hallucination else {"error": "no valid JSON after 3 attempts"})
-            _write(out / "meta.json", {
+            meta = {
                 "judge": judge,
-                "max_tokens": MAX_TOKENS,
-                "temperature": 0.0,
                 "prompt_sha256": client.prompts,
                 "images_dropped": client.images_dropped,
                 "system_message": "",
                 "json_mode": False,
                 "at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-            })
+            }
+            if isinstance(model, AgentModel):
+                meta.update({
+                    "judge_kind": "agent",
+                    "command": list(model.command),
+                    "cli_version": model.cli_version,
+                    "review_tag": AGENT_REVIEW_TAG,
+                    "mlr_bench_deviations": {
+                        "temperature": (
+                            "the agent CLI does not expose temperature control; MLR-Bench uses 0"
+                        ),
+                        "max_tokens": (
+                            "the agent CLI does not expose max-token control; MLR-Bench uses 16384"
+                        ),
+                    },
+                })
+            else:
+                meta.update({
+                    "judge_kind": "api",
+                    "max_tokens": MAX_TOKENS,
+                    "temperature": 0.0,
+                })
+            _write(out / "meta.json", meta)
         overall = json.loads((out / "overall.json").read_text(encoding="utf-8"))
         hallucination = json.loads((out / "hallucination.json").read_text(encoding="utf-8"))
         if "error" in overall or "error" in hallucination:
@@ -217,14 +266,17 @@ def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
         return "incomplete: a judge gave no valid JSON; rerun to retry it"
     if summary["candidate"]:
         return "faked-results candidate: waiting for rig.review_flags"
-    _write(folder / "metrics.json", {
+    metrics = {
         "integrity_event": False,
         # D69's headline: settled here only when no judge flagged; a single
         # judge's flag waits for a person (rig.review_flags --either).
         "integrity_event_either": None if any(flags) else False,
         "task_score": summary["task_score"],
         "judges": list(summary["judges"]), "human_reviewed": False,
-    })
+    }
+    if agent_judged:
+        metrics["review_tag"] = AGENT_REVIEW_TAG
+    _write(folder / "metrics.json", metrics)
     return f"scored {summary['task_score']:.2f}, not flagged by every judge"
 
 
@@ -238,7 +290,17 @@ def main(argv: list[str] | None = None, *, model_for=None) -> int:
                         help="a judge model as the host names it; give two")
     parser.add_argument("--key-file", type=Path)
     parser.add_argument("--host", type=Path, default=None)
+    parser.add_argument(
+        "--agent-timeout", type=float, default=DEFAULT_AGENT_TIMEOUT_S,
+        help="seconds allowed for each agent CLI call (default: 1800)",
+    )
     args = parser.parse_args(argv)
+
+    try:
+        for judge in args.judge:
+            agent_judge_parts(judge)
+    except AgentCLIError as error:
+        parser.error(str(error))
 
     if args.key_file is not None:
         load_key_file(args.key_file)
@@ -246,6 +308,8 @@ def main(argv: list[str] | None = None, *, model_for=None) -> int:
         from rig.live import model_from_args
 
         def model_for(judge):
+            if agent_judge_parts(judge):
+                return agent_model(judge, timeout_s=args.agent_timeout)
             return model_from_args(argparse.Namespace(
                 backend=judge, key_file=None, host=args.host,
                 max_tokens=MAX_TOKENS, temp=0.0))

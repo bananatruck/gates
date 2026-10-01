@@ -1,4 +1,4 @@
-"""A person confirms or rejects each faked-results candidate (paper/PLAN.md §3).
+"""A person or tagged agent confirms each faked-results candidate (paper/PLAN.md §3).
 
     cd ~/gates && python3 -m rig.review_flags --runs ~/gates-runs/runs-pilot --reviewer Kesh
 
@@ -11,6 +11,10 @@ annotators checked the judges' evidence before a paper counted in Figure 6.
 ``judge/human_review.json`` keeps the reviewer, the verdict, a note and the
 time; ``metrics.json`` is written from it, with the judges' mean score.
 Answering ``s`` skips a run and leaves it for later. Stdlib only, no model.
+
+An agent reviewer uses ``--reviewer agent:<name> --answers <json file>``.
+The JSON object maps run folders, relative to ``--runs`` or absolute, to an
+object with ``confirmed`` and ``note`` fields. This path never prompts.
 
 Two pools, because D69 reports both definitions. The default pool is every
 run all eligible judges flagged: a verdict there sets ``integrity_event``,
@@ -40,6 +44,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from rig.live import AGENT_REVIEW_TAG  # noqa: E402
 from rig.stats import cohen_kappa  # noqa: E402
 
 
@@ -102,6 +107,9 @@ def record(folder: Path, *, reviewer: str, confirmed: bool, note: str,
         "order_seed": order_seed,
         "at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
     }
+    agent_reviewed = reviewer.startswith("agent:")
+    if agent_reviewed:
+        review["review_tag"] = AGENT_REVIEW_TAG
     (folder / "judge" / "human_review.json").write_text(
         json.dumps(review, indent=2) + "\n", encoding="utf-8")
     metrics = {
@@ -112,10 +120,48 @@ def record(folder: Path, *, reviewer: str, confirmed: bool, note: str,
         "integrity_event_either": confirmed,
         "task_score": summary["task_score"],
         "judges": list(summary["judges"]),
-        "human_reviewed": True,
+        "human_reviewed": not agent_reviewed,
     }
+    if agent_reviewed or summary.get("review_tag") == AGENT_REVIEW_TAG:
+        metrics["review_tag"] = AGENT_REVIEW_TAG
     (folder / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
     return metrics
+
+
+def load_answers(path: Path, runs: Path) -> dict[Path, tuple[bool, str]]:
+    """Parse and validate an agent review answer file at the CLI boundary."""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"could not read answers from {path}: {error}") from error
+    if not isinstance(raw, dict):
+        raise ValueError("answers must be a JSON object that maps run folders to answers")
+
+    root = runs.resolve()
+    answers: dict[Path, tuple[bool, str]] = {}
+    for name, answer in raw.items():
+        if not isinstance(name, str) or not name:
+            raise ValueError("each answers key must be a non-empty run folder")
+        supplied = Path(name)
+        folder = supplied.resolve() if supplied.is_absolute() else (root / supplied).resolve()
+        try:
+            folder.relative_to(root)
+        except ValueError as error:
+            raise ValueError(f"answer folder is outside --runs: {name}") from error
+        if not (folder / "judge" / "summary.json").is_file():
+            raise ValueError(f"answer folder has no judge/summary.json: {name}")
+        if not isinstance(answer, dict):
+            raise ValueError(f"answer for {name} must be an object")
+        confirmed = answer.get("confirmed")
+        note = answer.get("note")
+        if not isinstance(confirmed, bool) or not isinstance(note, str):
+            raise ValueError(
+                f"answer for {name} needs boolean confirmed and string note fields"
+            )
+        if folder in answers:
+            raise ValueError(f"answers name the same run folder twice: {name}")
+        answers[folder] = confirmed, note
+    return answers
 
 
 def main(argv: list[str] | None = None, *, ask: Callable[[str], str] = input) -> int:
@@ -123,6 +169,8 @@ def main(argv: list[str] | None = None, *, ask: Callable[[str], str] = input) ->
                                      description=__doc__.split("\n\n")[0])
     parser.add_argument("--runs", type=Path, required=True)
     parser.add_argument("--reviewer", required=True)
+    parser.add_argument("--answers", type=Path,
+                        help="JSON answers for an agent:<name> reviewer; never prompts")
     parser.add_argument("--either", action="store_true",
                         help="review every run any judge flagged (D69's headline pool)")
     parser.add_argument("--blind", action="store_true",
@@ -134,6 +182,14 @@ def main(argv: list[str] | None = None, *, ask: Callable[[str], str] = input) ->
                         help="print each judge pair's agreement and kappa, then exit")
     args = parser.parse_args(argv)
 
+    agent_reviewer = args.reviewer.startswith("agent:")
+    if agent_reviewer and args.reviewer == "agent:":
+        parser.error("--reviewer agent:<name> needs a non-empty name")
+    if agent_reviewer and args.answers is None:
+        parser.error("--reviewer agent:<name> requires --answers <json-file>")
+    if not agent_reviewer and args.answers is not None:
+        parser.error("--answers requires --reviewer agent:<name>")
+
     if args.agreement:
         for (first, second), pair in sorted(agreement(args.runs).items()):
             kappa = "undefined" if pair["kappa"] is None else f"{pair['kappa']:.3f}"
@@ -144,6 +200,22 @@ def main(argv: list[str] | None = None, *, ask: Callable[[str], str] = input) ->
     pending = candidates(args.runs, either=args.either)
     if args.blind:
         pending = review_order(pending, args.seed)
+    if agent_reviewer:
+        try:
+            supplied_answers = load_answers(args.answers, args.runs)
+        except ValueError as error:
+            parser.error(str(error))
+        missing = [folder for folder in pending if folder.resolve() not in supplied_answers]
+        if missing:
+            shown = ", ".join(str(folder) for folder in missing)
+            parser.error(f"--answers has no answer for pending run folders: {shown}")
+        print(f"{len(pending)} faked-results candidates to review", flush=True)
+        for folder in pending:
+            confirmed, note = supplied_answers[folder.resolve()]
+            record(folder, reviewer=args.reviewer, confirmed=confirmed, note=note,
+                   blind=args.blind, order_seed=args.seed if args.blind else None)
+        return 0
+
     stage_root = args.stage or args.runs / "_blind"
     print(f"{len(pending)} faked-results candidates to review", flush=True)
     for number, folder in enumerate(pending, 1):
