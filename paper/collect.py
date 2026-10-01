@@ -69,7 +69,8 @@ REQUIRED = ("benchmark", "task", "system", "level", "seed")
 
 #: A crashed execution's cause, from its record alone.
 #: ``oom_at_cap``: out of memory under the runner's per-run GPU share, which
-#: PyTorch reports as "N GiB allowed"; ``oom``: out of memory with no cap named;
+#: PyTorch reports as "N GiB allowed" or "N MiB allowed"; ``oom``: out of memory
+#: with no cap named;
 #: ``timeout``: killed at the execution limit; ``environment``: a package the
 #: environment should provide failed to import; ``agent_code``: anything else.
 CRASH_CAUSES = ("oom_at_cap", "oom", "timeout", "environment", "agent_code")
@@ -79,7 +80,10 @@ CRASH_CAUSES = ("oom_at_cap", "oom", "timeout", "environment", "agent_code")
 #: agent chose may simply not fit the card.
 HARNESS_CAUSES = {"oom_at_cap", "timeout", "environment"}
 
-_ALLOWED = re.compile(r"GiB allowed")
+_ALLOWED = re.compile(r"(?:GiB|MiB) allowed")
+_OUT_OF_MEMORY = re.compile(
+    r"out of memory|not enough memory|CUBLAS_STATUS_ALLOC_FAILED", re.IGNORECASE
+)
 _ENVIRONMENT = re.compile(r"Failed to import|No module named|cannot import name")
 
 
@@ -91,7 +95,7 @@ def crash_cause(exception: dict | None, timed_out: bool) -> str | None:
         return None
     kind = str(exception.get("type", ""))
     message = str(exception.get("message", ""))
-    if kind == "OutOfMemoryError" or "out of memory" in message:
+    if kind in {"MemoryError", "OutOfMemoryError"} or _OUT_OF_MEMORY.search(message):
         return "oom_at_cap" if _ALLOWED.search(message) else "oom"
     if kind in {"ModuleNotFoundError", "ImportError"} or _ENVIRONMENT.search(message):
         return "environment"
@@ -140,16 +144,37 @@ def load_crash_runs(root: Path) -> list[dict]:
     return runs
 
 
-def _executions(folder: Path) -> list[dict]:
+def _executions(folder: Path, level: int | str) -> list[dict]:
     """Each execution a run made, in order: its cause, and whether Gate 1 passed it."""
     artifacts = folder / "gate_artifacts"
     out: list[dict] = []
-    for results in sorted(artifacts.glob("ungated_*/results.json")):
+    ungated_dirs = [
+        path for path in artifacts.glob("ungated_*")
+        if path.name.removeprefix("ungated_").isdigit()
+    ]
+    for execution_dir in sorted(
+        ungated_dirs, key=lambda path: int(path.name.removeprefix("ungated_"))
+    ):
+        results = execution_dir / "results.json"
+        if not results.exists():
+            out.append({"cause": "timeout", "passed": None})
+            continue
         record = json.loads(results.read_text(encoding="utf-8"))
         out.append({"cause": crash_cause(record.get("exception"), False), "passed": None})
-    for report_path in sorted((artifacts / "gate1").glob("attempt_*/gate1_report.json")):
+    for report_path in sorted(
+        (artifacts / "gate1").glob("attempt_*/gate1_report.json"),
+        key=lambda path: int(path.parent.name.removeprefix("attempt_")),
+    ):
         report = json.loads(report_path.read_text(encoding="utf-8"))
-        execution = report.get("execution") or {}
+        execution = report.get("execution")
+        if execution is None and level == "0d":
+            results = report_path.parent / "results.json"
+            execution = (
+                json.loads(results.read_text(encoding="utf-8"))
+                if results.exists()
+                else {"timed_out": True}
+            )
+        execution = execution or {}
         out.append({
             "cause": crash_cause(execution.get("exception"), bool(execution.get("timed_out"))),
             "passed": report.get("verdict") == "PASS",
@@ -157,25 +182,34 @@ def _executions(folder: Path) -> list[dict]:
     return out
 
 
-def _paper_run(executions: list[dict]) -> dict | None:
-    """The execution a paper was written from: the last Gate 1 passed, else the last."""
+def _paper_run(executions: list[dict], level: int | str) -> dict | None:
+    """The execution a paper was written from under the arm's enforcement rule."""
+    if str(level) == "0":
+        ungated = [e for e in executions if e["passed"] is None]
+        return ungated[-1] if ungated else (executions[-1] if executions else None)
+    if level == "0d":
+        return executions[-1] if executions else None
     passed = [e for e in executions if e["passed"]]
     if passed:
         return passed[-1]
     return executions[-1] if executions else None
 
 
+def _arm(level: int | str) -> str:
+    return "L0'" if level == "0d" else f"L{int(level)}"
+
+
 def crash_table(runs: list[dict]) -> dict[tuple[str, str, str], dict[str, int]]:
     """Per cell: executions, crashes by cause, harness against agent, papers on a crash."""
     table: dict[tuple[str, str, str], dict[str, int]] = {}
     for run in runs:
-        key = (run["benchmark"], run["system"], f"L{int(run['level'])}")
+        key = (run["benchmark"], run["system"], _arm(run["level"]))
         row = table.setdefault(key, {
             "runs": 0, "executions": 0, "crashed": 0, "harness": 0, "agent": 0,
             **dict.fromkeys(CRASH_CAUSES, 0),
             "papers": 0, "papers_on_crashed_run": 0, "papers_on_harness_crash": 0,
         })
-        executions = _executions(Path(run["folder"]))
+        executions = _executions(Path(run["folder"]), run["level"])
         row["runs"] += 1
         row["executions"] += len(executions)
         for execution in executions:
@@ -187,7 +221,7 @@ def crash_table(runs: list[dict]) -> dict[tuple[str, str, str], dict[str, int]]:
             row["harness" if cause in HARNESS_CAUSES else "agent"] += 1
         if run.get("paper_present"):
             row["papers"] += 1
-            source = _paper_run(executions)
+            source = _paper_run(executions, run["level"])
             if source is not None and source["cause"] is not None:
                 row["papers_on_crashed_run"] += 1
                 if source["cause"] in HARNESS_CAUSES:
@@ -208,7 +242,7 @@ def write_crashes(table: dict[tuple[str, str, str], dict[str, int]], path: Path)
 def cells(runs: list[dict]) -> dict[tuple[str, str, str], list[dict]]:
     grouped: dict[tuple[str, str, str], list[dict]] = defaultdict(list)
     for run in runs:
-        grouped[(run["benchmark"], run["system"], f"L{int(run['level'])}")].append(run)
+        grouped[(run["benchmark"], run["system"], _arm(run["level"]))].append(run)
     return dict(grouped)
 
 
