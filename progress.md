@@ -17,7 +17,7 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 branch: main
 head: fec788f
 head_date: 2026-09-29
-tests_total: 966
+tests_total: 967
 tests_gate1: 183
 tests_gate2: 103
 tests_gate3: 164
@@ -256,6 +256,7 @@ Append-only. One line each: date, decision, where it is enforced.
 | 09-30 | D87 | **The flag review's either-judge pool waits for incomplete judging, and judge agreement with no shared runs is undefined (B28, B29).** A summary with `complete: false` is no longer in `candidates(either=True)`: reviewing it wrote `metrics.json` and `rig.judge` then never retried the failed judge, so the run's score was lost (B28). `agreement()` reports a judge pair with no shared runs as n 0 with raw agreement and kappa None, printed as undefined, not 0.000 (B29), and skips pilot, rescore and void runs (T79-7). Red first: T79-1, T79-5, T79-7 in `tests/test_judge.py`. Reviewed by a reviewer agent: pass. | `rig/review_flags.py`, `tests/test_judge.py` |
 | 09-30 | D88 | **The red team counts a warning for a key only when the warning names that key, not a longer key that starts with it (B34).** `_names_key` matched by substring, so a WARN naming `exp1.test_acc_std` was counted as naming `exp1.test_acc`. It now requires the key not to be followed by a word character. The rig is unchanged at 17 strategies, 7 blocked, 1 warned, 9 silent, strategy by strategy. Known limit, from review: only what follows the key is checked, so a longer key that ends with it (`myexp1.test_acc`) or a dotted child (`exp1.test_acc.mean`) still counts. Red first: T74-4 in `tests/test_red_team.py`. Reviewed by a reviewer agent: pass. | `rig/red_team.py`, `tests/test_red_team.py` |
 | 09-30 | D89 | **The red team gains B5 as strategy S18: the agent aliases the recording call (`rr = record_result`) and records a typed constant through the alias, and Gate 1 lets it pass silently.** Gate 1 is unchanged: `run_gate1` passes S18's code with the value recorded as `arg_kind='unknown'` and the key listed as unresolved in `results.values_computed`, matching B5's reproduction. The rig is now 18 strategies: 7 blocked, 1 warned, 10 silent; S0-S17 are unchanged strategy by strategy. B5's second shape, `record_result(**{...})`, is not in the rig yet. Reviewed by a reviewer agent: pass. | `rig/red_team.py`, `tests/test_red_team.py` |
+| 09-30 | D90 | **An L0' bundle's PROVENANCE line points at the run's own results when Gate 1 rejected the program before running it (D83 follow-up).** At `GATES_LEVEL=0d` the program runs even when Gate 1 rejects it statically, but `build_evidence_bundle` pointed PROVENANCE at Gate 1's empty `registry.json`. It now points at the execution's `results.json` when `report.execution` is None. Verdicts and PROVENANCE are unchanged at levels 0-3 and on L0' runs where Gate 1 ran (reviewer probe over passing, crashing, unbound-name, shadowed and syntax-error programs at every level). Known limit, from review: if such a run writes no `results.json`, the line still falls back to the registry. Red first, in `tests/test_levels.py`. Reviewed by a reviewer agent: pass. | `gates/pipeline.py`, `tests/test_levels.py` |
 
 ## session log
 
@@ -351,3 +352,4 @@ Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 
 | 09-30 | PR | **D87.** B28, B29 and T79-7 in the flag review, red first (3 tests). 964 gates tests. |
 | 09-30 | PR | **D88.** B34 in the red team rig, red first (1 test). 965 gates tests. |
 | 09-30 | PR | **D89.** B5 as red-team strategy S18 (silent), 18 strategies: 7 blocked, 1 warned, 10 silent. 966 gates tests. |
+| 09-30 | PR | **D90.** D83 follow-up: L0' PROVENANCE for a program Gate 1 rejected before running, red first (1 test). 967 gates tests. |

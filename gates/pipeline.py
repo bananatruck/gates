@@ -741,11 +741,19 @@ def build_evidence_bundle(
             lines += [f"    {row}" for row in render_evidence(check)]
 
     if report.artifact_dir:
-        lines += [
-            "",
-            "PROVENANCE",
-            f"  registry: {os.path.join(report.artifact_dir, REGISTRY_FILENAME)}",
-        ]
+        lines += ["", "PROVENANCE"]
+        if (
+            execution_
+            and execution_.results_json_path
+            and report.execution is None
+        ):
+            # Gate 1 rejected before running; L0' still ran the program and the
+            # registry on disk is Gate 1's empty one, not what was measured.
+            lines.append(f"  results: {execution_.results_json_path}")
+        else:
+            lines.append(
+                f"  registry: {os.path.join(report.artifact_dir, REGISTRY_FILENAME)}"
+            )
 
     if not enforced and execution_ and execution_.exception:
         lines += ["", "EXCEPTION", execution_.exception.traceback.rstrip()]
