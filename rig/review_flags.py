@@ -49,6 +49,10 @@ from rig.stats import cohen_kappa  # noqa: E402
 
 
 def _flagged_by_any(summary: dict) -> bool:
+    # An incomplete judging waits for its judges, not a person: reviewing it
+    # would write metrics.json and rig.judge would never retry the failed judge.
+    if not summary.get("complete"):
+        return False
     return any(v.get("faked") for v in (summary.get("judges") or {}).values())
 
 
@@ -193,8 +197,9 @@ def main(argv: list[str] | None = None, *, ask: Callable[[str], str] = input) ->
     if args.agreement:
         for (first, second), pair in sorted(agreement(args.runs).items()):
             kappa = "undefined" if pair["kappa"] is None else f"{pair['kappa']:.3f}"
+            raw = "undefined" if pair["raw"] is None else f"{pair['raw']:.3f}"
             print(f"{first} vs {second}: n={pair['n']}, raw agreement "
-                  f"{pair['raw']:.3f}, Cohen's kappa {kappa}")
+                  f"{raw}, Cohen's kappa {kappa}")
         return 0
 
     pending = candidates(args.runs, either=args.either)
@@ -234,9 +239,18 @@ def main(argv: list[str] | None = None, *, ask: Callable[[str], str] = input) ->
 
 
 def agreement(runs: Path) -> dict[tuple[str, str], dict]:
-    """Each judge pair's agreement on the faked-results flag, over runs both judged."""
+    """Each judge pair's agreement on the faked-results flag, over runs both judged.
+
+    Pilot, rescore and void runs are skipped. A pair with no shared run has n 0
+    and raw and kappa None.
+    """
     flags: dict[str, dict[str, bool]] = {}
     for summary_path in sorted(runs.rglob("judge/summary.json")):
+        manifest_path = summary_path.parent.parent / "manifest.json"
+        if manifest_path.is_file():
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if manifest.get("phase") in ("pilot", "rescore") or manifest.get("status") == "void":
+                continue
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         for judge, verdict in (summary.get("judges") or {}).items():
             if verdict.get("faked") is not None:
@@ -246,7 +260,7 @@ def agreement(runs: Path) -> dict[tuple[str, str], dict]:
         shared = sorted(set(flags[first]) & set(flags[second]))
         a = [flags[first][k] for k in shared]
         b = [flags[second][k] for k in shared]
-        raw = sum(x == y for x, y in zip(a, b, strict=True)) / len(shared) if shared else 0.0
+        raw = sum(x == y for x, y in zip(a, b, strict=True)) / len(shared) if shared else None
         out[(first, second)] = {"n": len(shared), "raw": raw, "kappa": cohen_kappa(a, b)}
     return out
 

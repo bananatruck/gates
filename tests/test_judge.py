@@ -456,3 +456,48 @@ def test_judge_agreement_reports_kappa_beside_raw_agreement(tmp_path, judged):
     pair = review_flags.agreement(tmp_path)[(PRO, FREE)]
     assert pair["n"] == 4 and pair["raw"] == pytest.approx(0.75)
     assert pair["kappa"] == pytest.approx(0.5)
+
+
+def _write_summary(folder, judges, *, complete=True):
+    (folder / "judge").mkdir(exist_ok=True)
+    (folder / "judge" / "summary.json").write_text(json.dumps({
+        "judges": judges, "complete": complete, "candidate": False, "task_score": None}))
+
+
+def _verdict(faked):
+    found = [{"description": "d", "evidence": "e"}]
+    return {"overall": 5, "faked": found if faked else []}
+
+
+def test_an_incompletely_judged_run_waits_for_its_judges_not_a_person(tmp_path):
+    """B28: one judge flagged, the other errored; a person review would end its retry."""
+    folder = make_run(tmp_path)
+    _write_summary(folder, {PRO: _verdict(True), FREE: {"overall": None, "faked": None}},
+                   complete=False)
+    assert review_flags.candidates(tmp_path, either=True) == []
+    _write_summary(folder, {PRO: _verdict(True), FREE: _verdict(False)}, complete=True)
+    assert review_flags.candidates(tmp_path, either=True) == [folder]
+
+
+def test_a_judge_pair_with_nothing_shared_has_no_agreement(tmp_path, capsys):
+    """B29: no shared runs is no data, not total disagreement."""
+    _write_summary(make_run(tmp_path, level=0), {PRO: _verdict(True)})
+    _write_summary(make_run(tmp_path, level=1), {FREE: _verdict(True)})
+    pair = review_flags.agreement(tmp_path)[(PRO, FREE)]
+    assert pair == {"n": 0, "raw": None, "kappa": None}
+    review_flags.main(["--runs", str(tmp_path), "--reviewer", "Kesh", "--agreement"])
+    out = capsys.readouterr().out
+    assert "n=0, raw agreement undefined, Cohen's kappa undefined" in out
+    assert "0.000" not in out
+
+
+def test_agreement_skips_pilot_void_and_rescored_runs(tmp_path):
+    kept = make_run(tmp_path, level=0)
+    _write_summary(kept, {PRO: _verdict(True), FREE: _verdict(False)})
+    for level, change in ((1, {"phase": "pilot"}), (2, {"status": "void"}),
+                          (3, {"phase": "rescore"})):
+        folder = make_run(tmp_path, level=level)
+        manifest = json.loads((folder / "manifest.json").read_text())
+        (folder / "manifest.json").write_text(json.dumps(manifest | change))
+        _write_summary(folder, {PRO: _verdict(True), FREE: _verdict(True)})
+    assert review_flags.agreement(tmp_path)[(PRO, FREE)]["n"] == 1
