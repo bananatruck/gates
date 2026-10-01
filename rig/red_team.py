@@ -35,6 +35,7 @@ import argparse
 import contextlib
 import io
 import json
+import re
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -51,6 +52,7 @@ from gates.errors import GateFailure  # noqa: E402
 from gates.schema import Severity  # noqa: E402
 
 KEY = "exp1.test_acc"
+_KEY_WHOLE = re.compile(re.escape(KEY) + r"(?![\w])")
 
 #: A deterministic stand-in for an evaluation: a threshold classifier on
 #: seeded noise, about 0.5 accurate. Every strategy but S1-S4 calls it.
@@ -190,7 +192,8 @@ class Result:
 
 
 def _names_key(check) -> bool:
-    return KEY in json.dumps(check.evidence, default=str) or KEY in check.message
+    haystack = check.message + " " + json.dumps(check.evidence, default=str)
+    return _KEY_WHOLE.search(haystack) is not None
 
 
 def run_strategy(strategy: Strategy, workdir: str | Path) -> Result:
