@@ -180,6 +180,108 @@ def _judge_outputs_complete(folder: Path) -> bool:
     return all(not _output_needs_prompt(path) for path in paths)
 
 
+def _read_meta(path: Path) -> dict:
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _prompt_provenance(
+    client: Client,
+    *,
+    start_prompts: int,
+    start_images: int,
+    at_utc: str,
+) -> dict:
+    hashes = client.prompts[start_prompts:]
+    return {
+        "prompt_sha256": hashes[-1] if hashes else None,
+        "attempts": len(hashes),
+        "at_utc": at_utc,
+        "images_dropped": client.images_dropped - start_images,
+    }
+
+
+def _judge_shared_meta(judge_name: str, model: ModelFn) -> dict:
+    meta = {
+        "judge": judge_name,
+        "system_message": "",
+        "json_mode": False,
+    }
+    if isinstance(model, AgentModel):
+        meta.update({
+            "judge_kind": "agent",
+            "command": list(model.command),
+            "cli": model.cli,
+            "model": model.model,
+            "effort": model.effort,
+            "cli_version": model.cli_version,
+            "review_tag": AGENT_REVIEW_TAG,
+            "mlr_bench_deviations": {
+                "temperature": (
+                    "the agent CLI does not expose temperature control; "
+                    "MLR-Bench uses 0"
+                ),
+                "max_tokens": (
+                    "the agent CLI does not expose max-token control; "
+                    "MLR-Bench uses 16384"
+                ),
+            },
+        })
+    else:
+        meta.update({
+            "judge_kind": "api",
+            "max_tokens": MAX_TOKENS,
+            "temperature": 0.0,
+        })
+    return meta
+
+
+def _refresh_meta_compat_fields(meta: dict) -> None:
+    """Top-level copies other tools read; derived from per-prompt provenance."""
+    prompts = meta.get("prompts") or {}
+    ordered: list[str] = []
+    latest_utc = ""
+    images = 0
+    for role in ("overall", "hallucination"):
+        entry = prompts.get(role)
+        if not entry:
+            continue
+        digest = entry.get("prompt_sha256")
+        if digest:
+            ordered.append(digest)
+        images += int(entry.get("images_dropped") or 0)
+        at = entry.get("at_utc") or ""
+        if at > latest_utc:
+            latest_utc = at
+    if ordered:
+        meta["prompt_sha256"] = ordered
+    meta["images_dropped"] = images
+    if latest_utc:
+        meta["at_utc"] = latest_utc
+
+
+def _write_judge_meta(
+    out: Path,
+    judge_name: str,
+    model: ModelFn,
+    *,
+    overall: dict | None,
+    hallucination: dict | None,
+) -> None:
+    path = out / "meta.json"
+    meta = _read_meta(path)
+    meta.update(_judge_shared_meta(judge_name, model))
+    prompts = dict(meta.get("prompts") or {})
+    if overall is not None:
+        prompts["overall"] = overall
+    if hallucination is not None:
+        prompts["hallucination"] = hallucination
+    meta["prompts"] = prompts
+    _refresh_meta_compat_fields(meta)
+    _write(path, meta)
+
+
 def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
               reviews: tuple, tasks: Path, opinions: list[str] | None = None) -> str:
     """Judge one run folder. Returns what happened, in a few words."""
@@ -237,13 +339,31 @@ def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
                     task_file=str(task_file),
                     code_path=str(code) if code.is_dir() else None,
                 )
+                overall_prov = None
+                hallucination_prov = None
                 if need_overall:
+                    start_prompts = len(client.prompts)
+                    start_images = client.images_dropped
+                    at_utc = datetime.datetime.now(datetime.timezone.utc).isoformat(
+                        timespec="seconds"
+                    )
                     overall = overall_fn(**args)
                     _write(
                         out / "overall.json",
                         overall[0] if overall else {"error": "no valid JSON after 3 attempts"},
                     )
+                    overall_prov = _prompt_provenance(
+                        client,
+                        start_prompts=start_prompts,
+                        start_images=start_images,
+                        at_utc=at_utc,
+                    )
                 if need_hallucination:
+                    start_prompts = len(client.prompts)
+                    start_images = client.images_dropped
+                    at_utc = datetime.datetime.now(datetime.timezone.utc).isoformat(
+                        timespec="seconds"
+                    )
                     hallucination = hallucination_fn(**args)
                     _write(
                         out / "hallucination.json",
@@ -251,43 +371,19 @@ def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
                         if hallucination
                         else {"error": "no valid JSON after 3 attempts"},
                     )
-                meta = {
-                    "judge": judge,
-                    "prompt_sha256": client.prompts,
-                    "images_dropped": client.images_dropped,
-                    "system_message": "",
-                    "json_mode": False,
-                    "at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(
-                        timespec="seconds"
-                    ),
-                }
-                if isinstance(model, AgentModel):
-                    meta.update({
-                        "judge_kind": "agent",
-                        "command": list(model.command),
-                        "cli": model.cli,
-                        "model": model.model,
-                        "effort": model.effort,
-                        "cli_version": model.cli_version,
-                        "review_tag": AGENT_REVIEW_TAG,
-                        "mlr_bench_deviations": {
-                            "temperature": (
-                                "the agent CLI does not expose temperature control; "
-                                "MLR-Bench uses 0"
-                            ),
-                            "max_tokens": (
-                                "the agent CLI does not expose max-token control; "
-                                "MLR-Bench uses 16384"
-                            ),
-                        },
-                    })
-                else:
-                    meta.update({
-                        "judge_kind": "api",
-                        "max_tokens": MAX_TOKENS,
-                        "temperature": 0.0,
-                    })
-                _write(out / "meta.json", meta)
+                    hallucination_prov = _prompt_provenance(
+                        client,
+                        start_prompts=start_prompts,
+                        start_images=start_images,
+                        at_utc=at_utc,
+                    )
+                _write_judge_meta(
+                    out,
+                    judge,
+                    model,
+                    overall=overall_prov,
+                    hallucination=hallucination_prov,
+                )
             overall = json.loads((out / "overall.json").read_text(encoding="utf-8"))
             hallucination = json.loads(
                 (out / "hallucination.json").read_text(encoding="utf-8")

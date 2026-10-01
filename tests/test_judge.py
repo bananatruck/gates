@@ -586,6 +586,21 @@ def test_a_run_without_a_paper_gets_no_score_and_no_judge(tmp_path, judged):
     assert "no_paper:gate" in metrics["no_paper"]
 
 
+def _api_meta_with_overall_prompt(judge_name: str, overall_entry: dict) -> dict:
+    return {
+        "judge": judge_name,
+        "prompt_sha256": [overall_entry["prompt_sha256"]],
+        "images_dropped": overall_entry.get("images_dropped", 0),
+        "system_message": "",
+        "json_mode": False,
+        "at_utc": overall_entry["at_utc"],
+        "judge_kind": "api",
+        "max_tokens": 16384,
+        "temperature": 0.0,
+        "prompts": {"overall": dict(overall_entry)},
+    }
+
+
 def test_rerun_does_not_rewrite_a_valid_overall_when_hallucination_failed(
     tmp_path, judged
 ):
@@ -597,6 +612,15 @@ def test_rerun_does_not_rewrite_a_valid_overall_when_hallucination_failed(
     (judge_dir / "hallucination.json").write_text(
         json.dumps({"error": "no valid JSON after 3 attempts"}) + "\n"
     )
+    kept_overall_meta = {
+        "prompt_sha256": "a" * 64,
+        "attempts": 1,
+        "at_utc": "2020-01-01T00:00:00+00:00",
+        "images_dropped": 2,
+    }
+    (judge_dir / "meta.json").write_text(
+        json.dumps(_api_meta_with_overall_prompt(PRO, kept_overall_meta), indent=2) + "\n"
+    )
     prompts = []
 
     def always_fails(prompt, _system):
@@ -606,6 +630,8 @@ def test_rerun_does_not_rewrite_a_valid_overall_when_hallucination_failed(
     judged(folder, {PRO: always_fails}, judges=(PRO,))
 
     assert (judge_dir / "overall.json").read_bytes() == overall_bytes
+    meta = json.loads((judge_dir / "meta.json").read_text())
+    assert meta["prompts"]["overall"] == kept_overall_meta
     assert prompts
     assert all("identifying hallucinations" in prompt for prompt in prompts)
     assert not any("Soundness (1-10)" in prompt for prompt in prompts)
@@ -625,9 +651,22 @@ def test_rerun_completes_hallucination_without_touching_valid_overall(tmp_path, 
     )
     prompts = []
 
+    kept_overall_meta = {
+        "prompt_sha256": "b" * 64,
+        "attempts": 2,
+        "at_utc": "2019-06-15T12:00:00+00:00",
+        "images_dropped": 0,
+    }
+    (judge_dir / "meta.json").write_text(
+        json.dumps(_api_meta_with_overall_prompt(PRO, kept_overall_meta), indent=2) + "\n"
+    )
+
     judged(folder, {PRO: fake(3, False, prompts)}, judges=(PRO,))
 
     assert (judge_dir / "overall.json").read_bytes() == overall_bytes
+    meta = json.loads((judge_dir / "meta.json").read_text())
+    assert meta["prompts"]["overall"] == kept_overall_meta
+    assert meta["prompts"]["hallucination"]["attempts"] == 1
     assert len(prompts) == 1
     assert "identifying hallucinations" in prompts[0]
     assert "Soundness (1-10)" not in prompts[0]
