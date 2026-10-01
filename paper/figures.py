@@ -739,8 +739,241 @@ def agent_judge_figure(
     return _save_publication_figure(fig, rows, output_dir, "agent_judge_by_level")
 
 
+JUDGE_COLUMNS = (
+    ("agent:claude/claude-opus-5-5", "Opus 5.5"),
+    ("agent:codex/gpt-5.6-sol:high", "GPT-5.6 Sol"),
+    ("agent:cursor/grok-4.7-high", "Grok 4.7*"),
+)
+
+
+def _run_label(row: dict[str, str]) -> str:
+    return f"{row['level']} seed {row['seed']}"
+
+
+def audit_figure(
+    provenance_path: Path = HERE / "provenance.csv",
+    judging_path: Path = HERE / "judging.csv",
+    output_dir: Path = OUT,
+) -> RenderedFigure:
+    """Draw, per run, where the paper's numerals came from and every rater's verdict."""
+    runs = sorted(
+        _csv_rows(provenance_path), key=lambda r: (_level_sort(r["level"]), int(r["seed"]))
+    )
+    verdicts: dict[tuple[str, str, str], dict[str, str]] = {}
+    for row in _csv_rows(judging_path):
+        verdicts[(row["level"], row["seed"], row["judge"])] = row
+
+    fig, (share_ax, grid_ax) = plt.subplots(
+        1, 2, figsize=(7.0, 3.1), gridspec_kw={"width_ratios": [1.0, 1.0]}
+    )
+    fig.patch.set_facecolor(SURFACE)
+    _paper_axis(share_ax)
+    share_ax.grid(axis="y", visible=False)
+    share_ax.grid(axis="x", color=GRID, linewidth=0.6)
+
+    labels = [_run_label(r) for r in runs]
+    for index, row in enumerate(runs):
+        total = int(row["numerals"])
+        missing = int(row["not_in_execution"])
+        found = total - missing
+        found_share = 100 * found / total
+        share_ax.barh(index, found_share, color=BLUE, height=0.62)
+        share_ax.barh(
+            index, 100 - found_share, left=found_share, color=VERMILLION, height=0.62, hatch="///",
+            edgecolor=SURFACE, linewidth=0,
+        )
+        share_ax.text(
+            101.5, index, f"{missing}/{total}", va="center", ha="left", fontsize=7, color=INK
+        )
+    share_ax.set_yticks(range(len(runs)), labels)
+    share_ax.invert_yaxis()
+    share_ax.set_xlim(0, 118)
+    share_ax.set_xticks([0, 25, 50, 75, 100])
+    share_ax.set_xlabel("Share of the paper's numerals, %", fontsize=7, color=INK2)
+    share_ax.set_title(
+        "(a) Paper numerals found in the feeding execution",
+        loc="left", fontsize=7.5, color=INK, weight="bold",
+    )
+    for boundary in (1.5, 3.5, 5.5):
+        share_ax.axhline(boundary, color=MUTED, linewidth=0.5, linestyle=":")
+    share_ax.text(
+        101.5, -0.8, "missing/all", ha="left", va="center", fontsize=7, color=INK2
+    )
+    share_ax.legend(
+        handles=[
+            plt.Rectangle((0, 0), 1, 1, color=BLUE, label="found"),
+            plt.Rectangle((0, 0), 1, 1, facecolor=VERMILLION, hatch="///", edgecolor=SURFACE,
+                          label="not found"),
+        ],
+        loc="lower left", bbox_to_anchor=(0.0, -0.36), ncol=2, frameon=False, fontsize=7,
+    )
+
+    short = ["Opus", "Sol", "Grok*"]
+    columns = ["Rule A"] + short + short + ["Cites"]
+    grid_ax.set_facecolor(SURFACE)
+    for side in grid_ax.spines.values():
+        side.set_visible(False)
+    grid_ax.set_xlim(-0.5, len(columns) - 0.5)
+    grid_ax.set_ylim(len(runs) - 0.5, -0.5)
+    grid_ax.set_xticks(range(len(columns)), columns, fontsize=7, color=INK2)
+    for x0, x1, label in ((1, 3, "faked flag"), (4, 6, "score, 1-10")):
+        grid_ax.annotate(
+            "", xy=(x0 - 0.4, -1.35), xytext=(x1 + 0.4, -1.35), annotation_clip=False,
+            arrowprops={"arrowstyle": "-", "color": MUTED, "linewidth": 0.6},
+        )
+        grid_ax.text((x0 + x1) / 2, -1.55, label, ha="center", va="bottom", fontsize=7,
+                     color=INK, clip_on=False)
+    grid_ax.text(0, -1.55, "agent,\ncode+logs", ha="center", va="bottom", fontsize=7,
+                 color=INK2, clip_on=False)
+    grid_ax.text(7, -1.55, "wrong\nrefs", ha="center", va="bottom", fontsize=7,
+                 color=INK2, clip_on=False)
+    grid_ax.xaxis.tick_top()
+    grid_ax.set_yticks(range(len(runs)), [""] * len(runs))
+    grid_ax.tick_params(length=0)
+
+    def cell(x: int, y: int, fill: str, text: str, color: str = INK, hatch: str | None = None):
+        grid_ax.add_patch(
+            plt.Rectangle((x - 0.46, y - 0.42), 0.92, 0.84, facecolor=fill, edgecolor=GRID,
+                          linewidth=0.5, hatch=hatch)
+        )
+        grid_ax.text(x, y, text, ha="center", va="center", fontsize=7, color=color)
+
+    for y, row in enumerate(runs):
+        rule_a = row["rule_a_faked"].strip().lower()
+        if rule_a == "true":
+            cell(0, y, VERMILLION, "faked", SURFACE)
+        elif rule_a == "open":
+            cell(0, y, SURFACE, "open", INK, hatch="....")
+        else:
+            cell(0, y, SURFACE, "clear", INK2)
+        for j, (judge, _) in enumerate(JUDGE_COLUMNS):
+            verdict = verdicts.get((row["level"], row["seed"], judge), {})
+            flag = verdict.get("faked", "").strip().lower()
+            if flag == "true":
+                cell(1 + j, y, ORANGE, "flag", SURFACE)
+            elif flag == "false":
+                cell(1 + j, y, SURFACE, "clear", INK2)
+            else:
+                cell(1 + j, y, SURFACE, "none", MUTED, hatch="////")
+            score = verdict.get("overall", "").strip()
+            cell(4 + j, y, "#eef2f7" if score else SURFACE, score or "none",
+                 INK if score else MUTED, None if score else "////")
+        problems = int(row["citation_problems"])
+        cell(7, y, ORANGE if problems else SURFACE, str(problems), SURFACE if problems else INK2)
+    for boundary in (1.5, 3.5, 5.5):
+        grid_ax.axhline(boundary, color=MUTED, linewidth=0.5, linestyle=":")
+    grid_ax.set_title("(b) Every rater's verdict", loc="left", fontsize=7.5, color=INK,
+                      weight="bold", pad=34)
+    fig.tight_layout(pad=0.4, w_pad=0.6)
+    return _save_publication_figure(fig, runs, output_dir, "audit_by_run")
+
+
+def price_figure(
+    waves_path: Path = HERE / "waves23.csv",
+    crashes_path: Path = HERE / "crashes.csv",
+    output_dir: Path = OUT,
+) -> RenderedFigure:
+    """Draw what each level cost: dollars, tokens, gate attempts and crashes by cause."""
+    rows = _csv_rows(waves_path)
+    crash_rows = {r["arm"]: r for r in _csv_rows(crashes_path)}
+    levels = sorted({r["level"] for r in rows}, key=_level_sort)
+    by_level = {lv: [r for r in rows if r["level"] == lv] for lv in levels}
+    fig, axes = plt.subplots(1, 4, figsize=(7.0, 2.5))
+    fig.patch.set_facecolor(SURFACE)
+    xs = range(len(levels))
+
+    def seeds_panel(ax, values, title, unit, fmt):
+        _paper_axis(ax)
+        means = [sum(v) / len(v) for v in values]
+        ax.bar(xs, means, color=[MUTED] + [GATED] * (len(levels) - 1), width=0.62)
+        for x, seed_values in zip(xs, values, strict=True):
+            ax.scatter([x - 0.12, x + 0.12][: len(seed_values)], seed_values, s=9, color=INK,
+                       zorder=3, marker="o")
+        for x, mean in zip(xs, means, strict=True):
+            ax.text(x, mean * 0.5, fmt(mean), ha="center", va="center", fontsize=7,
+                    color=SURFACE, rotation=90)
+        ax.set_xticks(list(xs), levels)
+        ax.set_ylabel(unit, fontsize=7, color=INK2)
+        ratio = means[-1] / means[0]
+        ax.set_title(f"{title}, L3/L0 {ratio:.2f}x", loc="left", fontsize=7, color=INK,
+                     weight="bold")
+
+    seeds_panel(
+        axes[0], [[float(r["cost_usd"]) for r in by_level[lv]] for lv in levels],
+        "(a) Cost/run", "US dollars", lambda v: f"{v:.2f}",
+    )
+    seeds_panel(
+        axes[1],
+        [[(int(r["tokens_prompt"]) + int(r["tokens_completion"])) / 1e6 for r in by_level[lv]]
+         for lv in levels],
+        "(b) Tokens/run", "millions, prompt+completion", lambda v: f"{v:.1f}",
+    )
+
+    ax = axes[2]
+    _paper_axis(ax)
+    width = 0.26
+    gate_colors = (BLUE, ORANGE, VERMILLION)
+    for g, color in enumerate(gate_colors, start=1):
+        for x, lv in enumerate(levels):
+            attempts = sum(int(r[f"g{g}_attempts"]) for r in by_level[lv])
+            fails = sum(int(r[f"g{g}_fails"]) for r in by_level[lv])
+            if g > _level_sort(lv)[0]:
+                continue
+            pos = x + (g - 2) * width
+            ax.bar(pos, attempts - fails, width=width, color=color, bottom=fails)
+            ax.bar(pos, fails, width=width, facecolor=SURFACE, edgecolor=color, hatch="////",
+                   linewidth=0.6)
+            ax.text(pos, attempts + 0.6, f"{fails}/{attempts}", ha="center", fontsize=7,
+                    color=INK, rotation=90, va="bottom")
+    ax.set_xticks(list(xs), levels)
+    ax.set_title("(c) Gate attempts", loc="left", fontsize=7.2, color=INK, weight="bold")
+    ax.set_ylabel("attempts", fontsize=7, color=INK2)
+    ax.set_ylim(0, 50)
+    ax.legend(
+        handles=[plt.Rectangle((0, 0), 1, 1, color=c, label=f"{g}")
+                 for g, c in enumerate(gate_colors, start=1)],
+        fontsize=7, frameon=False, loc="upper left", handlelength=0.8, ncol=3,
+        columnspacing=0.6,
+    )
+
+    ax = axes[3]
+    _paper_axis(ax)
+    causes = (
+        ("oom_at_cap", "GPU cap", BLUE, None),
+        ("timeout", "timeout", "#56B4E9", "///"),
+        ("environment", "environment", "#009E73", "xx"),
+        ("agent_code", "agent code", "#CC79A7", None),
+    )
+    for x, lv in enumerate(levels):
+        bottom = 0
+        crash = crash_rows[lv]
+        for key, _, color, hatch in causes:
+            count = int(crash[key])
+            if count:
+                ax.bar(x, count, bottom=bottom, color=color, hatch=hatch, edgecolor=SURFACE,
+                       linewidth=0, width=0.62)
+            bottom += count
+        ax.text(x, bottom + 0.3, f"{crash['crashed']}/{crash['executions']}", ha="center",
+                fontsize=7, color=INK)
+    ax.set_xticks(list(xs), levels)
+    ax.set_title("(d) Crashed executions", loc="left", fontsize=7.2, color=INK, weight="bold")
+    ax.set_ylabel("crashed executions", fontsize=7, color=INK2)
+    ax.set_ylim(0, 28)
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+    ax.legend(
+        handles=[plt.Rectangle((0, 0), 1, 1, facecolor=c, hatch=h, edgecolor=SURFACE, label=n)
+                 for _, n, c, h in causes],
+        fontsize=7, frameon=False, loc="upper left", handlelength=0.9, ncol=2,
+        columnspacing=0.5,
+    )
+    fig.tight_layout(pad=0.4, w_pad=0.5)
+    return _save_publication_figure(fig, rows, output_dir, "price_by_level")
+
+
 if __name__ == "__main__":
     rendered = [
+        audit_figure(),
+        price_figure(),
         crashes_figure(),
         tokens_cost_figure(),
         gate_attempts_figure(),

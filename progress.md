@@ -17,7 +17,7 @@ otherwise would be the same overclaim as a green check that never ran. Update th
 branch: main
 head: ceed232
 head_date: 2026-09-30
-tests_total: 1034
+tests_total: 1038
 tests_gate1: 183
 tests_gate2: 103
 tests_gate3: 164
@@ -364,3 +364,4 @@ Tier A verified per-commit in a throwaway worktree: 395 → 399 → 405 → 415 
 | 09-30 | PR | **D93.** Codex agent judge and non-counting opinions, red first. 994 gates tests. |
 | 09-30 | PR | **D94.** Hidden Pitfalls auditor through agent judges, red first (21 tests). 1017 gates tests. |
 | 09-30 | PR | **D97.** Measured figures and the rewritten draft (17 tests). 1034 gates tests. |
+| 10-01 | PR | **D97 follow-up (#28).** Draft restructured after a five-seat simulated review (`~/Documents/AI Research/reviews/2026-10-01/`): problem formulation with definitions, two propositions and a threat model; rule A headline with level 2 open; 21 arXiv-API-checked references; TikZ information-flow figure; `audit_by_run` and `price_by_level` figures from the new `paper/provenance.csv` (4 tests). 1038 gates tests. |

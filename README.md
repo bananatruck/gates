@@ -104,6 +104,8 @@ The significance test is fixed in advance in [`paper/PLAN.md`](paper/PLAN.md) §
 
 | Figure | What it shows |
 |---|---|
+| ![Per-run audit](paper/figures/audit_by_run.png) | per run: where the paper's numerals came from (`paper/provenance.csv`) and every rater's verdict |
+| ![Price by level](paper/figures/price_by_level.png) | cost, tokens, gate attempts and crashes by level in one figure |
 | ![Crashes by level](paper/figures/crashes_by_level.png) | execution crashes by owner and cause |
 | ![Resource use by level](paper/figures/tokens_cost_by_level.png) | token use and cost across measured seeds |
 | ![Gate attempts by level](paper/figures/gate_attempts_by_level.png) | attempts and rejections at each gate |
@@ -273,8 +275,8 @@ pip install -e ".[dev]" && pytest && ruff check .
 | Gate 3: checks, loop, model layer, scanner miss, arXiv resolver | 231 |
 | Model layer and log scanning | 148 |
 | Wiring, levels, setup, install skills, key handling | 101 |
-| Evaluation tooling and this status check | 196 |
-| **Total** | **1034** |
+| Evaluation tooling and this status check | 200 |
+| **Total** | **1038** |
 
 One test, the live arXiv lookup, is skipped unless `GATES_LIVE_ARXIV=1`.
 The suite runs with every socket refused, so no test can quietly depend on the network (D61 in `progress.md`).

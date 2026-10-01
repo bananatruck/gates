@@ -9,9 +9,11 @@ from pathlib import Path
 from paper.figures import (
     adjacency_figure,
     agent_judge_figure,
+    audit_figure,
     crashes_figure,
     gate_attempts_figure,
     mechanism_figure,
+    price_figure,
     redteam_figure,
     tokens_cost_figure,
 )
@@ -299,3 +301,43 @@ def test_rig_csvs_hold_the_measured_totals():
     honest = [row for row in adjacency if row["kind"] == "honest"]
     assert (sum(row["caught"] == "true" for row in attacks), len(attacks)) == (23, 27)
     assert (sum(row["passed"] == "true" for row in honest), len(honest)) == (35, 36)
+
+
+def test_audit_figure_draws_every_run_and_rater_from_the_csvs(tmp_path):
+    rendered = audit_figure(output_dir=tmp_path)
+
+    _assert_saved(rendered)
+    _assert_publication_size(rendered, 7)
+    text = _drawn_text(rendered)
+    assert "PLACEHOLDER" not in _visible_text(rendered)
+    assert {"35/52", "246/301", "12/627", "0/330", "24/472", "11/418", "1/418", "0/324"} <= text
+    assert {"L0 seed 1", "L3 seed 2"} <= text
+
+
+def test_audit_figure_shows_a_missing_judge_answer_as_none(tmp_path):
+    rendered = audit_figure(output_dir=tmp_path)
+
+    texts = [t.get_text() for axis in rendered.figure.axes for t in axis.texts]
+    assert texts.count("none") == 2  # L3 seed 2, GPT-5.6 Sol: flag and score
+    assert texts.count("open") == 2  # L2 rule A waits on a person (D99)
+
+
+def test_provenance_csv_holds_the_ledger_counts():
+    with open(REPO / "paper" / "provenance.csv", newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+
+    assert len(rows) == 8
+    assert sum(int(r["numerals"]) for r in rows) == 2942
+    assert [r["rule_a_faked"] for r in rows if r["level"] == "L0"] == ["true", "true"]
+    assert not any("/home/" in value for row in rows for value in row.values())
+
+
+def test_price_figure_draws_ratios_and_crash_totals(tmp_path):
+    rendered = price_figure(output_dir=tmp_path)
+
+    _assert_saved(rendered)
+    _assert_publication_size(rendered, 7)
+    text = _drawn_text(rendered)
+    assert "(a) Cost/run, L3/L0 2.21x" in text
+    assert "(b) Tokens/run, L3/L0 2.30x" in text
+    assert {"14/18", "19/32", "16/36", "10/35", "13/15"} <= text
