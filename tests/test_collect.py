@@ -24,7 +24,8 @@ def write_run(root: Path, *, benchmark="MLR-Bench", task="t1", system="Agent Lab
     folder = root / benchmark / task / system / f"L{level}" / f"seed{seed}" / model
     folder.mkdir(parents=True)
     manifest = {"benchmark": benchmark, "task": task, "system": system, "level": level,
-                "seed": seed, "model": model, "cost_usd": cost, "wallclock_s": 100.0 + level,
+                "seed": seed, "model": model, "cost_usd": cost,
+                "wallclock_s": 100.0 + (0 if level == "0d" else level),
                 **extra}
     (folder / "manifest.json").write_text(json.dumps(manifest))
     if metrics:
@@ -164,6 +165,26 @@ def test_each_crash_cause_is_read_from_the_record():
     assert harness == {"oom_at_cap", "timeout", "environment"}
 
 
+def test_a_cap_named_in_mib_is_still_the_runners_cap():
+    exception = {
+        "type": "OutOfMemoryError",
+        "message": "CUDA out of memory. 512.00 MiB allowed; 500.00 MiB allocated",
+    }
+
+    assert collect.crash_cause(exception, False) == "oom_at_cap"
+
+
+def test_memory_errors_in_other_words_are_oom():
+    exceptions = [
+        {"type": "MemoryError", "message": ""},
+        {"type": "RuntimeError", "message": "CUDA Out Of Memory"},
+        {"type": "RuntimeError", "message": "DefaultCPUAllocator: not enough memory"},
+        {"type": "RuntimeError", "message": "CUBLAS_STATUS_ALLOC_FAILED"},
+    ]
+
+    assert [collect.crash_cause(exception, False) for exception in exceptions] == ["oom"] * 4
+
+
 def _ungated(folder: Path, index: int, exception: dict | None):
     d = folder / "gate_artifacts" / f"ungated_{index:02d}"
     d.mkdir(parents=True)
@@ -175,6 +196,22 @@ def _attempt(folder: Path, index: int, exception: dict | None, timed_out=False, 
     d.mkdir(parents=True)
     (d / "gate1_report.json").write_text(json.dumps(
         {"verdict": verdict, "execution": {"exception": exception, "timed_out": timed_out}}))
+
+
+def test_an_ungated_execution_killed_at_the_timeout_is_a_crash(tmp_path):
+    runs = tmp_path / "runs"
+    l0 = write_run(runs, level=0, metrics=False, paper_present=True)
+    _ungated(l0, 1, None)
+    timed_out = l0 / "gate_artifacts" / "ungated_02"
+    timed_out.mkdir(parents=True)
+    (timed_out / "stdout.txt").write_text("still running")
+
+    table = collect.crash_table(collect.load_crash_runs(runs))
+
+    row = table[("MLR-Bench", "Agent Lab", "L0")]
+    assert row["executions"] == 2
+    assert row["timeout"] == 1
+    assert row["papers_on_harness_crash"] == 1
 
 
 def test_crashes_are_counted_per_cell_and_split_harness_from_agent(tmp_path):
@@ -200,6 +237,39 @@ def test_crashes_are_counted_per_cell_and_split_harness_from_agent(tmp_path):
     assert lvl3["papers_on_crashed_run"] == 0
 
 
+def test_a_level_0_paper_comes_from_its_last_execution_even_beside_gate_1_attempts(tmp_path):
+    runs = tmp_path / "runs"
+    l0 = write_run(runs, level=0, metrics=False, paper_present=True)
+    _ungated(l0, 1, {"type": "TypeError", "message": "last level 0 execution"})
+    _attempt(l0, 1, None, verdict="PASS")
+    l0_prime = write_run(runs, level="0d", metrics=False, paper_present=True)
+    _attempt(l0_prime, 1, None, verdict="PASS")
+    _attempt(
+        l0_prime,
+        2,
+        {"type": "TypeError", "message": "last L0' execution"},
+        verdict="FAIL",
+    )
+
+    table = collect.crash_table(collect.load_crash_runs(runs))
+
+    assert table[("MLR-Bench", "Agent Lab", "L0")]["papers_on_crashed_run"] == 1
+    assert table[("MLR-Bench", "Agent Lab", "L0'")]["papers_on_crashed_run"] == 1
+
+
+def test_attempts_past_99_keep_their_order(tmp_path):
+    runs = tmp_path / "runs"
+    l0 = write_run(runs, level=0, metrics=False, paper_present=True)
+    _ungated(l0, 99, None)
+    _ungated(l0, 100, {"type": "TypeError", "message": "last execution"})
+
+    table = collect.crash_table(collect.load_crash_runs(runs))
+
+    row = table[("MLR-Bench", "Agent Lab", "L0")]
+    assert row["executions"] == 2
+    assert row["papers_on_crashed_run"] == 1
+
+
 def test_crash_runs_need_no_judging_but_skip_pilot_and_void(tmp_path):
     runs = tmp_path / "runs"
     write_run(runs, level=0, metrics=False)
@@ -207,6 +277,19 @@ def test_crash_runs_need_no_judging_but_skip_pilot_and_void(tmp_path):
     write_run(runs, level=2, metrics=False, status="void")
     loaded = collect.load_crash_runs(runs)
     assert [r["level"] for r in loaded] == [0]
+
+
+def test_an_l0_prime_run_is_its_own_cell(tmp_path):
+    runs = tmp_path / "runs"
+    write_run(runs, level="0d")
+
+    loaded, skipped = collect.load_runs(runs)
+
+    assert skipped == []
+    assert set(collect.cells(loaded)) == {("MLR-Bench", "Agent Lab", "L0'")}
+    assert set(collect.crash_table(collect.load_crash_runs(runs))) == {
+        ("MLR-Bench", "Agent Lab", "L0'")
+    }
 
 
 def test_costs_carry_tokens_and_cost_per_accepted_paper(tmp_path):
