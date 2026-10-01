@@ -79,8 +79,8 @@ _REFERENCE_NUMBER = re.compile(r"(?:Table|Figure|Fig\.|Section|Eq\.|Appendix)\s*
 _CITED = re.compile(r"\bSOTA\b|\bbaselines?\b|state[- ]of[- ]the[- ]art", re.IGNORECASE)
 _CLAUSE_BREAK = re.compile(r";|(?<![\d])\.(?=\s|$)|,(?=\s+[^\d\s])")
 _SENTENCE_END = re.compile(r"(?<![\d])\.(?=\s|$)")
-_TEST = re.compile(r"\btest\b", re.IGNORECASE)
-_OTHER_SPLIT = re.compile(r"\b(?:train(?:ing)?|validation|val|dev(?:elopment)?)\b", re.IGNORECASE)
+_SPLIT_WORD = re.compile(r"\b(test|train(?:ing)?|validation|val|dev(?:elopment)?)\b", re.IGNORECASE)
+_SPLIT_TAG = re.compile(r"\s*\\?\(\s*(test|train(?:ing)?|validation|val|dev(?:elopment)?)\s*\\?\)", re.IGNORECASE)
 _LOG = Path("src/experiment_output.log")
 SUBSTITUTION = "data substitution (our addition, not the paper's leakage)"
 _SPLIT_SLICE = re.compile(r"""split\s*=\s*(['"])([^'"\[]*)\[:""")
@@ -420,6 +420,24 @@ def _own_number(text: str, start: int, end: int) -> re.Match[str] | None:
     return None
 
 
+def _split_of(line: str, sentence_start: int, number: re.Match[str]) -> str | None:
+    """The data split a figure belongs to: a "(split)" tag right after it, else the split
+    named nearest before it in its sentence, else none.
+
+    Our rule, not the paper's (p.12 says only which criterion a run recorded).
+    """
+    tag = _SPLIT_TAG.match(line, number.end())
+    if tag:
+        return _split_name(tag.group(1))
+    named = list(_SPLIT_WORD.finditer(line, sentence_start, number.start()))
+    # limit: the split is read within one sentence on one line, so a sentence wrapped across lines, a split named in the sentence before, a split named only after the figure ("80% during training"), or a negation ("did not evaluate on test") is misread or missed; a table whose header row names the metrics and whose next row holds the numbers is not read. Fix: join wrapped lines into sentences, read tables as a grid, and attach trailing split phrases.
+    return _split_name(named[-1].group(1)) if named else None
+
+
+def _split_name(word: str) -> str:
+    return "test" if word.lower() == "test" else "other"
+
+
 def _metrics_in_text(text: str) -> list[tuple[str, str, int]]:
     """Test SWA and test CWA figures, in the order the manuscript states them."""
     found: list[tuple[str, str, int]] = []
@@ -430,20 +448,8 @@ def _metrics_in_text(text: str) -> list[tuple[str, str, int]]:
         ends = [*(start for start in starts[1:]), len(line)]
         sentence_ends = [match.end() for match in _SENTENCE_END.finditer(line)]
         for begin, end in zip(starts, ends, strict=True):
-            sentence = line[
-                max([0, *(e for e in sentence_ends if e <= begin)]):
-                min([len(line), *(e for e in sentence_ends if e >= end)])
-            ]
+            sentence_start = max([0, *(e for e in sentence_ends if e <= begin)])
             clause = line[begin:end]
-            # A clause inherits "test" from its sentence unless it names another split itself.
-            # limit: "test" is carried only within one sentence on one line, so a sentence wrapped
-            # across lines, or "test" named in the sentence before, is not read; a table whose
-            # header row names the metrics and whose next row holds the numbers is not read either.
-            # Fix: join wrapped lines into sentences, and read tables as a grid.
-            if not _TEST.search(clause) and (
-                not _TEST.search(sentence) or _OTHER_SPLIT.search(clause)
-            ):
-                continue
             cited = _CITED.search(clause)
             if cited:
                 # Only the run's own figures, before the first cited or baseline word, count.
@@ -455,7 +461,7 @@ def _metrics_in_text(text: str) -> list[tuple[str, str, int]]:
                     continue
                 limit = tokens[index + 1].start() if index + 1 < len(tokens) else len(clause)
                 number = _own_number(line, begin + token.end(), begin + limit)
-                if number is None:
+                if number is None or _split_of(line, sentence_start, number) != "test":
                     continue
                 seen.add(kind)
                 found.append((kind, _number_display(number), lineno))

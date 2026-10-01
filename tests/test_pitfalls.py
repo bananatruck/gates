@@ -316,6 +316,21 @@ def test_a_clause_naming_another_split_does_not_inherit_test(tmp_path):
     assert _metrics(tmp_path, "The test set is held out, validation SWA is 75.0\\%.\n").reported == "neither"
 
 
+@pytest.mark.parametrize(("text", "expected"), [
+    ("Test performance: SWA 71\\%, CWA 69\\% (val: SWA 75\\%, CWA 74\\%).\n",
+     (("SWA", "71%"), ("CWA", "69%"))),
+    ("Trained on the training set, reaching SWA 90\\%; on test, SWA 71\\%.\n", (("SWA", "71%"),)),
+    ("We held out a test set, and validation SWA peaked at 75\\%, CWA at 72\\%.\n", ()),
+    ("We did not evaluate on test; validation SWA 75\\%, CWA 70\\%.\n", ()),
+    ("Our model reached SWA 70.1\\% (test) and CWA 68.2\\% (validation).\n", (("SWA", "70.1%"),)),
+    ("Validation CWA reached 75\\% before the test.\n", ()),
+])
+def test_a_figure_belongs_to_the_split_named_nearest_before_it(tmp_path, text, expected):
+    """Each figure takes the split named closest before it in its sentence, or a (split) tag right after it."""
+    got = tuple((e.signal, e.value) for e in _metrics(tmp_path, text).evidence)
+    assert got == expected
+
+
 def test_the_runs_own_figure_before_a_cited_one_is_kept(tmp_path):
     against = _metrics(tmp_path, "test SWA 71.2\\% vs baseline 65\\%.\n")
     assert against.reported == "SWA only"
