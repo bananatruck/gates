@@ -1,4 +1,4 @@
-"""Lay released papers out as run folders, so rig.judge re-scores them (D70 item 3).
+"""Lay released papers out as run folders, and rig.judge re-scores them (D70 item 3).
 
     python -m rig.stage_released --papers <mlrbench>/ai_scientist_v2_papers/o4-mini \\
         --tasks <kit>/mlrbench/tasks --system "AI Scientist v2" --model o4-mini \\
@@ -8,17 +8,25 @@ Then, on machine A, ``python -m rig.judge --runs ~/gates-runs/runs-rescore ...``
 exactly as for our own runs, so the released papers meet D63's judges and
 MLR-Bench's prompts with nothing else changed.
 
-Each task folder holds ``<task>.pdf`` and ``experiments/*.py``, as MLR-Bench
-released AI Scientist v2's papers at ``f728d57``. The stager writes, per task,
-``<out>/MLR-Bench/<task>/<system>/released/seed0/`` with:
+Each task folder holds ``<task>.pdf`` and optionally ``experiments/*.py``, as
+MLR-Bench released AI Scientist v2's papers at ``f728d57``. The stager writes,
+per task, ``<out>/MLR-Bench/<task>/<system-slug>/released/seed0/`` with:
 
 ``manifest.json``
     task, model, ``phase: rescore``, the task text's hash (which ``rig.judge``
-    checks), the PDF's hash, the text extractor and its version;
+    checks), the PDF's hash, the text extractor and its version, and
+    ``code_files`` (relative paths under ``experiments/``, possibly empty);
 ``paper/report.txt``
     the PDF's text; ``paper/source.pdf`` beside it;
 ``code/``
-    the released experiment scripts.
+    only when ``code_files`` is non-empty: the released experiment scripts.
+
+A task with no task text or no PDF is named and skipped. Whitespace-only PDF
+text (including a lone form feed from ``pdftotext`` on a scan) is treated as
+empty extraction and skipped with nothing written. Failed extraction is skipped
+the same way. A system name that slugs to an empty path is refused. Two
+different systems that share a slug refuse the second with both names in the
+note. A folder already staged is never overwritten.
 
 One difference from MLR-Bench, stated rather than hidden: its judge reads a
 PDF through ``pymupdf4llm``'s Markdown, which the host's environment does not
@@ -27,8 +35,7 @@ carry and ``rig.judge`` stubs out. The text here comes from poppler's
 one on MLR-Bench's extraction. ``paper/collect.py`` skips ``phase: rescore``:
 a released paper is never a level of ours.
 
-A task with no task text or no PDF is named and skipped; a folder already
-staged is never overwritten. Stdlib only, no model.
+Stdlib only, no model.
 """
 
 from __future__ import annotations
@@ -126,7 +133,7 @@ def stage_all(
         except Exception as exc:
             skipped.append(f"{task}: extraction failed ({exc})")
             continue
-        if not report:
+        if not report.strip():
             skipped.append(f"{task}: empty extraction from {pdf}")
             continue
         scripts = _experiment_scripts(source)

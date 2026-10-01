@@ -15,9 +15,20 @@ PRO = "deepseek-v4-pro"
 FREE = "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
 
 
-def released(root: Path, task="iclr2025_scsl", pdf=True, code=True) -> Path:
+def released(
+    root: Path,
+    task="iclr2025_scsl",
+    pdf=True,
+    code=True,
+    *,
+    experiments_dir: bool | None = None,
+) -> Path:
     folder = root / task
-    (folder / "experiments").mkdir(parents=True)
+    want_experiments = experiments_dir if experiments_dir is not None else True
+    if want_experiments:
+        (folder / "experiments").mkdir(parents=True)
+    else:
+        folder.mkdir(parents=True, exist_ok=True)
     if pdf:
         (folder / f"{task}.pdf").write_bytes(b"%PDF-1.4 fake")
     if code:
@@ -95,7 +106,20 @@ def test_a_staged_folder_is_never_overwritten(tmp_path):
 
 def test_a_released_paper_with_no_code_says_so(tmp_path):
     papers = tmp_path / "papers"
+    released(papers, code=False, experiments_dir=False)
+    assert not (papers / "iclr2025_scsl" / "experiments").exists()
+    staged, skipped = stage(tmp_path, papers)
+    assert skipped == []
+    [folder] = staged
+    manifest = json.loads((folder / "manifest.json").read_text())
+    assert manifest["code_files"] == []
+    assert not (folder / "code").exists()
+
+
+def test_an_empty_experiments_folder_stages_with_no_code_files(tmp_path):
+    papers = tmp_path / "papers"
     released(papers, code=False)
+    assert (papers / "iclr2025_scsl" / "experiments").is_dir()
     staged, skipped = stage(tmp_path, papers)
     assert skipped == []
     [folder] = staged
@@ -107,13 +131,16 @@ def test_a_released_paper_with_no_code_says_so(tmp_path):
 def test_an_empty_extraction_is_named_not_staged(tmp_path):
     papers = tmp_path / "papers"
     released(papers)
-    staged, skipped = stage_released.stage_all(
-        papers, tasks=FIXTURE / "tasks", out=tmp_path / "out",
-        system="AI Scientist v2", model="o4-mini", extract=lambda p: "", extractor="fake 1.0",
-    )
-    assert staged == []
-    assert any("iclr2025_scsl" in s and "empty" in s.lower() for s in skipped)
-    assert not (tmp_path / "out" / "MLR-Bench" / "iclr2025_scsl").exists()
+    for empty in ("", "\f\n", "   \t\n"):
+        out = tmp_path / f"out-{empty!r}"
+        staged, skipped = stage_released.stage_all(
+            papers, tasks=FIXTURE / "tasks", out=out,
+            system="AI Scientist v2", model="o4-mini",
+            extract=lambda p, text=empty: text, extractor="fake 1.0",
+        )
+        assert staged == []
+        assert any("iclr2025_scsl" in s and "empty" in s.lower() for s in skipped)
+        assert not (out / "MLR-Bench" / "iclr2025_scsl").exists()
 
 
 def test_a_failed_extraction_leaves_nothing_behind(tmp_path):
@@ -149,7 +176,10 @@ def test_two_systems_never_share_a_folder(tmp_path):
         system="AI-Scientist v2", model="o4-mini", extract=fake_extract, extractor="fake 1.0",
     )
     assert staged2 == []
-    assert any("clash" in s.lower() or "slug" in s.lower() for s in skipped2)
+    clash_notes = [s for s in skipped2 if "clash" in s.lower() or "slug" in s.lower()]
+    assert len(clash_notes) == 1
+    note = clash_notes[0]
+    assert "AI Scientist v2" in note and "AI-Scientist v2" in note
 
     staged3, skipped3 = stage_released.stage_all(
         papers, tasks=FIXTURE / "tasks", out=tmp_path / "out2",
