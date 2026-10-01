@@ -62,7 +62,7 @@ on Autonomous Agents and Multiagent Systems (AAMAS 2027)}{3--7 May 2027}{Hanoi, 
   \country{\todo{country}}}
 
 \begin{abstract}
-Autonomous research agents write papers that report numbers their experiments never produced.
+Autonomous research agents can write papers that report numbers their experiments never produced.
 In Agent Laboratory, the scaffold we audited, the cause was mechanical.
 The host cut experiment output to a short prefix before any agent read it, so the writer never saw the real numbers and the failure detector never saw the crash.
 We argue that a large share of fabricated results is an information-flow defect, and we close the channel at three points with \gates{}: execution validity, source-result coherence and report validity.
@@ -96,7 +96,7 @@ It also appended the crash marker after the program's own output, so the same cu
 The writing agent never saw the numbers, and the failure detector never saw the crash.
 A model in that position has nothing true to report, so it reports something else.
 
-That makes much of the fabrication a property of the information flow, and a deterministic layer can stop it.
+That makes much of the fabrication a property of the information flow, and a deterministic layer can stop much of it, though not cheating done with real numbers.
 \gates{} places a gate at each point where a scaffold loses its hold on evidence:
 
 \begin{itemize}
@@ -455,14 +455,14 @@ D94, written by another session and not yet confirmed to us, says rule B.}
 \begin{table}[t]
 \caption{Faked-results counts on waves 2 and 3, by rule and level, all reviewed by agent for now.
 The rule A row is one agent's reading of code and logs; the rule B rows are the two judges' unconfirmed flags.
-$^{*}$Level 3 seed 2 is incomplete: Opus flagged it, and Codex's answer failed on a credit limit.}
+$^{*}$Level 3 seed 2 is missing from the both-judges row: Opus flagged it, and Codex's answer failed on a credit limit.}
 \label{tab:faked}
 \begin{tabular}{lcccc}
 \toprule
 Count & L0 & L1 & L2 & L3 \\
 \midrule
 Rule A, agent's reading & 2/2 & 0/2 & 0/2 & 0/2 \\
-Rule B, either judge flags & 2/2 & 2/2 & 2/2 & 1/1$^{*}$ \\
+Rule B, either judge flags & 2/2 & 2/2 & 2/2 & 2/2 \\
 Rule B, both judges flag & 2/2 & 1/2 & 1/2 & 1/1$^{*}$ \\
 \bottomrule
 \end{tabular}
@@ -533,40 +533,37 @@ Six cheat in the method while every recorded value is real, which no check on a 
 
 \paragraph{Claims about numbers.}
 The gates check that a number was measured, not what a sentence says about it.
-Every gated faked-results flag in waves 2 and 3 is a claim about measured numbers or about how they were measured, and Section~\ref{sec:waves} proposes the check that would catch most of them.
+Every gated faked-results flag in waves 2 and 3 is a claim about measured numbers or about how they were measured, and Section~\ref{sec:waves} proposes a check for most of them.
 
 \paragraph{Gate 3's blind spots.}
 Four of the 27 adjacency attacks pass, stated as a \texttt{\# limit:} comment in \texttt{gates/gate3.py}.
-A test-design pass found four more shapes that Gate 3 passes, still open: a numeral inside a citation's optional text or a cross-reference's link text, inside an equation or a figure caption, in a section heading, and behind a macro the manuscript defines.
+A test-design pass found four more shapes that still pass: a numeral in a citation's optional text or a link's text, in an equation or a caption, in a section heading, or behind a macro the manuscript defines.
 The claim scanner misses 3 of 49 literals.
-Citation checks see arXiv identifiers only, and check that an identifier resolves and was retrieved, not that the title beside it is right.
+Citation checks see arXiv identifiers only, and not the titles beside them.
 
 \paragraph{Scale.}
 The end-to-end result is one task, one model and two seeds, so it is descriptive.
 
 \paragraph{The harness.}
 Our harness caused 46 of the 59 crashes, mostly through the GPU cap of a four-way split and through timeouts, so crash counts compare harness conditions as much as agents.
-We report crashes by cause and attribute only the agent's to the agent.
 
 \paragraph{Cost.}
-Level 3 cost 2.21 times level 0 and took 2.59 times the wall clock, with 2.30 times the tokens.
-A quality difference between levels is therefore also a compute difference.
+Level 3 cost 2.21 times level 0, took 2.59 times the wall clock and used 2.30 times the tokens, so a quality difference between levels is also a compute difference.
 
 \paragraph{Judges.}
-Every judgement so far is an agent's, \rtag{}, and one is incomplete.
-Like MLR-Bench's judge, ours do not read the logs.
+Every judgement so far is an agent's, \rtag{}, one is incomplete, and like MLR-Bench's judge, ours do not read the logs.
 A person's blind review hides the level but not the paper's text, which can still reveal its treatment.
 
 \paragraph{What the gates do not do.}
 The gates deliver the evidence; they do not make the science good, and the agent judges score every paper 1 to 3 out of 10.
-The signed campaign ran on an earlier DeepSeek Flash model than the waves, so it is context for level 1, not a replication.
+The signed campaign used an earlier DeepSeek Flash model, so it is context for level 1, not a replication.
 
 \section{Conclusion}
 
-Fabricated results in the scaffold we audited came from a channel that never showed the writer the numbers, and \gates{} closes it with three deterministic gates installed through one adapter.
-On one MLR-Bench task, by an agent's reading, both ungated papers report results no execution produced and none of the six gated papers does.
-What the gates leave is prose that misstates a measured number, and we have named the check that would catch it.
-Next come that check, an L0' wave, a second model, a person's review of the judges' flags, and Hidden Pitfalls.
+In the scaffold we audited, we trace a large share of fabricated results, not all, to a channel that never showed the writer the numbers; L0' has not yet tested that claim.
+\gates{} closes the channel with three deterministic gates installed through one adapter.
+On one MLR-Bench task, by an agent's reading, only the ungated papers report results no execution produced; what remains is prose that misstates a measured number.
+Next come a check for that prose, an L0' wave, a second model, a person's review of the flags, and Hidden Pitfalls.
 
 %%% For the final paper, issue \balance in the first column of the last page
 %%% (the sample's rule); in this draft that column holds the references.
