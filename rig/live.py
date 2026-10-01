@@ -2,8 +2,8 @@
 
 The live tools take their model injected, like every gate. API-backed models
 use the host's own ``query_model`` through ``make_gate_model``. Agent-backed
-models run Claude Code or Cursor Agent as a non-interactive ``ModelFn`` and
-send the system and user prompts through stdin.
+models run Claude Code, Cursor Agent, or Codex as a non-interactive
+``ModelFn`` and send the system and user prompts through stdin.
 
 A key is loaded into this process's environment and nowhere else. It is never
 printed, logged, or passed on a command line.
@@ -32,22 +32,44 @@ class AgentCLIError(RuntimeError):
     """An agent judge name or process invocation is invalid."""
 
 
-def agent_judge_parts(name: str) -> tuple[str, str] | None:
-    """Return the CLI and model from ``agent:CLI/MODEL``, or ``None``."""
+def _agent_judge_config(name: str) -> tuple[str, str, str | None] | None:
     if not name.startswith("agent:"):
         return None
     cli, separator, model = name.removeprefix("agent:").partition("/")
-    if not separator or cli not in {"claude", "cursor"} or not model.strip():
+    effort = None
+    if cli == "codex" and ":" in model:
+        model, _, effort = model.rpartition(":")
+        effort = effort.strip()
+    if (
+        not separator
+        or cli not in {"claude", "cursor", "codex"}
+        or not model.strip()
+        or effort == ""
+    ):
         raise AgentCLIError(
-            f"invalid agent judge {name!r}; use agent:claude/<model> or agent:cursor/<model>"
+            f"invalid agent judge {name!r}; use agent:claude/<model>, "
+            "agent:cursor/<model>, or agent:codex/<model>[:<effort>]"
         )
-    return cli, model
+    return cli, model, effort
 
 
-def _agent_command(cli: str, model: str) -> tuple[str, ...]:
+def agent_judge_parts(name: str) -> tuple[str, str] | None:
+    """Return the CLI and model from an agent judge name, or ``None``."""
+    config = _agent_judge_config(name)
+    return (config[0], config[1]) if config else None
+
+
+def _agent_command(cli: str, model: str, effort: str | None = None) -> tuple[str, ...]:
     if cli == "claude":
         return "claude", "-p", "--model", model
-    return "cursor-agent", "--trust", "--mode", "ask", "--model", model, "-p"
+    if cli == "cursor":
+        return "cursor-agent", "--trust", "--mode", "ask", "--model", model, "-p"
+    command = (
+        "codex", "exec", "--skip-git-repo-check", "-s", "read-only", "-m", model,
+    )
+    if effort is not None:
+        command += "-c", f"model_reasoning_effort={effort}"
+    return command
 
 
 def _run_agent(
@@ -88,6 +110,9 @@ class AgentModel:
     command: tuple[str, ...]
     cli_version: str
     timeout_s: float = DEFAULT_AGENT_TIMEOUT_S
+    cli: str = ""
+    model: str = ""
+    effort: str | None = None
 
     def __call__(self, prompt: str, system: str) -> str:
         payload = f"{system}\n\n{prompt}"
@@ -97,16 +122,23 @@ class AgentModel:
 def agent_model(
     name: str, *, timeout_s: float = DEFAULT_AGENT_TIMEOUT_S,
 ) -> AgentModel:
-    """Build the agent CLI named by ``agent:CLI/MODEL``."""
-    parts = agent_judge_parts(name)
-    if parts is None:
+    """Build the agent CLI named by ``agent:CLI/MODEL[:EFFORT]``."""
+    config = _agent_judge_config(name)
+    if config is None:
         raise AgentCLIError(f"{name!r} is not an agent judge")
-    cli, model = parts
-    command = _agent_command(cli, model)
+    cli, model, effort = config
+    command = _agent_command(cli, model, effort)
     version = _run_agent((command[0], "--version"), timeout_s=timeout_s).strip()
     if not version:
         raise AgentCLIError(f"{command[0]} --version returned no version")
-    return AgentModel(command=command, cli_version=version, timeout_s=timeout_s)
+    return AgentModel(
+        command=command,
+        cli=cli,
+        model=model,
+        effort=effort,
+        cli_version=version,
+        timeout_s=timeout_s,
+    )
 
 #: ``NAME = value`` or ``NAME=value``, the form ``AI_keys.env`` uses. ``source``
 #: cannot read the spaced form, which is why the tools parse it themselves.

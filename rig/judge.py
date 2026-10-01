@@ -7,9 +7,10 @@
         --key-file <AI_keys.env>
 
 API judges use the host's client through ``rig.live``, which records every API
-call's tokens. An ``agent:claude/<model>`` or ``agent:cursor/<model>`` judge
-instead runs the installed agent CLI. Its prompt is sent through stdin and its
-outputs carry ``reviewed by agent for now``.
+call's tokens. An ``agent:claude/<model>``, ``agent:cursor/<model>``, or
+``agent:codex/<model>[:<effort>]`` judge instead runs the installed agent CLI.
+Its prompt is sent through stdin and its outputs carry
+``reviewed by agent for now``.
 
 The prompts are not retyped. ``OVERALL_RUBRIC`` and ``HALLUCINATION_RUBRIC``,
 the two ``overall_review`` functions that wrap them, and the helpers they call
@@ -25,20 +26,24 @@ no temperature or maximum-token control.
 A judge never scores a run of its own model (D54): on a ``deepseek-v4-pro``
 run only the other judge counts.
 
+``--opinion`` runs the same review and records the same files, but opinions
+never contribute to completion, candidacy, scores, metrics, or agreement.
+An opinion also never reviews a run of its own model.
+
 Per run, in ``judge/``:
 
-* ``<judge>/overall.json``, ``<judge>/hallucination.json``, ``<judge>/meta.json``
-  and ``<judge>/usage.jsonl``;
-* ``summary.json``: each eligible judge's overall score and its "Faked
-  Experimental Results" findings with their evidence.
+* ``<name>/overall.json``, ``<name>/hallucination.json``, ``<name>/meta.json``
+  and ``<name>/usage.jsonl`` for every eligible judge and opinion;
+* ``summary.json``: eligible judges and opinions in separate objects, with
+  each overall score and its "Faked Experimental Results" findings.
 
 A paper is a faked-results candidate only when every eligible judge flags it.
 A candidate waits for a person (``rig.review_flags``); every other run gets its
 ``metrics.json`` here. A run with no paper gets no MLR-Judge score and no
 integrity event, and stays in the denominator (``paper/PLAN.md`` §3).
 
-The tool resumes: a judge whose files exist is not asked again, and a run with
-``metrics.json`` is skipped.
+The tool resumes: a judge or opinion whose files exist is not asked again, and
+a run with ``metrics.json`` is skipped.
 """
 
 from __future__ import annotations
@@ -172,7 +177,7 @@ def _judge_outputs_complete(folder: Path) -> bool:
 
 
 def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
-              reviews: tuple, tasks: Path) -> str:
+              reviews: tuple, tasks: Path, opinions: list[str] | None = None) -> str:
     """Judge one run folder. Returns what happened, in a few words."""
     manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
     if manifest.get("status") == "void":
@@ -194,66 +199,110 @@ def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
     code = folder / "code"
     overall_fn, hallucination_fn = reviews
 
+    opinions = opinions or []
     eligible_judges = eligible(judges, manifest["model"])
+    eligible_opinions = eligible(opinions, manifest["model"])
     agent_judged = any(agent_judge_parts(judge) for judge in eligible_judges)
-    summary = {"judges": {},
-               "excluded": [j for j in judges if j not in eligible_judges]}
-    if agent_judged:
+    agent_recorded = agent_judged or any(
+        agent_judge_parts(opinion) for opinion in eligible_opinions
+    )
+    summary = {
+        "judges": {},
+        "opinions": {},
+        "excluded": [
+            name for name in judges + opinions
+            if name not in eligible_judges and name not in eligible_opinions
+        ],
+    }
+    if agent_recorded:
         summary["review_tag"] = AGENT_REVIEW_TAG
     complete = True
-    for judge in eligible_judges:
-        out = folder / "judge" / slug(judge)
-        if not _judge_outputs_complete(out):
-            out.mkdir(parents=True, exist_ok=True)
-            os.environ[USAGE_ENV] = str(out / "usage.jsonl")
-            model = models[judge]
-            client = Client(model)
-            args = dict(paper_path=str(paper), client=client, task_file=str(task_file),
-                        code_path=str(code) if code.is_dir() else None)
-            overall = overall_fn(**args)
-            hallucination = hallucination_fn(**args)
-            _write(out / "overall.json", overall[0] if overall else {"error": "no valid JSON after 3 attempts"})
-            _write(out / "hallucination.json",
-                   hallucination[0] if hallucination else {"error": "no valid JSON after 3 attempts"})
-            meta = {
-                "judge": judge,
-                "prompt_sha256": client.prompts,
-                "images_dropped": client.images_dropped,
-                "system_message": "",
-                "json_mode": False,
-                "at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+    for role, names in (
+        ("judges", eligible_judges),
+        ("opinions", eligible_opinions),
+    ):
+        for judge in names:
+            out = folder / "judge" / slug(judge)
+            if not _judge_outputs_complete(out):
+                out.mkdir(parents=True, exist_ok=True)
+                os.environ[USAGE_ENV] = str(out / "usage.jsonl")
+                model = models[judge]
+                client = Client(model)
+                args = dict(
+                    paper_path=str(paper),
+                    client=client,
+                    task_file=str(task_file),
+                    code_path=str(code) if code.is_dir() else None,
+                )
+                overall = overall_fn(**args)
+                hallucination = hallucination_fn(**args)
+                _write(
+                    out / "overall.json",
+                    overall[0] if overall else {"error": "no valid JSON after 3 attempts"},
+                )
+                _write(
+                    out / "hallucination.json",
+                    hallucination[0]
+                    if hallucination
+                    else {"error": "no valid JSON after 3 attempts"},
+                )
+                meta = {
+                    "judge": judge,
+                    "prompt_sha256": client.prompts,
+                    "images_dropped": client.images_dropped,
+                    "system_message": "",
+                    "json_mode": False,
+                    "at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(
+                        timespec="seconds"
+                    ),
+                }
+                if isinstance(model, AgentModel):
+                    meta.update({
+                        "judge_kind": "agent",
+                        "command": list(model.command),
+                        "cli": model.cli,
+                        "model": model.model,
+                        "effort": model.effort,
+                        "cli_version": model.cli_version,
+                        "review_tag": AGENT_REVIEW_TAG,
+                        "mlr_bench_deviations": {
+                            "temperature": (
+                                "the agent CLI does not expose temperature control; "
+                                "MLR-Bench uses 0"
+                            ),
+                            "max_tokens": (
+                                "the agent CLI does not expose max-token control; "
+                                "MLR-Bench uses 16384"
+                            ),
+                        },
+                    })
+                else:
+                    meta.update({
+                        "judge_kind": "api",
+                        "max_tokens": MAX_TOKENS,
+                        "temperature": 0.0,
+                    })
+                _write(out / "meta.json", meta)
+            overall = json.loads((out / "overall.json").read_text(encoding="utf-8"))
+            hallucination = json.loads(
+                (out / "hallucination.json").read_text(encoding="utf-8")
+            )
+            errored = "error" in overall or "error" in hallucination
+            if role == "judges" and errored:
+                complete = False
+            score = (
+                (overall.get("Overall") or {}).get("score")
+                if "error" not in overall
+                else None
+            )
+            summary[role][judge] = {
+                "overall": score,
+                "faked": (
+                    faked_findings(hallucination)
+                    if "error" not in hallucination
+                    else None
+                ),
             }
-            if isinstance(model, AgentModel):
-                meta.update({
-                    "judge_kind": "agent",
-                    "command": list(model.command),
-                    "cli_version": model.cli_version,
-                    "review_tag": AGENT_REVIEW_TAG,
-                    "mlr_bench_deviations": {
-                        "temperature": (
-                            "the agent CLI does not expose temperature control; MLR-Bench uses 0"
-                        ),
-                        "max_tokens": (
-                            "the agent CLI does not expose max-token control; MLR-Bench uses 16384"
-                        ),
-                    },
-                })
-            else:
-                meta.update({
-                    "judge_kind": "api",
-                    "max_tokens": MAX_TOKENS,
-                    "temperature": 0.0,
-                })
-            _write(out / "meta.json", meta)
-        overall = json.loads((out / "overall.json").read_text(encoding="utf-8"))
-        hallucination = json.loads((out / "hallucination.json").read_text(encoding="utf-8"))
-        if "error" in overall or "error" in hallucination:
-            complete = False
-        score = (overall.get("Overall") or {}).get("score") if "error" not in overall else None
-        summary["judges"][judge] = {
-            "overall": score,
-            "faked": faked_findings(hallucination) if "error" not in hallucination else None,
-        }
 
     flags = [bool(v["faked"]) for v in summary["judges"].values() if v["faked"] is not None]
     summary["complete"] = complete and bool(summary["judges"])
@@ -288,6 +337,10 @@ def main(argv: list[str] | None = None, *, model_for=None) -> int:
                         help="the kit's pinned MLR-Bench copy (holds SHA256SUMS)")
     parser.add_argument("--judge", action="append", required=True,
                         help="a judge model as the host names it; give two")
+    parser.add_argument(
+        "--opinion", action="append", default=[],
+        help="a non-counting judge model; repeat for more opinions",
+    )
     parser.add_argument("--key-file", type=Path)
     parser.add_argument("--host", type=Path, default=None)
     parser.add_argument(
@@ -297,11 +350,15 @@ def main(argv: list[str] | None = None, *, model_for=None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        for judge in args.judge:
-            agent_judge_parts(judge)
+        for name in args.judge + args.opinion:
+            agent_judge_parts(name)
     except AgentCLIError as error:
         parser.error(str(error))
-
+    overlap = set(args.judge) & set(args.opinion)
+    if overlap:
+        parser.error(
+            "a model cannot be both --judge and --opinion: " + ", ".join(sorted(overlap))
+        )
     if args.key_file is not None:
         load_key_file(args.key_file)
     if model_for is None:
@@ -315,12 +372,12 @@ def main(argv: list[str] | None = None, *, model_for=None) -> int:
                 max_tokens=MAX_TOKENS, temp=0.0))
 
     reviews = load_judges(args.mlrbench)
-    models = {judge: model_for(judge) for judge in args.judge}
+    models = {name: model_for(name) for name in args.judge + args.opinion}
     tasks = args.mlrbench / "tasks"
     for manifest_path in sorted(args.runs.rglob("manifest.json")):
         folder = manifest_path.parent
         outcome = judge_run(folder, judges=args.judge, models=models,
-                            reviews=reviews, tasks=tasks)
+                            reviews=reviews, tasks=tasks, opinions=args.opinion)
         print(f"{folder.relative_to(args.runs)}: {outcome}", flush=True)
     return 0
 

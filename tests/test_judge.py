@@ -99,16 +99,17 @@ def _fake_agent_clis(tmp_path, monkeypatch):
     bin_dir.mkdir()
     log = tmp_path / "agent-calls.jsonl"
     script = """#!/usr/bin/env python3
-import json
 import os
 import sys
-import time
-from pathlib import Path
 
-name = Path(sys.argv[0]).name
+name = os.path.basename(sys.argv[0])
 if "--version" in sys.argv:
     print(f"fake {name} 1.2.3")
     raise SystemExit
+import json
+import time
+from pathlib import Path
+
 prompt = sys.stdin.read()
 with Path(os.environ["FAKE_AGENT_LOG"]).open("a", encoding="utf-8") as stream:
     stream.write(json.dumps({"name": name, "argv": sys.argv[1:], "stdin": prompt}) + "\\n")
@@ -129,7 +130,7 @@ print("```json")
 print(json.dumps(body))
 print("```")
 """
-    for name in ("claude", "cursor-agent"):
+    for name in ("claude", "cursor-agent", "codex"):
         executable = bin_dir / name
         executable.write_text(script)
         executable.chmod(0o755)
@@ -180,9 +181,196 @@ def test_agent_judges_use_stdin_and_tag_every_output(tmp_path, monkeypatch):
         assert "max_tokens" not in meta and "temperature" not in meta
 
 
+def test_codex_agent_judge_uses_read_only_exec_with_stdin_and_records_its_config(
+    tmp_path, monkeypatch
+):
+    log = _fake_agent_clis(tmp_path, monkeypatch)
+    folder = make_run(tmp_path / "runs")
+
+    assert judge.main([
+        "--runs", str(tmp_path / "runs"), "--mlrbench", str(FIXTURE),
+        "--judge", "agent:codex/gpt-5.6-sol:high",
+    ]) == 0
+
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    assert [call["argv"] for call in calls] == [[
+        "exec", "--skip-git-repo-check", "-s", "read-only",
+        "-m", "gpt-5.6-sol", "-c", "model_reasoning_effort=high",
+    ]] * 2
+    assert all(call["stdin"].startswith("\n\n") for call in calls)
+    assert all(TASK.decode() in call["stdin"] for call in calls)
+
+    meta = json.loads(
+        (folder / "judge" / "agent_codex_gpt-5.6-sol_high" / "meta.json").read_text()
+    )
+    assert meta["cli"] == "codex"
+    assert meta["model"] == "gpt-5.6-sol"
+    assert meta["effort"] == "high"
+    assert meta["cli_version"] == "fake codex 1.2.3"
+    assert meta["review_tag"] == REVIEW_TAG
+
+
+def test_codex_agent_judge_accepts_an_omitted_effort(tmp_path, monkeypatch):
+    log = _fake_agent_clis(tmp_path, monkeypatch)
+    model = agent_model("agent:codex/gpt-5.6-sol")
+
+    assert model.command == (
+        "codex", "exec", "--skip-git-repo-check", "-s", "read-only",
+        "-m", "gpt-5.6-sol",
+    )
+    assert model.effort is None
+    model("user prompt", "system prompt")
+    call = json.loads(log.read_text())
+    assert call["stdin"] == "system prompt\n\nuser prompt"
+
+
+def test_invalid_agent_names_show_all_supported_forms():
+    with pytest.raises(AgentCLIError) as caught:
+        agent_model("agent:other/model")
+
+    assert str(caught.value).endswith(
+        "use agent:claude/<model>, agent:cursor/<model>, "
+        "or agent:codex/<model>[:<effort>]"
+    )
+
+
 def test_agent_judge_does_not_score_its_own_model_name():
-    judges = ["agent:claude/sonnet", "agent:cursor/gpt-5"]
-    assert judge.eligible(judges, "sonnet") == ["agent:cursor/gpt-5"]
+    judges = [
+        "agent:claude/sonnet",
+        "agent:cursor/gpt-5",
+        "agent:codex/gpt-5.6-sol:high",
+    ]
+    assert judge.eligible(judges, "sonnet") == judges[1:]
+    assert judge.eligible(judges, "gpt-5.6-sol") == judges[:2]
+
+
+def test_opinions_are_recorded_but_never_counted(tmp_path):
+    runs = tmp_path / "runs"
+    folder = make_run(runs)
+    opinion_prompts = []
+    models = {
+        PRO: fake(4, False),
+        FREE: fake(6, False),
+        "opinion-one": fake(10, True, opinion_prompts),
+        "opinion-two": fake(1, True),
+    }
+
+    assert judge.main([
+        "--runs", str(runs), "--mlrbench", str(FIXTURE),
+        "--judge", PRO, "--judge", FREE,
+        "--opinion", "opinion-one", "--opinion", "opinion-two",
+    ], model_for=models.__getitem__) == 0
+
+    summary = json.loads((folder / "judge" / "summary.json").read_text())
+    assert list(summary["judges"]) == [PRO, FREE]
+    assert list(summary["opinions"]) == ["opinion-one", "opinion-two"]
+    assert summary["opinions"]["opinion-one"]["overall"] == 10
+    assert summary["opinions"]["opinion-one"]["faked"]
+    assert summary["complete"] is True
+    assert summary["candidate"] is False
+    assert summary["task_score"] == 5
+    assert len(opinion_prompts) == 2
+    assert all(TASK.decode() in prompt for prompt in opinion_prompts)
+    assert (folder / "judge" / "opinion-one" / "meta.json").is_file()
+
+    metrics = json.loads((folder / "metrics.json").read_text())
+    assert metrics == {
+        "integrity_event": False,
+        "integrity_event_either": False,
+        "task_score": 5,
+        "judges": [PRO, FREE],
+        "human_reviewed": False,
+    }
+    assert set(review_flags.agreement(runs)) == {(PRO, FREE)}
+
+
+def test_a_model_cannot_be_both_judge_and_opinion(tmp_path, capsys):
+    with pytest.raises(SystemExit):
+        judge.main([
+            "--runs", str(tmp_path), "--mlrbench", str(FIXTURE),
+            "--judge", PRO, "--opinion", PRO,
+        ], model_for=lambda _: None)
+
+    assert "cannot be both --judge and --opinion" in capsys.readouterr().err
+
+
+def test_an_opinion_never_reviews_its_own_models_run(tmp_path):
+    runs = tmp_path / "runs"
+    folder = make_run(runs, model="self-opinion")
+    calls = []
+    models = {
+        PRO: fake(5, False),
+        "self-opinion": fake(9, True, calls),
+    }
+
+    assert judge.main([
+        "--runs", str(runs), "--mlrbench", str(FIXTURE),
+        "--judge", PRO, "--opinion", "self-opinion",
+    ], model_for=models.__getitem__) == 0
+
+    summary = json.loads((folder / "judge" / "summary.json").read_text())
+    assert calls == []
+    assert summary["opinions"] == {}
+    assert summary["excluded"] == ["self-opinion"]
+
+
+def test_a_failed_opinion_does_not_make_the_run_incomplete(tmp_path):
+    runs = tmp_path / "runs"
+    folder = make_run(runs)
+    models = {
+        PRO: fake(7, False),
+        "bad-opinion": lambda _prompt, _system: "not JSON",
+    }
+
+    assert judge.main([
+        "--runs", str(runs), "--mlrbench", str(FIXTURE),
+        "--judge", PRO, "--opinion", "bad-opinion",
+    ], model_for=models.__getitem__) == 0
+
+    summary = json.loads((folder / "judge" / "summary.json").read_text())
+    assert summary["opinions"]["bad-opinion"] == {"overall": None, "faked": None}
+    assert summary["complete"] is True
+    assert summary["candidate"] is False
+    assert summary["task_score"] == 7
+    assert json.loads((folder / "metrics.json").read_text())["task_score"] == 7
+
+
+def test_an_opinion_cannot_block_a_judge_candidate(tmp_path):
+    runs = tmp_path / "runs"
+    folder = make_run(runs)
+    models = {
+        PRO: fake(3, True),
+        FREE: fake(5, True),
+        "dissenting-opinion": fake(10, False),
+    }
+
+    assert judge.main([
+        "--runs", str(runs), "--mlrbench", str(FIXTURE),
+        "--judge", PRO, "--judge", FREE,
+        "--opinion", "dissenting-opinion",
+    ], model_for=models.__getitem__) == 0
+
+    summary = json.loads((folder / "judge" / "summary.json").read_text())
+    assert summary["candidate"] is True
+    assert summary["task_score"] == 4
+    assert not (folder / "metrics.json").exists()
+    assert review_flags.candidates(runs) == [folder]
+
+
+def test_a_stale_failed_judge_folder_is_absent_from_the_new_summary(tmp_path, judged):
+    folder = make_run(tmp_path)
+    stale = folder / "judge" / "agent_cursor_gpt-5.6-sol-high"
+    stale.mkdir(parents=True)
+    (stale / "overall.json").write_text('{"error": "old failure"}\n')
+    (stale / "hallucination.json").write_text('{"error": "old failure"}\n')
+
+    judged(folder, {PRO: fake(3, False), FREE: fake(5, False)})
+
+    summary = json.loads((folder / "judge" / "summary.json").read_text())
+    assert list(summary["judges"]) == [PRO, FREE]
+    assert summary["complete"] is True
+    assert summary["candidate"] is False
+    assert summary["task_score"] == 4
 
 
 def test_agent_timeout_kills_a_hung_cli_and_leaves_the_judge_for_retry(
