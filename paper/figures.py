@@ -30,6 +30,7 @@ except ModuleNotFoundError:
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.ticker import MaxNLocator  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "figures"
@@ -659,12 +660,13 @@ def agent_judge_figure(
             if scores:
                 mean = sum(scores) / len(scores)
                 score_ax.scatter(level_index, mean, marker="_", s=130, color=INK, zorder=4)
+                # Left of the tick: opinions are drawn to the right of it.
                 score_ax.text(
-                    level_index,
-                    mean + 0.32,
+                    level_index - 0.3,
+                    mean,
                     f"{mean:.1f}",
-                    ha="center",
-                    va="bottom",
+                    ha="right",
+                    va="center",
                     fontsize=7,
                     color=INK,
                 )
@@ -720,6 +722,7 @@ def agent_judge_figure(
         )
         flag_ax.set_yticks(range(len(levels)), levels)
         flag_ax.invert_yaxis()
+        flag_ax.xaxis.set_major_locator(MaxNLocator(integer=True))
         flag_ax.set_xlabel("Judge responses", fontsize=7.5, color=INK2)
         flag_ax.set_title("Faked-result verdicts", loc="left", fontsize=9, color=INK, weight="bold")
 

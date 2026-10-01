@@ -96,13 +96,13 @@ The two are level, and reviewers recommended rejecting both papers.
 Gate 1 fixed where the numbers came from.
 It did not make the science better, and no number here says it did.
 
-## Planned evaluation
+## Evaluation figures
 
-These seven figures are the paper's evaluation, and every one is a placeholder.
-`paper/figures.py` stamps PLACEHOLDER on any figure that still draws a dummy row, and `paper/collect.py` turns rows to measured as runs finish.
+These figures are drawn by `paper/figures.py` from measured data only: waves 2-3 (`paper/waves23.csv`, `paper/crashes.csv`), the agent judges (`paper/judging.csv`, tagged "reviewed by agent for now"), the red-team rig (`paper/redteam.csv`), the Gate 3 adjacency probes (`paper/adjacency.csv`) and the signed mechanism campaign (`paper/mechanism.csv`).
+A benchmark not yet run is described in the paper, never drawn; any figure that would still draw a dummy row is stamped PLACEHOLDER.
 The significance test is fixed in advance in [`paper/PLAN.md`](paper/PLAN.md) §9: an exact McNemar test per benchmark on level 0 against level 3, Holm across the three, and a non-inferiority bound on each task score.
 
-| Figure | What it will show |
+| Figure | What it shows |
 |---|---|
 | ![Crashes by level](paper/figures/crashes_by_level.png) | execution crashes by owner and cause |
 | ![Resource use by level](paper/figures/tokens_cost_by_level.png) | token use and cost across measured seeds |
