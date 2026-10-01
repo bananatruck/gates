@@ -657,7 +657,7 @@ State as of 2026-09-26.
 | 6 | Gate 2 | Built: tiers A and B, and the loop through Gate 1. Evaluated offline: tier A 27/27 and 0/18, tier B 29/29 |
 | 7 | Gate 3 | Built: `report.*` with claim chains, `source.*`, `style.*`, the loop and the model layer. Scanner miss measured, 34 of 49 (D48), 46 of 49 after per-token reference masking (D76) |
 | 8 | `GATES_LEVEL`, the shared loops in `gates/pipeline.py`, per-gate install skills | done (D58, D59) |
-| 9 | The benchmark evaluation: CORE-Bench, MLR-Bench and BadScientist at four levels (D60) | Planned in `paper/PLAN.md`. Its tooling is built (`paper/collect.py`, `rig/posthoc_audit.py`, `rig/stats.py`); the host's four-level runner is next, then the pilot |
+| 9 | The benchmark evaluation: CORE-Bench, MLR-Bench and BadScientist at four levels (D60); since D94/D99, Hidden Pitfalls going forward, with the MLR-Bench waves 2-3 kept as the end-to-end pilot | Planned in `paper/PLAN.md` §0. Its tooling is built (`paper/collect.py`, `rig/posthoc_audit.py`, `rig/stats.py`); the host's four-level runner is next, then the pilot |
 
 Step 8 of earlier versions named a CORE-Bench subset and PaperBench Code-Dev.
 D60 replaced both with the three benchmarks above.
@@ -686,6 +686,7 @@ That spec lives outside the repository, and every "spec §5" in `progress.md` us
 
 D58-D60 in `progress.md` replaced it on 09-21.
 The evaluation is three benchmarks, CORE-Bench, MLR-Bench and BadScientist, each run at the four cumulative `GATES_LEVEL`s and each reported as one integrity metric and one task score.
+D94, confirmed with a change as D99 on 10-01, replaced that: Hidden Pitfalls is the forward benchmark, MLR-Bench and BadScientist are dropped going forward, and a faked result is a reported number no run measured (rule A).
 `paper/PLAN.md` is the single source for the protocol, the figures, the significance test (§9) and the steps to run it.
 What follows here still applies to it.
 
