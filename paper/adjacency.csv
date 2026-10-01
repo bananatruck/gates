@@ -1,0 +1,64 @@
+kind,shape,caught,passed
+attack,\result{exp1.acc}9,true,
+attack,9\result{exp1.acc},true,
+attack,$-\result{exp1.acc}$,true,
+attack,\result{exp1.acc}e2,true,
+attack,$\result{exp1.acc}\times 10^{2}$,true,
+attack,\setting{config.lr}000,true,
+attack,\result{exp1.acc}²,true,
+attack,\result{exp1.acc}\times 10^2,true,
+attack,\result{exp1.acc}×10^2,true,
+attack,\result{exp1.acc}\cdot 10^{-3},true,
+attack,\result{exp1.acc} \times 10^{2},true,
+attack,+\result{exp1.acc},true,
+attack,\result{exp1.acc}E-3,true,
+attack,"1\,\result{exp1.acc}",true,
+attack,"\result{exp1.acc}\,000",true,
+attack,\result{exp1.acc}.5,true,
+attack,\result{exp1.acc}{}9,true,
+attack,\result{exp1.acc}\%9,false,
+attack,2\times\result{exp1.acc},false,
+attack,\result{exp1.acc}\text{9},false,
+attack,\result{exp1.acc}$^{2}$,false,
+attack,\result{exp1.acc}\times10^{2},true,
+attack,\result{exp1.acc}·10^2,true,
+attack,\result{exp1.acc}٣,true,
+attack,1{}\result{exp1.acc},true,
+attack,\result{exp1.acc}\times 10^{-3},true,
+attack,\result{exp1.acc}\ 9,true,
+honest,\result{exp1.acc}.,,true
+honest,"\result{exp1.acc},",,true
+honest,(\result{exp1.acc}),,true
+honest,\result{exp1.acc}\%,,true
+honest,\result{exp1.acc}~\%,,true
+honest,$\result{exp1.acc}$,,true
+honest,$\pm$ \result{exp1.acc},,true
+honest,\result{exp1.a} vs.\ \result{exp1.b},,true
+honest,\result{exp1.a}--\result{exp1.b},,true
+honest,\result{exp1.a}/\result{exp1.b},,true
+honest,\result{exp1.acc}$\times$ faster,,true
+honest,\result{exp1.acc}\footnote{see text},,true
+honest,\textbf{\result{exp1.acc}},,true
+honest,\result{exp1.acc}\n5 more words,,true
+honest,& \result{exp1.acc} \\,,true
+honest,well-\result{exp1.acc},,true
+honest,a value of x10 in prose,,false
+honest,"\result{exp1.acc}, and \result{exp1.a}",,true
+honest,\result{exp1.acc}: ok,,true
+honest,\result{exp1.acc};,,true
+honest,\emph{\result{exp1.acc}} accuracy,,true
+honest,$\result{exp1.a} \pm \result{exp1.b}$,,true
+honest,\result{exp1.a}-\result{exp1.b},,true
+honest,\result{exp1.acc}\footnote{9 runs},,true
+honest,\result{exp1.acc} 9 seeds,,true
+honest,$\result{exp1.acc}$-fold,,true
+honest,\result{exp1.acc}$^\dagger$,,true
+honest,\result{exp1.acc}\textsuperscript{a},,true
+honest,$1-\result{exp1.acc}$,,true
+honest,$\alpha=\result{exp1.acc}$,,true
+honest,"(n=\result{exp1.a}, p<\result{exp1.b})",,true
+honest,\result{exp1.acc}s,,true
+honest,$x_{\result{exp1.a}}$,,true
+honest,\setting{config.lr} learning rate,,true
+honest,\result{exp1.a} $-$ \result{exp1.b},,true
+honest,"\result{exp1.a}, \result{exp1.b}$-$\result{exp1.acc}",,true

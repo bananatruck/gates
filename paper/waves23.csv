@@ -1,0 +1,9 @@
+benchmark,task,level,seed,phase,status,paper,cost_usd,wallclock_h,calls,tokens_prompt,tokens_completion,tokens_reasoning,peak_gpu_mb,executions,crashed,harness_crashes,agent_crashes,g1_attempts,g1_fails,g2_attempts,g2_fails,g3_attempts,g3_fails,judges
+MLR-Bench,iclr2025_scsl,L0,1,main,completed,True,0.774197,1.84,156,2823656,921629,511675,1886.0,8,4,3,1,0,0,0,0,0,0,
+MLR-Bench,iclr2025_scsl,L0,2,main,completed,True,0.538236,2.12,204,2308602,579696,400919,1900.0,10,10,10,0,0,0,0,0,0,0,
+MLR-Bench,iclr2025_scsl,L1,1,main,completed,True,0.996576,4.12,192,4679504,1056598,592981,280.0,18,10,4,6,18,12,0,0,0,0,
+MLR-Bench,iclr2025_scsl,L1,2,main,completed,True,0.744578,3.41,182,2602979,871142,427769,1886.0,14,9,9,0,14,10,0,0,0,0,
+MLR-Bench,iclr2025_scsl,L2,1,main,completed,True,0.684502,3.3,182,2967214,729747,493812,392.0,13,6,5,1,13,8,1,0,0,0,
+MLR-Bench,iclr2025_scsl,L2,2,main,completed,True,0.852425,5.54,257,3139886,1000215,646739,650.0,23,10,6,4,23,12,2,1,0,0,
+MLR-Bench,iclr2025_scsl,L3,1,main,completed,True,1.839191,6.2,266,6649005,2022498,1494509,1886.0,24,7,6,1,24,8,3,2,12,11,
+MLR-Bench,iclr2025_scsl,L3,2,main,completed,True,1.059894,4.05,209,5502023,1056469,664396,1574.0,11,3,3,0,11,3,1,0,3,2,

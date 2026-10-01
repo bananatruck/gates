@@ -1,266 +1,726 @@
-"""Every figure in the paper, drawn from results.csv and mechanism.csv and nothing else.
+"""Draw the paper's measured figures as PDF and PNG.
 
-    python3 paper/figures.py        # writes paper/figures/*.png
+    python3 paper/figures.py        # writes paper/figures/*.{pdf,png}
 
-Figures 1-7 are the benchmark evaluation, from results.csv. Figure 8 is the
-mechanism evidence already measured, from mechanism.csv, where every row names
-the rig or signed report that produced it.
-
-Filling in a real result means replacing its row in results.csv (status
-``dummy`` becomes ``measured``) and running this again. A figure that still
-draws a dummy row is stamped PLACEHOLDER, so an expected shape cannot be
-mistaken for a result.
+The inputs are the aggregate CSV files beside this module. Unrun benchmarks in
+``results.csv`` never become bars. If a future input explicitly carries a row
+whose status is ``dummy``, the shared save path stamps its figure PLACEHOLDER.
+The agent-judge figure is skipped until ``judging.csv`` exists.
 
 Needs matplotlib. This is not part of the gates package, whose stdlib-only rule
 covers ``gates/`` alone.
 """
 
 import csv
+import sys
+import sysconfig
+from dataclasses import dataclass
 from pathlib import Path
 
-import matplotlib
+try:
+    import matplotlib
+except ModuleNotFoundError:
+    # The paper is not part of the stdlib-only package. Debian keeps its
+    # workstation plotting packages outside isolated virtual environments.
+    system_site = sysconfig.get_path(
+        "purelib", vars={"base": sys.base_prefix, "platbase": sys.base_prefix}
+    )
+    sys.path.append(system_site)
+    import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
-from matplotlib.lines import Line2D  # noqa: E402
-from matplotlib.patches import Patch  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "figures"
 
-# The dataviz reference palette. The level ramp passes its ordinal checks, and
-# gray-vs-blue passes CVD, normal-vision and 3:1 contrast (validate_palette.js).
+# The paper palette keeps text dark on SURFACE and uses redundant shape or
+# hatching wherever hue carries meaning.
 SURFACE, INK, INK2, MUTED, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#898781", "#e1e0d9"
-LEVEL_RAMP = ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab"]  # more gates, darker
 ALONE, GATED = MUTED, "#2a78d6"
-
-LEVELS = ["L0", "L1", "L2", "L3"]
-LEVEL_NAMES = ["Gate 0\n(all off)", "Gate 1", "Gate 1+2", "Gate 1+2+3"]
-SYSTEMS = ["AI Scientist v2", "Agent Lab", "ScientistOne"]
-METRICS = {
-    "CORE-Bench": {
-        "integrity": "Answers not traceable to a recorded value (%)  lower is better",
-        "task": "Accuracy, pass@1 on Hard (%)  higher is better",
-    },
-    "MLR-Bench": {
-        "integrity": "Papers with faked experimental results (%)  lower is better",
-        "task": "MLR-Judge overall score (1-10)  higher is better",
-    },
-    "BadScientist": {
-        "integrity": "Manipulated manuscripts emitted and accepted (%)  lower is better",
-        "task": "Honest manuscripts admitted (%)  higher is better",
-    },
-    "Audit": {
-        "integrity": "Released papers citing a paper that does not resolve (%)  lower is better",
-    },
-}
-
-with open(HERE / "results.csv", newline="") as _f:
-    ROWS = list(csv.DictReader(_f))
-drawn: set[int] = set()  # every figure, for the completeness check
-shown: set[int] = set()  # the figure being drawn, for its footer
+BLUE, ORANGE, VERMILLION = "#0072B2", "#9A6700", "#D55E00"
 
 
-def find(benchmark, system, arm, metric):
-    for i, row in enumerate(ROWS):
-        if (row["benchmark"], row["system"], row["arm"], row["metric"]) == (
-            benchmark, system, arm, metric,
-        ):
-            drawn.add(i)
-            shown.add(i)
-            return row
-    return None
-
-
-def refs(benchmark, metric):
-    return [find(benchmark, r["system"], "ref", metric) for r in ROWS
-            if r["benchmark"] == benchmark and r["arm"] == "ref" and r["metric"] == metric]
-
-
-def is_percent(benchmark, metric):
-    return not (benchmark == "MLR-Bench" and metric == "task")
-
-
-def style(ax, benchmark, metric):
-    ax.set_facecolor(SURFACE)
-    top = 100 if is_percent(benchmark, metric) else 10
-    ax.set_ylim(0, top * 1.18)  # headroom for the label over a full bar
-    ax.set_yticks([top * i / 5 for i in range(6)])
-    ax.grid(axis="y", color=GRID, linewidth=0.6)
-    ax.set_axisbelow(True)
-    for side in ("top", "right", "left"):
-        ax.spines[side].set_visible(False)
-    ax.spines["bottom"].set_color(MUTED)
-    ax.tick_params(colors=INK2, labelsize=8, length=0)
-    ax.set_title(METRICS[benchmark][metric], loc="left", fontsize=9, color=INK)
-
-
-def bar(ax, x, row, color, width=0.62):
-    """One bar with its interval and label. Returns the row's status."""
-    if row is None or row["status"] == "not_reported":
-        ax.text(x, 2, "not\nreported", ha="center", va="bottom", fontsize=7, color=MUTED)
-        return "not_reported"
-    value = float(row["value"])
-    no_input = row["no_input"] == "1"
-    ax.bar(x, value, width, color=SURFACE if no_input else color,
-           edgecolor=MUTED if no_input else SURFACE, hatch="///" if no_input else None,
-           linewidth=1 if no_input else 2)
-    top = value
-    if row["ci_low"]:
-        low, high = float(row["ci_low"]), float(row["ci_high"])
-        ax.vlines(x, low, high, color=INK2, linewidth=1)
-        top = high
-    unit = "%" if is_percent(row["benchmark"], row["metric"]) else ""
-    tag = {"published": "\npublished", "measured": ""}.get(row["status"], "")
-    if no_input:
-        tag = "\nno input"
-    ax.text(x, top + ax.get_ylim()[1] * 0.02, f"{value:g}{unit}{tag}",
-            ha="center", va="bottom", fontsize=7.5, color=INK)
-    return row["status"]
-
-
-def reference_lines(ax, benchmark, metric):
-    handles = []
-    for row in refs(benchmark, metric):
-        value = float(row["value"])
-        ax.axhline(value, color=INK2, linewidth=0.8)
-        handles.append(Line2D([], [], color=INK2, linewidth=0.8,
-                              label=f"{row['system']}, published: {value:g}%"))
-    if handles:
-        ax.legend(handles=handles, loc="upper right", frameon=False, fontsize=7, labelcolor=INK2)
-
-
-def finish(fig, statuses, name, note=""):
-    sources = sorted({r["source"] for i, r in enumerate(ROWS) if i in shown and r["status"] == "published"})
-    shown.clear()
-    footer = "  |  ".join(filter(None, [note, *sources]))
-    fig.text(0.01, 0.01, footer, fontsize=6.5, color=MUTED, ha="left", va="bottom")
-    if "dummy" in statuses:
-        fig.text(0.5, 0.5, "PLACEHOLDER", fontsize=64, color=INK, alpha=0.07,
-                 rotation=18, ha="center", va="center", weight="bold")
-    fig.savefig(OUT / name, dpi=200, facecolor=SURFACE)
-    plt.close(fig)
-
-
-def level_figure(benchmark, name):
-    fig, axes = plt.subplots(1, 2, figsize=(10, 3.8), facecolor=SURFACE)
-    statuses = []
-    for ax, metric in zip(axes, ("integrity", "task"), strict=True):
-        style(ax, benchmark, metric)
-        for i, level in enumerate(LEVELS):
-            statuses.append(bar(ax, i, find(benchmark, "Agent Lab", level, metric), LEVEL_RAMP[i]))
-        ax.set_xticks(range(4), LEVEL_NAMES)
-        ax.set_xlim(-0.6, 3.6)
-        reference_lines(ax, benchmark, metric)
-    fig.suptitle(f"{benchmark}: Agent Lab at each GATES_LEVEL", x=0.01, ha="left",
-                 fontsize=11, weight="bold", color=INK)
-    fig.tight_layout(rect=(0, 0.04, 1, 0.97))
-    finish(fig, statuses, name, "Hatched: the newest gate has no input on this benchmark, so it emits nothing.")
-
-
-def compare_figure(benchmark, name):
-    fig, axes = plt.subplots(1, 2, figsize=(10, 3.8), facecolor=SURFACE)
-    statuses = []
-    for ax, metric in zip(axes, ("integrity", "task"), strict=True):
-        style(ax, benchmark, metric)
-        for g, system in enumerate(SYSTEMS):
-            gated = find(benchmark, system, "L3", metric)
-            if gated is None:  # nothing to pair with, so the one cell sits centred
-                statuses.append(bar(ax, g, find(benchmark, system, "L0", metric), ALONE, 0.36))
-                continue
-            statuses.append(bar(ax, g - 0.19, find(benchmark, system, "L0", metric), ALONE, 0.36))
-            statuses.append(bar(ax, g + 0.19, gated, GATED, 0.36))
-        ax.set_xticks(range(len(SYSTEMS)), SYSTEMS)
-        ax.set_xlim(-0.6, len(SYSTEMS) - 0.4)
-        reference_lines(ax, benchmark, metric)
-    fig.legend(handles=[Patch(color=ALONE, label="system alone (GATES_LEVEL=0)"),
-                        Patch(color=GATED, label="system + GATES (GATES_LEVEL=3)")],
-               loc="upper right", frameon=False, fontsize=8, ncol=2, labelcolor=INK2)
-    fig.suptitle(f"{benchmark}: each system alone and with GATES", x=0.01, ha="left",
-                 fontsize=11, weight="bold", color=INK)
-    fig.tight_layout(rect=(0, 0.04, 1, 0.93))
-    finish(fig, statuses, name)
-
-
-def audit_figure(name):
-    fig, ax = plt.subplots(figsize=(7.5, 3.8), facecolor=SURFACE)
-    style(ax, "Audit", "integrity")
-    statuses = [bar(ax, g, find("Audit", s, "audit", "integrity"), ALONE) for g, s in enumerate(SYSTEMS)]
-    for row in refs("Audit", "integrity"):
-        g, value = SYSTEMS.index(row["system"]), float(row["value"])
-        ax.hlines(value, g - 0.4, g + 0.4, color=INK, linewidth=1.5)
-        ax.text(g + 0.42, value, f"MLR-Bench, published: {value:g}%", va="center", fontsize=7, color=INK2)
-    ax.set_xticks(range(len(SYSTEMS)), SYSTEMS)
-    fig.suptitle("Released papers, audited after the fact by Gate 3",
-                 x=0.01, ha="left", fontsize=10, weight="bold", color=INK)
-    fig.tight_layout(rect=(0, 0.04, 1, 0.95))
-    finish(fig, statuses, name)
-
-
-def mechanism_figure(name):
-    """Measured already: what each gate catches, and what it wrongly flags.
-
-    One horizontal bar per measure, each with its denominator and, where the
-    source reports one, its Wilson interval. No row here is a dummy.
-    """
-    import sys
-
+def mechanism_figure(
+    data_path: Path = HERE / "mechanism.csv", output_dir: Path = OUT
+) -> "RenderedFigure":
+    """Draw measured detection and false-positive evidence for each gate."""
     sys.path.insert(0, str(HERE.parent))
     from rig.stats import wilson
 
-    with open(HERE / "mechanism.csv", newline="") as f:
-        rows = list(csv.DictReader(f))
-    fig, ax = plt.subplots(figsize=(10, 5.2), facecolor=SURFACE)
+    rows = _csv_rows(Path(data_path))
+    fig, ax = plt.subplots(figsize=(7, 4.7), facecolor=SURFACE)
     ax.set_facecolor(SURFACE)
     labels = []
     for y, row in enumerate(rows):
         k, n = int(row["k"]), int(row["n"])
         value = 100 * k / n
         off = row["arm"].endswith("off")
-        ax.barh(y, value, 0.62, color=ALONE if off else GATED)
+        ax.barh(
+            y,
+            value,
+            0.6,
+            color=ALONE if off else GATED,
+            edgecolor=SURFACE,
+            linewidth=0.7,
+        )
         end = value
         if row["interval"] == "yes":
             lo, hi = wilson(k, n)
-            ax.hlines(y, 100 * lo, 100 * hi, color=INK2, linewidth=1)
+            ax.hlines(y, 100 * lo, 100 * hi, color=INK, linewidth=1)
             end = 100 * hi
-        ax.text(end + 1.5, y, f"{k}/{n}", va="center", fontsize=7.5, color=INK)
+        if value == 0:
+            ax.scatter(0, y, marker="|", s=45, color=ALONE, zorder=3)
+        ax.text(end + 1.4, y, f"{k}/{n}", va="center", fontsize=7, color=INK)
         arm = f", {row['arm']}" if row["arm"] else ""
         labels.append(f"{row['panel']}: {row['measure']}{arm}")
     ax.set_yticks(range(len(rows)), labels)
     ax.invert_yaxis()
-    ax.set_xlim(0, 115)
-    ax.set_xticks([0, 20, 40, 60, 80, 100])
+    ax.set_xlim(0, 116)
+    ax.set_xticks([0, 20, 40, 60, 80, 100], ["0", "20", "40", "60", "80", "100%"])
     ax.grid(axis="x", color=GRID, linewidth=0.6)
     ax.set_axisbelow(True)
     for side in ("top", "right", "left"):
         ax.spines[side].set_visible(False)
     ax.spines["bottom"].set_color(MUTED)
-    ax.tick_params(colors=INK2, labelsize=7.5, length=0)
-    ax.set_xlabel("%  (whisker: Wilson 95% interval)", fontsize=8, color=INK2)
-    fig.suptitle("Mechanism evidence, measured: what each gate catches and what it wrongly flags",
-                 x=0.01, ha="left", fontsize=10, weight="bold", color=INK)
-    ax.legend(handles=[Patch(color=GATED, label="gate on"), Patch(color=ALONE, label="Gate 1 off, the host as shipped")],
-              # Above the plot, so no bar can run under it: at 46 of 49 Gate 3's did.
-              loc="lower right", bbox_to_anchor=(1.0, 1.0), ncol=2,
-              frameon=False, fontsize=7, labelcolor=INK2)
-    fig.text(0.01, 0.01, "Sources: paper/mechanism.csv. Gate 1 from the signed 08-15 campaign; "
-             "Gates 2 and 3 from the model-free rigs.", fontsize=6.5, color=MUTED)
-    fig.subplots_adjust(left=0.36, right=0.98, top=0.9, bottom=0.12)
-    fig.savefig(OUT / name, dpi=200, facecolor=SURFACE)
+    ax.tick_params(colors=INK2, labelsize=7, length=0)
+    ax.set_xlabel("Whiskers: Wilson 95% interval", fontsize=7, color=INK2)
+    fig.suptitle(
+        "Mechanism evidence: what the gates catch and wrongly flag",
+        x=0.01,
+        y=0.98,
+        ha="left",
+        fontsize=10,
+        weight="bold",
+        color=INK,
+    )
+    fig.text(
+        0.01,
+        0.01,
+        "Gate 1 uses the signed 08-15 campaign. Gates 2 and 3 use model-free rigs.",
+        fontsize=6.5,
+        color=INK2,
+    )
+    fig.subplots_adjust(left=0.48, right=0.98, top=0.91, bottom=0.12)
+    return _save_publication_figure(fig, rows, Path(output_dir), "fig8_mechanism")
+
+
+@dataclass(frozen=True)
+class RenderedFigure:
+    """The saved publication files and the Matplotlib figure that produced them."""
+
+    png: Path
+    pdf: Path
+    figure: object
+
+
+def _save_publication_figure(fig, rows, output_dir: Path, stem: str) -> RenderedFigure:
+    """Stamp dummy data, then save the same figure as a raster preview and vector art."""
+    if any(row.get("status", "").strip().lower() == "dummy" for row in rows):
+        fig.text(
+            0.5,
+            0.5,
+            "PLACEHOLDER",
+            fontsize=48,
+            color=INK,
+            alpha=0.09,
+            rotation=18,
+            ha="center",
+            va="center",
+            weight="bold",
+        )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    png = output_dir / f"{stem}.png"
+    pdf = output_dir / f"{stem}.pdf"
+    fig.savefig(png, dpi=300, facecolor=SURFACE, bbox_inches="tight")
+    fig.savefig(pdf, facecolor=SURFACE, bbox_inches="tight")
     plt.close(fig)
-    return len(rows)
+    return RenderedFigure(png=png, pdf=pdf, figure=fig)
+
+
+def _level_sort(level: str) -> tuple[int, str]:
+    number = level.upper().removeprefix("L")
+    return (int(number), level) if number.isdigit() else (10_000, level)
+
+
+def _paper_axis(ax) -> None:
+    ax.set_facecolor(SURFACE)
+    ax.grid(axis="y", color=GRID, linewidth=0.6)
+    ax.set_axisbelow(True)
+    for side in ("top", "right", "left"):
+        ax.spines[side].set_visible(False)
+    ax.spines["bottom"].set_color(MUTED)
+    ax.tick_params(colors=INK2, labelsize=7.5, length=0)
+
+
+def _csv_rows(data_path: Path) -> list[dict[str, str]]:
+    with open(data_path, newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        raise ValueError(f"{data_path} has no data rows")
+    return rows
+
+
+def crashes_figure(
+    data_path: Path = HERE / "crashes.csv", output_dir: Path = OUT
+) -> RenderedFigure:
+    """Draw execution crashes per level, separated by owner and cause."""
+    data_path = Path(data_path)
+    rows = _csv_rows(data_path)
+    levels = sorted({row["arm"] for row in rows}, key=_level_sort)
+    by_level = {row["arm"]: row for row in rows}
+    panels = (
+        (
+            "Harness-caused crashes",
+            (
+                ("oom_at_cap", "GPU cap", BLUE, ""),
+                ("timeout", "timeout", "#56B4E9", "//"),
+                ("environment", "env.", "#009E73", "xx"),
+            ),
+        ),
+        (
+            "Agent-caused crashes",
+            (
+                ("oom", "OOM", VERMILLION, ""),
+                ("agent_code", "agent code", "#CC79A7", "//"),
+            ),
+        ),
+    )
+    maximum = max(
+        sum(int(by_level[level][key]) for key, _, _, _ in causes)
+        for _, causes in panels
+        for level in levels
+    )
+    fig, axes = plt.subplots(1, 2, figsize=(7, 2.75), facecolor=SURFACE, sharey=True)
+    for ax, (title, causes) in zip(axes, panels, strict=True):
+        _paper_axis(ax)
+        totals = []
+        for level_index, level in enumerate(levels):
+            bottom = 0
+            for key, label, color, hatch in causes:
+                count = int(by_level[level][key])
+                if not count:
+                    continue
+                ax.bar(
+                    level_index,
+                    count,
+                    bottom=bottom,
+                    width=0.65,
+                    color=color,
+                    edgecolor=SURFACE,
+                    hatch=hatch,
+                    linewidth=0.7,
+                )
+                ax.text(
+                    level_index,
+                    bottom + count / 2,
+                    f"{label}\n{count}",
+                    ha="center",
+                    va="center",
+                    fontsize=6.7,
+                    color=SURFACE if color == BLUE else INK,
+                )
+                bottom += count
+            totals.append(bottom)
+            ax.text(
+                level_index,
+                bottom + maximum * 0.035,
+                f"{bottom}",
+                ha="center",
+                va="bottom",
+                fontsize=7,
+                color=INK,
+                weight="bold",
+            )
+        ax.set_xticks(range(len(levels)), levels)
+        ax.set_title(title, loc="left", fontsize=9, weight="bold", color=INK)
+        ax.set_ylim(0, maximum * 1.18)
+    axes[0].set_ylabel("Crashed executions", fontsize=7.5, color=INK2)
+    fig.suptitle(
+        "Crashes by level and cause",
+        x=0.01,
+        y=1.01,
+        ha="left",
+        fontsize=10,
+        weight="bold",
+        color=INK,
+    )
+    fig.text(
+        0.01,
+        -0.01,
+        "Harness: GPU-share cap, timeout, or environment. Agent: uncapped OOM or agent code.",
+        fontsize=6.5,
+        color=INK2,
+    )
+    fig.subplots_adjust(left=0.09, right=0.99, bottom=0.18, top=0.82, wspace=0.18)
+    return _save_publication_figure(fig, rows, Path(output_dir), "crashes_by_level")
+
+
+def tokens_cost_figure(
+    data_path: Path = HERE / "waves23.csv", output_dir: Path = OUT
+) -> RenderedFigure:
+    """Draw mean token use and cost per level, with every seed visible."""
+    rows = _csv_rows(Path(data_path))
+    levels = sorted({row["level"] for row in rows}, key=_level_sort)
+    fig, axes = plt.subplots(1, 2, figsize=(7, 2.65), facecolor=SURFACE)
+    measures = (
+        (
+            "Tokens",
+            BLUE,
+            lambda row: sum(
+                float(row[column])
+                for column in ("tokens_prompt", "tokens_completion", "tokens_reasoning")
+            )
+            / 1_000_000,
+            "Million tokens",
+            lambda value: f"{value:.2f}M",
+        ),
+        (
+            "Cost",
+            VERMILLION,
+            lambda row: float(row["cost_usd"]),
+            "US dollars",
+            lambda value: f"${value:.2f}",
+        ),
+    )
+    for ax, (title, color, value_of, ylabel, label_of) in zip(
+        axes, measures, strict=True
+    ):
+        _paper_axis(ax)
+        all_values = []
+        for level_index, level in enumerate(levels):
+            values = [value_of(row) for row in rows if row["level"] == level]
+            all_values.extend(values)
+            mean = sum(values) / len(values)
+            ax.bar(
+                level_index,
+                mean,
+                width=0.62,
+                color=color,
+                edgecolor=SURFACE,
+                linewidth=0.8,
+                zorder=2,
+            )
+            for seed_index, value in enumerate(values):
+                offset = (seed_index - (len(values) - 1) / 2) * 0.11
+                ax.scatter(
+                    level_index + offset,
+                    value,
+                    s=23,
+                    color=INK,
+                    edgecolor=SURFACE,
+                    linewidth=0.6,
+                    zorder=3,
+                )
+            ax.text(
+                level_index,
+                mean + max(all_values) * 0.055,
+                label_of(mean),
+                ha="center",
+                va="bottom",
+                fontsize=7,
+                color=INK,
+                weight="bold",
+            )
+        ax.set_xticks(range(len(levels)), levels)
+        ax.set_ylim(0, max(all_values) * 1.25)
+        ax.set_ylabel(ylabel, fontsize=7.5, color=INK2)
+        ax.set_title(title, loc="left", fontsize=9, color=INK, weight="bold")
+    fig.suptitle(
+        "Resource use by level",
+        x=0.01,
+        y=0.99,
+        ha="left",
+        fontsize=10,
+        weight="bold",
+        color=INK,
+    )
+    fig.text(0.01, 0.01, "Bars: mean over seeds. Points: individual seeds.", fontsize=6.5, color=INK2)
+    fig.subplots_adjust(left=0.1, right=0.99, bottom=0.2, top=0.8, wspace=0.3)
+    return _save_publication_figure(fig, rows, Path(output_dir), "tokens_cost_by_level")
+
+
+def gate_attempts_figure(
+    data_path: Path = HERE / "waves23.csv", output_dir: Path = OUT
+) -> RenderedFigure:
+    """Draw total gate attempts and rejected attempts at each level."""
+    rows = _csv_rows(Path(data_path))
+    levels = sorted({row["level"] for row in rows}, key=_level_sort)
+    gates = (("Gate 1", "g1"), ("Gate 2", "g2"), ("Gate 3", "g3"))
+    totals = {
+        (level, prefix): (
+            sum(int(row[f"{prefix}_attempts"]) for row in rows if row["level"] == level),
+            sum(int(row[f"{prefix}_fails"]) for row in rows if row["level"] == level),
+        )
+        for level in levels
+        for _, prefix in gates
+    }
+    maximum = max((attempts for attempts, _ in totals.values()), default=1)
+    fig, axes = plt.subplots(1, 3, figsize=(7, 2.65), facecolor=SURFACE, sharey=True)
+    for ax, (gate_name, prefix) in zip(axes, gates, strict=True):
+        _paper_axis(ax)
+        for level_index, level in enumerate(levels):
+            attempts, rejected = totals[(level, prefix)]
+            if rejected > attempts:
+                raise ValueError(f"{gate_name} at {level} rejects more attempts than it made")
+            passed = attempts - rejected
+            if attempts:
+                ax.bar(
+                    level_index,
+                    passed,
+                    width=0.66,
+                    color=BLUE,
+                    edgecolor=SURFACE,
+                    linewidth=0.7,
+                )
+                ax.bar(
+                    level_index,
+                    rejected,
+                    bottom=passed,
+                    width=0.66,
+                    color=VERMILLION,
+                    edgecolor=SURFACE,
+                    hatch="//",
+                    linewidth=0.7,
+                )
+                ax.text(
+                    level_index,
+                    attempts + maximum * 0.04,
+                    f"{attempts}\n{rejected} rejected",
+                    ha="center",
+                    va="bottom",
+                    fontsize=6.3,
+                    color=INK,
+                )
+            else:
+                ax.text(level_index, maximum * 0.025, "-", ha="center", fontsize=8, color=INK2)
+        ax.set_xticks(range(len(levels)), levels)
+        ax.set_ylim(0, maximum * 1.22)
+        ax.set_title(gate_name, loc="left", fontsize=9, weight="bold", color=INK)
+    axes[0].set_ylabel("Attempts across both seeds", fontsize=7.5, color=INK2)
+    fig.suptitle(
+        "Gate attempts and rejections by level",
+        x=0.01,
+        y=0.99,
+        ha="left",
+        fontsize=10,
+        weight="bold",
+        color=INK,
+    )
+    fig.text(
+        0.01,
+        0.01,
+        "Labels: total attempts, then rejected attempts. Hatched segment: rejected attempts.",
+        fontsize=6.5,
+        color=INK2,
+    )
+    fig.subplots_adjust(left=0.09, right=0.99, bottom=0.2, top=0.79, wspace=0.16)
+    return _save_publication_figure(fig, rows, Path(output_dir), "gate_attempts_by_level")
+
+
+def redteam_figure(
+    data_path: Path = HERE / "redteam.csv", output_dir: Path = OUT
+) -> RenderedFigure:
+    """Draw the measured outcome of every adversarial strategy."""
+    rows = _csv_rows(Path(data_path))
+    order = {"blocked": 0, "warned": 1, "silent": 2}
+    styles = {
+        "blocked": (VERMILLION, "X"),
+        "warned": (ORANGE, "^"),
+        "silent": (BLUE, "o"),
+    }
+    unknown = sorted({row["outcome"] for row in rows} - order.keys())
+    if unknown:
+        raise ValueError(f"unknown red-team outcomes: {', '.join(unknown)}")
+    rows = sorted(
+        rows,
+        key=lambda row: int(row["id"].upper().removeprefix("S")),
+    )
+    counts = {outcome: sum(row["outcome"] == outcome for row in rows) for outcome in order}
+    fig, ax = plt.subplots(
+        figsize=(7, max(2.5, 0.27 * len(rows) + 1.35)), facecolor=SURFACE
+    )
+    ax.set_facecolor(SURFACE)
+    for y, row in enumerate(rows):
+        outcome = row["outcome"]
+        color, marker = styles[outcome]
+        ax.scatter(
+            order[outcome],
+            y,
+            s=31,
+            color=color,
+            marker=marker,
+            edgecolor=SURFACE,
+            linewidth=0.6,
+            zorder=3,
+        )
+    ax.set_yticks(
+        range(len(rows)),
+        [f"{row['id']}  {row['description']}" for row in rows],
+    )
+    ax.invert_yaxis()
+    ax.set_xticks(
+        range(3),
+        [
+            f"Blocked\n{counts['blocked']}",
+            f"Warned\n{counts['warned']}",
+            f"Silent\n{counts['silent']}",
+        ],
+    )
+    ax.set_xlim(-0.45, 2.45)
+    ax.grid(axis="x", color=GRID, linewidth=0.6)
+    ax.set_axisbelow(True)
+    for side in ("top", "right", "left", "bottom"):
+        ax.spines[side].set_visible(False)
+    ax.tick_params(colors=INK2, labelsize=7, length=0)
+    ax.set_title(
+        "Red-team outcome by fabrication strategy",
+        loc="left",
+        fontsize=10,
+        weight="bold",
+        color=INK,
+        pad=9,
+    )
+    fig.text(
+        0.99,
+        0.01,
+        "Blocked: no registry reached the writer. Warned: key named. Silent: no check named it.",
+        ha="right",
+        fontsize=6.5,
+        color=INK2,
+    )
+    fig.subplots_adjust(left=0.48, right=0.98, bottom=0.12, top=0.92)
+    return _save_publication_figure(fig, rows, Path(output_dir), "redteam_outcomes")
+
+
+def adjacency_figure(
+    data_path: Path = HERE / "adjacency.csv", output_dir: Path = OUT
+) -> RenderedFigure:
+    """Draw attack catches and honest-shape passes from Gate 3 adjacency probes."""
+    rows = _csv_rows(Path(data_path))
+    panels = (
+        ("attack", "caught", "Attack probes", "caught", "missed"),
+        ("honest", "passed", "Honest shapes", "passed", "rejected"),
+    )
+    summary = []
+    for kind, column, label, success_word, failure_word in panels:
+        selected = [row for row in rows if row["kind"] == kind]
+        if not selected:
+            raise ValueError(f"{data_path} has no {kind} rows")
+        values = [row[column].strip().lower() for row in selected]
+        invalid = sorted(set(values) - {"true", "false"})
+        if invalid:
+            raise ValueError(f"{kind}.{column} must be true or false")
+        successes = sum(value == "true" for value in values)
+        summary.append((label, successes, len(values), success_word, failure_word))
+
+    fig, ax = plt.subplots(figsize=(3.3, 1.9), facecolor=SURFACE)
+    ax.set_facecolor(SURFACE)
+    for y, (_label, successes, total, success_word, failure_word) in enumerate(summary):
+        success_pct = 100 * successes / total
+        failure_pct = 100 - success_pct
+        ax.barh(y, success_pct, height=0.5, color=BLUE, edgecolor=SURFACE, linewidth=0.7)
+        ax.barh(
+            y,
+            failure_pct,
+            left=success_pct,
+            height=0.5,
+            color=VERMILLION,
+            edgecolor=SURFACE,
+            hatch="///",
+            linewidth=0.7,
+        )
+        ax.text(
+            success_pct / 2,
+            y,
+            f"{successes}/{total} {success_word}",
+            ha="center",
+            va="center",
+            fontsize=6.8,
+            color=SURFACE,
+            weight="bold",
+        )
+        failures = total - successes
+        if failure_pct >= 12:
+            x, align, color = success_pct + failure_pct / 2, "center", INK
+        else:
+            x, align, color = 101.5, "left", VERMILLION
+        ax.text(
+            x,
+            y,
+            f"{failures} {failure_word}",
+            ha=align,
+            va="center",
+            fontsize=6.5,
+            color=color,
+        )
+    ax.set_yticks(range(len(summary)), [row[0] for row in summary])
+    ax.invert_yaxis()
+    ax.set_xlim(0, 118)
+    ax.set_xticks([0, 25, 50, 75, 100], ["0", "25", "50", "75", "100%"])
+    ax.grid(axis="x", color=GRID, linewidth=0.6)
+    ax.set_axisbelow(True)
+    for side in ("top", "right", "left"):
+        ax.spines[side].set_visible(False)
+    ax.spines["bottom"].set_color(MUTED)
+    ax.tick_params(colors=INK2, labelsize=7, length=0)
+    ax.set_title(
+        "Gate 3 token-adjacency probes",
+        loc="left",
+        fontsize=9,
+        weight="bold",
+        color=INK,
+    )
+    fig.text(
+        0.01,
+        0.01,
+        "Blue: desired outcome. Hatched red: miss or false rejection.",
+        fontsize=6,
+        color=INK2,
+    )
+    fig.subplots_adjust(left=0.26, right=0.98, bottom=0.28, top=0.78)
+    return _save_publication_figure(fig, rows, Path(output_dir), "adjacency_probes")
+
+
+def agent_judge_figure(
+    data_path: Path = HERE / "judging.csv", output_dir: Path = OUT
+) -> RenderedFigure | None:
+    """Draw judge scores and faked-result verdicts at each measured level."""
+    data_path = Path(data_path)
+    output_dir = Path(output_dir)
+    if not data_path.exists():
+        return None
+    rows = _csv_rows(data_path)
+
+    benchmarks = list(dict.fromkeys(row["benchmark"] for row in rows))
+    fig, axes = plt.subplots(
+        len(benchmarks),
+        2,
+        figsize=(7, 2.45 * len(benchmarks)),
+        facecolor=SURFACE,
+        squeeze=False,
+    )
+    role_style = {
+        "judge": (BLUE, "o"),
+        "opinion": (VERMILLION, "s"),
+    }
+    for row_index, benchmark in enumerate(benchmarks):
+        selected = [row for row in rows if row["benchmark"] == benchmark]
+        levels = sorted({row["level"] for row in selected}, key=_level_sort)
+        score_ax, flag_ax = axes[row_index]
+        _paper_axis(score_ax)
+        _paper_axis(flag_ax)
+
+        for level_index, level in enumerate(levels):
+            level_rows = [row for row in selected if row["level"] == level]
+            scores = []
+            for point_index, row in enumerate(level_rows):
+                if not row["overall"].strip():
+                    continue
+                role = row["role"].strip().lower()
+                color, marker = role_style.get(role, (MUTED, "D"))
+                offset = (-0.09 if role == "judge" else 0.09) + 0.018 * (point_index % 3 - 1)
+                value = float(row["overall"])
+                scores.append(value)
+                score_ax.scatter(
+                    level_index + offset,
+                    value,
+                    s=22,
+                    marker=marker,
+                    color=color,
+                    edgecolor=SURFACE,
+                    linewidth=0.5,
+                    zorder=3,
+                )
+            if scores:
+                mean = sum(scores) / len(scores)
+                score_ax.scatter(level_index, mean, marker="_", s=130, color=INK, zorder=4)
+                score_ax.text(
+                    level_index,
+                    mean + 0.32,
+                    f"{mean:.1f}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=7,
+                    color=INK,
+                )
+
+            counts = {"true": 0, "false": 0, "error": 0}
+            for row in level_rows:
+                value = row["faked"].strip().lower()
+                counts[value if value in ("true", "false") else "error"] += 1
+            left = 0
+            segments = (
+                ("true", "flagged", VERMILLION, ""),
+                ("false", "clear", BLUE, ""),
+                ("error", "error", SURFACE, "///"),
+            )
+            for key, label, color, hatch in segments:
+                count = counts[key]
+                if not count:
+                    continue
+                flag_ax.barh(
+                    level_index,
+                    count,
+                    left=left,
+                    height=0.58,
+                    color=color,
+                    edgecolor=MUTED if hatch else SURFACE,
+                    hatch=hatch,
+                    linewidth=0.7,
+                )
+                flag_ax.text(
+                    left + count / 2,
+                    level_index,
+                    f"{label} {count}",
+                    ha="center",
+                    va="center",
+                    fontsize=6.5,
+                    color=INK if key in ("true", "error") else SURFACE,
+                )
+                left += count
+
+        score_ax.set_xticks(range(len(levels)), levels)
+        score_ax.set_ylim(0.5, 10.5)
+        score_ax.set_yticks([1, 3, 5, 7, 9])
+        score_ax.set_title(
+            f"{benchmark}: overall score", loc="left", fontsize=9, color=INK, weight="bold"
+        )
+        score_ax.set_ylabel("Score, 1-10", fontsize=7.5, color=INK2)
+        score_ax.set_xlabel(
+            "● judge    ■ opinion    black tick: mean",
+            fontsize=6.5,
+            color=INK2,
+        )
+        flag_ax.set_yticks(range(len(levels)), levels)
+        flag_ax.invert_yaxis()
+        flag_ax.set_xlabel("Judge responses", fontsize=7.5, color=INK2)
+        flag_ax.set_title("Faked-result verdicts", loc="left", fontsize=9, color=INK, weight="bold")
+
+    fig.suptitle(
+        "Agent-judge results by level",
+        x=0.01,
+        y=1.01,
+        ha="left",
+        fontsize=10,
+        weight="bold",
+        color=INK,
+    )
+    fig.tight_layout(pad=0.7, w_pad=1.4)
+    return _save_publication_figure(fig, rows, output_dir, "agent_judge_by_level")
 
 
 if __name__ == "__main__":
-    OUT.mkdir(exist_ok=True)
-    for number, benchmark in enumerate(("CORE-Bench", "MLR-Bench", "BadScientist"), start=1):
-        slug = benchmark.lower().replace("-", "")
-        level_figure(benchmark, f"fig{number}_{slug}_levels.png")
-        compare_figure(benchmark, f"fig{number + 3}_{slug}_compare.png")
-    audit_figure("fig7_audit.png")
-    mechanism_figure("fig8_mechanism.png")
-    # A row no figure reads is a result that silently never reaches the paper.
-    missing = [f"{r['benchmark']}/{r['system']}/{r['arm']}/{r['metric']}"
-               for i, r in enumerate(ROWS) if i not in drawn]
-    assert not missing, f"rows no figure draws: {missing}"
-    print(f"{len(ROWS)} rows drawn into {len(list(OUT.glob('*.png')))} figures in {OUT}")
+    rendered = [
+        crashes_figure(),
+        tokens_cost_figure(),
+        gate_attempts_figure(),
+        redteam_figure(),
+        adjacency_figure(),
+        mechanism_figure(),
+    ]
+    judging = agent_judge_figure()
+    if judging is not None:
+        rendered.append(judging)
+    names = ", ".join(item.png.stem for item in rendered)
+    print(f"wrote {len(rendered)} figures as PDF and PNG in {OUT}: {names}")
