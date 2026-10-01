@@ -1,6 +1,18 @@
-%% First draft. Every figure is drawn by ../figures.py from ../results.csv and is
-%% stamped PLACEHOLDER while any row it draws is a dummy. Build: tectonic main.tex
+%% Draft for AAMAS 2027, on the structure of AAMAS_2027_sample.tex.
+%% Every number comes from run_kit_2026-09-29/LEDGER_2026-09-30.md, ../judging.csv,
+%% or the figure CSVs in ../ (waves23.csv, crashes.csv, redteam.csv, adjacency.csv,
+%% mechanism.csv). Figures are drawn by ../figures.py. Build: tectonic main.tex
+%% One sentence per line. No em dashes.
+
+%%%% For anonymized submission, use this
 \documentclass[sigconf,anonymous]{aamas}
+
+%%%% For camera-ready, use this
+%\documentclass[sigconf]{aamas}
+
+\usepackage{balance} % for balancing columns on the final page
+
+%%% AAMAS-2027 copyright block (do not change!)
 
 \makeatletter
 \gdef\@copyrightpermission{
@@ -21,11 +33,16 @@ on Autonomous Agents and Multiagent Systems (AAMAS 2027)}{3--7 May 2027}{Hanoi, 
 \acmYear{2027}
 \acmDOI{}
 \acmISBN{}
+
 \acmSubmissionID{<<OpenReview submission id>>}
+
 \submissionType{Research Paper Track}
+
+%%% Author-defined commands.
 
 \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
 \newcommand{\gates}{G.A.T.E.S.}
+\newcommand{\rtag}{\emph{reviewed by agent for now}}
 
 \title{\gates: A Portable Validity Layer for Autonomous Research Agents}
 
@@ -45,78 +62,133 @@ on Autonomous Agents and Multiagent Systems (AAMAS 2027)}{3--7 May 2027}{Hanoi, 
   \country{\todo{country}}}
 
 \begin{abstract}
-Autonomous research agents publish numbers their experiments never produced.
-The usual explanation is that the model fabricates.
-In the scaffold we audited, the cause was mechanical: the host cut experiment output to 1,000 characters before any agent read it, so the writer never saw the real numbers and the failure detector never saw the crash.
-We argue that a large share of hallucinated results is an information-flow defect, and close the channel at three points: execution validity, source-result coherence and report validity.
-The three gates are deterministic, need no model to reach a verdict, and install into an existing scaffold through one small adapter.
-A single switch runs them cumulatively, so each gate's contribution can be measured on its own.
-We evaluate the layer on CORE-Bench, MLR-Bench and BadScientist at every level, on two host scaffolds.
-\todo{Benchmarks: D70 replaced this set (Hidden Pitfalls, ARC-Bench, re-scoring, MLR-Bench); rewrite once the Holm family is re-declared (D-E).}
-\todo{one sentence of headline results, from the level-3 bars of Figures 1--3, once measured.}
+Autonomous research agents write papers that report numbers their experiments never produced.
+In Agent Laboratory, the scaffold we audited, the cause was mechanical.
+The host cut experiment output to a short prefix before any agent read it, so the writer never saw the real numbers and the failure detector never saw the crash.
+We argue that a large share of fabricated results is an information-flow defect, and we close the channel at three points with \gates{}: execution validity, source-result coherence and report validity.
+Deterministic checks decide every verdict, each rejection goes back to the agent as a list of fixes, and the layer installs into a host through one adapter.
+In a signed campaign, Gate 1 delivered 40 of 40 required values to the writer, against 0 of 40 without it.
+On one MLR-Bench task, at four cumulative levels and two seeds, an agent's reading of code and logs finds results that no execution produced in both ungated papers and in none of the six gated ones.
+At least one of two agent judges still flags each gated paper, mostly for prose that misstates a number the run did measure, which no gate checks.
+Level 3 cost 2.21 times level 0 and took 2.59 times as long, and 46 of 59 crashes were caused by our harness, not the agent.
+A red team shows the limit plainly: 10 of 18 fabrication strategies pass silently.
 \end{abstract}
 
 \keywords{autonomous research agents, scientific integrity, hallucination, verification}
 
 \begin{document}
 
-\pagestyle{fancy}
-\fancyhead{}
+%\pagestyle{fancy}
+%\fancyhead{}
 
 \maketitle
 
 \section{Introduction}
 
-Research agents such as Agent Laboratory~\cite{schmidgall2025agentlab} and The AI Scientist-v2~\cite{yamada2025aiscientistv2} run experiments and write the papers that report them.
-Their papers regularly state results that no experiment produced: MLR-Bench found faked experimental results in every one of the ten papers AI Scientist-v2 wrote for its experimentation tasks~\cite{chen2025mlrbench}.
+Research agents such as Agent Laboratory~\cite{schmidgall2025agentlab} and The AI Scientist-v2~\cite{yamada2025aiscientistv2} run experiments and then write the papers that report them.
+Those papers often report results that no experiment produced.
+MLR-Bench's released human labels mark faked experimental results in all ten papers that AI Scientist-v2 wrote for the benchmark's full research tasks~\cite{chen2025mlrbench}.
 
-In the Agent Laboratory scaffold we audited, the mechanism was plain.
-The host cut experiment output to 1,000 characters before the writing agent read it, and it appended the crash marker \emph{after} the program's own output, so the same cut dropped the marker.
-A run that raised \texttt{NameError} on every attempt scored 1.0 from the reward model and went into the paper with a full results table.
-The model did not need to be dishonest; nothing ever showed it the numbers.
+The usual explanation is that the model fabricates.
+In the Agent Laboratory scaffold we audited, the cause was plainer.
+The host cut experiment output to a short fixed prefix before any agent read it.
+It also appended the crash marker after the program's own output, so the same cut dropped the marker.
+The writing agent never saw the numbers, and the failure detector never saw the crash.
+A model in that position has nothing true to report, so it reports something else.
 
-That makes much of the fabrication a property of the information flow, and so something a deterministic layer can stop.
-An ablation that delivers the gate's evidence without enforcing its verdict (L0') separates the two, and we report it beside the levels.
-\gates{} places a gate at each point where a scaffold loses its grip on evidence:
+That makes much of the fabrication a property of the information flow, and a deterministic layer can stop it.
+\gates{} places a gate at each point where a scaffold loses its hold on evidence:
 
 \begin{itemize}
-\item \textbf{Gate 1, execution validity.} Did the code run, and did \emph{this} run produce the numbers? Only values the experiment recorded become citable.
-\item \textbf{Gate 2, source-result coherence.} Is the verified run consistent with the ranges, relations and methodology its plan declared?
-\item \textbf{Gate 3, report validity.} Is every number in the manuscript rendered from a recorded value, and does every citation resolve to a paper the run retrieved?
+\item \textbf{Gate 1, execution validity.} Did the code run, and did this run produce the numbers?
+Only the values the experiment recorded can be cited.
+\item \textbf{Gate 2, source-result coherence.} Is the verified run consistent with the ranges, relations and methods its plan declared?
+\item \textbf{Gate 3, report validity.} Does every number in the manuscript render from a recorded value, and does every citation resolve to a paper the run retrieved?
 \end{itemize}
 
+We claim a large share, not all.
+Two experiments would test the stronger claim, and neither has run yet.
+The first is L0', which delivers Gate 1's evidence to the agent but never enforces its verdict, and so separates delivering the values from rejecting runs.
+The second is a second model under test.
+L0' exists in the layer, but the host cannot run it until it accepts the new level.
+
+Our end-to-end result is narrow.
+On one task, by an agent's reading, the gates turned invented numbers into measured numbers, but they do not check what the prose says about those numbers.
+A gated paper can still say that a value ``never exceeds'' a bound its own table breaks; we show where this happens and propose the next check.
+
 Our contributions are:
-(1) the three gates, whose verdicts no model can change;
-(2) a cumulative switch that runs them one at a time, so each gate's effect is measured rather than assumed;
-(3) an install path shipped as agent skills, one per gate, tested against the code it describes;
-and (4) an evaluation on three benchmarks, at every level, on two hosts.
+(1) three gates whose verdicts no model can change, each with a feedback loop back to the agent;
+(2) a cumulative switch that runs the gates one at a time, so each gate's effect is measured rather than assumed;
+(3) mechanism evidence for each gate, a red team of 18 fabrication strategies, and 63 probes of Gate 3's token check;
+(4) a first comparison on one MLR-Bench task at all four levels, with crashes split by cause, cost, and agent judges;
+and (5) the forward evaluation on Hidden Pitfalls~\cite{luo2025hiddenpitfalls}, with the published numbers it will be read against.
 
 \section{Related Work}
 
 \paragraph{Research agents.}
 Agent Laboratory~\cite{schmidgall2025agentlab} and The AI Scientist-v2~\cite{yamada2025aiscientistv2} automate the path from idea to paper.
-ScientistOne~\cite{scientistone2026} maintains chains of evidence through its own pipeline, and audits other systems' released papers after the fact with four checks.
-Three of them correspond to our gates: score verification to Gate 1, specification violation to Gate 2, and reference verification to Gate 3.
-The difference is where the check sits: \gates{} runs inside an existing scaffold, before the paper exists, and sends each rejection back to the agent as feedback.
+ScientistOne~\cite{scientistone2026} keeps chains of evidence through its own pipeline and audits other systems' released papers after the fact.
+Its checks include score verification, specification violation and reference verification, which line up with our Gates 1, 2 and 3.
+The difference is where the check sits.
+\gates{} runs inside an existing scaffold, acts before the paper exists, and sends each rejection back to the agent that can fix it.
 
 \paragraph{Benchmarks.}
-MLR-Bench~\cite{chen2025mlrbench} evaluates agents on open-ended machine-learning research and labels the hallucinations in their papers.
-CORE-Bench~\cite{siegel2024corebench} asks agents to reproduce published code and answer questions about its outputs.
+MLR-Bench~\cite{chen2025mlrbench} evaluates agents on open-ended machine-learning research, scores their papers with an LLM judge, and labels four kinds of hallucination with human confirmation.
+Hidden Pitfalls~\cite{luo2025hiddenpitfalls} probes four failures of AI scientist systems: inappropriate benchmark selection, data leakage, metric misuse and post-hoc selection bias.
+It also shows that an LLM auditor finds them far more often when it reads the logs and code than when it reads the paper alone, which is the published case for checking evidence rather than prose.
 BadScientist~\cite{jiang2025badscientist} shows that LLM reviewers accept fabricated papers with no experiments at high rates under presentation-level manipulation.
+CORE-Bench~\cite{siegel2024corebench} asks agents to reproduce published code and answer questions about its outputs; it has no manuscript, so Gate 3 would have nothing to read.
+\todo{Related work cites only what refs.bib holds.
+Add MLReplicate, SciIntegrity-Bench, ARC-Bench and CiteAudit once each entry is checked against its arXiv page.}
 
-\section{The Validity Layer}
+\section{The \gates{} Design}
 
-\subsection{Design invariants}
+\subsection{Invariants}
 
-The layer is Python-standard-library-only and imports nothing from the host.
-Deterministic checks decide every verdict; a model can add a warning and nothing else, because the function that records a model's finding fixes its severity at WARN.
-A check with no input emits nothing rather than passing, so a report never shows a green row for a check that did not run.
-A gate never modifies what it judges; it writes its evidence beside it.
+The layer uses the Python standard library only, imports nothing from the host, and receives the model as one injected function.
+Deterministic checks decide every verdict.
+A model can add a warning and nothing else, because the function that records a model's finding fixes its severity at WARN and takes no severity argument.
+A check with no input emits nothing, so a report never shows a green row for a check that did not run.
+A gate never modifies what it judges; it writes its evidence beside it, and its ledger records every attempt, accepted or not.
 
-\subsection{Exhaustion policy}
+\subsection{Three gates}
 
-Each gate runs a feedback loop with a budget counted in agent turns.
-The policies on a spent budget differ on purpose (Table~\ref{tab:exhaustion}): Gate 2 must not block a genuinely new result forever, while an unverifiable experiment or manuscript must not be emitted.
+\paragraph{Gate 1, execution validity.}
+The experiment program records each result with \texttt{record\_result(key, value)} and each configured value, such as a learning rate, with \texttt{record\_setting}.
+Gate 1 runs the program in a child process.
+It checks that the run exited cleanly with no swallowed traceback, that the expected keys are present, finite and not degenerate, and that a static pass over the code finds each recorded value computed rather than typed as a constant.
+Accepted values go into a registry, which is the only source of citable numbers downstream.
+The writer receives the registry, the settings, the warnings and a path to the full output, in place of the host's printout.
+A log scanner and an optional model layer add warnings that never change the verdict.
+
+\paragraph{Gate 2, source-result coherence.}
+Gate 2 reads the registry against what the plan declared.
+Tier A checks the registry on its own terms, such as ranges and relations between keys.
+Tier B checks the run against plan fields.
+A model extracts those fields from the host's free-text plan and keeps only fields whose quote appears in the plan, so a divergence on such a field is capped at a warning.
+
+\paragraph{Gate 3, report validity.}
+The writer cites a result as \verb|\result{key}| and a setting as \verb|\setting{key}|, and Gate 3 renders each token from the registry.
+It fails a manuscript that types a numeral in its results sections, names a key the run did not record, or types a digit, a sign or a power of ten against a token.
+It also checks that referenced figures exist, that Gate 2's declared limitations appear word for word, and that every cited arXiv identifier resolves and was retrieved by the run.
+Gate 3 runs nothing.
+It writes each rendered number's claim chain, from task to command to log to value to claim.
+
+\subsection{Levels and L0'}
+
+One environment variable, \texttt{GATES\_LEVEL}, selects level 0 (all gates off), 1 (Gate 1), 2 (Gates 1 and 2) or 3 (all three).
+The levels are cumulative because each gate reads what the one before it produced: Gate 2 reviews Gate 1's registry, and Gate 3 judges a manuscript against it.
+A closed gate raises before it spends an agent turn, so no setting runs a gate without the gates below it.
+Level 0 is the host as shipped.
+L0' (\texttt{GATES\_LEVEL=0d}) behaves as level 0 in every decision, but Gate 1 runs and its evidence reaches the agent in place of the host's prefix; its verdict decides nothing.
+
+\subsection{Feedback loop and exhaustion}
+
+Each gate runs a reject, fix and retry loop.
+A rejection is rendered as a report the agent can act on: which check failed, on which key or line, and what to change.
+The budget lives in the adapter, not in the gate, and the person wiring the layer chooses it after the setup step states its cost.
+The policies on a spent budget differ on purpose (Table~\ref{tab:exhaustion}).
+Gate 2 must not block a new result forever, while an unverifiable experiment or manuscript must not be emitted.
 
 \begin{table}[t]
 \caption{What each gate does when its budget is spent.}
@@ -132,158 +204,374 @@ Gate & On exhaustion \\
 \end{tabular}
 \end{table}
 
-\subsection{Cumulative levels}
-
-One environment variable, \texttt{GATES\_LEVEL}, selects 0 (all off), 1 (Gate 1), 2 (Gates 1 and 2) or 3 (all three).
-The levels are cumulative because each gate reads what the one before it produced: Gate 2 reviews Gate 1's registry, and Gate 3 judges a manuscript against it.
-A closed gate raises before it spends an agent turn, so no setting runs a gate without the ones below it.
-
-\section{Installing into a Host}
+\subsection{Installing into a host}
 
 The loops every host shares live in the layer itself.
-A host adapter supplies only host knowledge: a context per phase, its model call, its original execution path for level 0, and the ids of the papers it retrieved.
-For Agent Laboratory that adapter is \todo{line count once frozen} lines.
-The install path ships as four agent skills: a router and one skill per gate, each naming what it needs from the gate before it and what it hands on.
-\todo{Phase 7: the AI Scientist-v2 adapter, and how many turns an agent took to write it from the skills.}
+A host adapter supplies only host knowledge: a context per phase, the host's model call, its original execution path for level 0, and the identifiers of the papers it retrieved.
+The install path ships as agent skills, a router and one skill per gate, each naming what it needs from the gate before it and what it hands on; a test holds each skill to the code it describes.
+The layer's suite holds 994 tests and refuses every network socket.
+Agent Laboratory is the only host so far; an adapter for a second host is future work.
 
-\section{Evaluation Protocol}
+\section{Evaluation Design}
 
-We run each host at all four levels on three benchmarks, and report one integrity metric and one task score for each (Table~\ref{tab:metrics}).
-Pairing the two follows ScientistOne's framing: integrity should rise without the task score falling.
-Every rate carries a Wilson interval and its denominator; published numbers carry neither.
+We report two kinds of evidence and never mix them in one figure.
+Mechanism evidence measures what each gate catches and what it wrongly flags, on a signed campaign and on model-free rigs.
+End-to-end evidence comes from two waves of real runs on one benchmark task.
 
-\begin{table*}[t]
-\caption{Metrics, and which gate has input on which benchmark. A gate with no input emits nothing, so its bar repeats the level below it.}
-\label{tab:metrics}
-\begin{tabular}{llll}
-\toprule
-Benchmark & Integrity metric (lower is better) & Task score (higher is better) & Gate with no input \\
-\midrule
-CORE-Bench (Hard, 45 tasks) & answers not traceable to a recorded value & pass@1 & Gate 3: no manuscript \\
-MLR-Bench (10 tasks) & papers with faked experimental results & MLR-Judge overall & none \\
-BadScientist (40 write-ups) & manipulated manuscripts emitted and accepted & honest manuscripts admitted & none \\
-\bottomrule
-\end{tabular}
-\end{table*}
+\paragraph{Waves 2 and 3.}
+The host is Agent Laboratory, and the model under test is \texttt{deepseek-flash} (DeepSeek V4.1 Flash).
+The task is MLR-Bench's \texttt{iclr2025\_scsl}.
+A wave starts all four levels together on one machine with one seed; wave 3 is seed 1 and wave 2 is seed 2.
+The GPU is split four ways, 0.9/4 of the device per run.
+Each run stops at \$5.50 of measured cost, and every gate allows 10000 rewrites, so a run is bounded by cost rather than by attempts.
+Only sterile runs enter a table, runs that start from the pinned inputs with their own empty caches and folders; a wave with an outside failure or a broken sterile condition is void and is rerun at the same seed.
+Wave 1 and one voided wave are kept out of every table; they cost \$1.78 and \$1.1537.
+All eight runs completed and wrote a paper.
+The waves ran at a gates commit from before the fixes of 29 September, including the separate call for settings, so their verdicts are those of that version.
 
-For BadScientist we manipulate the write-ups of real runs rather than generating papers with no experiments.
-A paper with no experiment never passes Gate 1, so every level from 1 up would read zero and say nothing about Gates 2 and 3.
-The model under test is DeepSeek V4.1 Flash; DeepSeek V4 Pro repeats MLR-Bench at levels 0 and 3, to test whether the effect belongs to the information flow or to one model.
-The faked-result labels and the MLR-Judge scores come from DeepSeek V4 Pro and NVIDIA Nemotron 3 Ultra, averaged as MLR-Judge does; a judge never scores a run of its own model, so on the V4 Pro runs only Nemotron counts.
-A person confirms each faked-result flag, blind to the level and in a shuffled order.
-Every run records its cost and wallclock, and we report both.
+\paragraph{Agent judges.}
+Two agent judges score each paper with MLR-Bench's prompts: Claude Opus 5.5 through Claude Code, and GPT-5.6 Sol at high effort through Codex.
+Each gives an MLR-Judge overall score from 1 to 10 and lists hallucinations by type, including ``Faked Experimental Results''.
+Like MLR-Bench's judge, they read the paper, the task and the code, but not the logs.
+Grok 4.7 through Cursor gives an opinion with the same prompts; it is recorded and never counted.
+Every judgement is tagged \rtag{}: no person has confirmed any flag yet.
+A paper that every judge flags is a faked-results candidate, and a person decides whether it counts.
+One run is incomplete: on level 3, seed 2, Codex's faked-results answer failed on a credit limit, and its overall score has no source file, so that run has Opus's verdict only.
+\todo{Rerun Codex on L3 seed 2 once it has credits, then redraw Figure~\ref{fig:judge} and Table~\ref{tab:faked}.}
 
-\paragraph{Significance, fixed before the pilot.}
-Level 0 and level 3 run on the same task with the same seed, so each task-seed is a pair.
-Per benchmark, an exact McNemar test on the discordant pairs tests the integrity event, with Holm's correction across the benchmarks at $\alpha = 0.05$.
-\todo{Name the Holm family once re-declared (D-E, D81).}
-The task score must be non-inferior: the lower bound of a seeded 95\% paired-bootstrap interval of level 3 minus level 0 stays above $-0.5$ MLR-Judge points, $-5$ points of pass@1, and $-10$ points of honest admission.
-The pilot's discordance sets the seed count for 80\% power.
+\paragraph{Statistics.}
+Each task and seed gives one pair of level 0 and level 3 runs.
+Two pairs cannot reach the planned test: the smallest exact two-sided McNemar $p$ with two discordant pairs is 0.5.
+So everything in Section~\ref{sec:waves} is descriptive.
+The full study's test was fixed before the pilot: an exact McNemar test on the discordant pairs per benchmark, Holm's correction across the benchmark family, and a paired-bootstrap non-inferiority bound on the task score.
 
-\section{Results}
+\section{Mechanism Results}
+\label{sec:mechanism}
 
-\todo{Every figure in this section is a dummy showing the expected shape. Replace from ../results.csv; see ../PLAN.md section 5.}
-
-\begin{figure*}[t]
-\includegraphics[width=\textwidth]{../figures/fig1_corebench_levels.png}
-\caption{CORE-Bench by level. Gate 3 has no manuscript to read, so its bar is hatched.}
-\label{fig:core}
-\end{figure*}
-
-\begin{figure*}[t]
-\includegraphics[width=\textwidth]{../figures/fig2_mlrbench_levels.png}
-\caption{MLR-Bench by level.}
-\label{fig:mlr}
-\end{figure*}
-
-\begin{figure*}[t]
-\includegraphics[width=\textwidth]{../figures/fig3_badscientist_levels.png}
-\caption{BadScientist by level. The attack lives in the write-up, so Gate 3 is expected to carry this result.}
-\label{fig:bad}
-\end{figure*}
-
-\paragraph{Each gate's contribution.}
-\todo{Figures~\ref{fig:core}--\ref{fig:bad}: where the integrity metric drops, and whether the task score moved.}
-
-\begin{figure*}[t]
-\includegraphics[width=\textwidth]{../figures/fig5_mlrbench_compare.png}
-\caption{Each system alone (level 0) and with \gates{} (level 3) on MLR-Bench. AI Scientist-v2 alone is MLR-Bench's published figure. CORE-Bench and BadScientist are in the appendix.}
-\label{fig:compare}
-\end{figure*}
-
-\paragraph{Across hosts.}
-\todo{Figure~\ref{fig:compare}: host alone against host with \gates{}.}
+Figure~\ref{fig:mechanism} gathers what each gate catches and what it wrongly flags.
 
 \begin{figure*}[t]
 \centering
-\includegraphics[width=0.6\textwidth]{../figures/fig7_audit.png}
-\caption{Released papers, audited after the fact with Gate 3's citation check.}
-\label{fig:audit}
+\includegraphics[width=\textwidth]{../figures/fig8_mechanism.pdf}
+\caption{Mechanism evidence: what each gate catches and what it wrongly flags, with Wilson 95\% intervals.
+Gate 1 rows come from the signed campaign of 15 August; Gates 2 and 3 from model-free rigs.
+The Gate 3 row has no interval: its 49 literals come from two manuscripts.}
+\label{fig:mechanism}
+\Description{Horizontal bar chart of eleven mechanism measures as percentages with Wilson intervals.
+Gate 1 delivered 40 of 40 required values when on and 0 of 40 when off; manuscript claims were traceable 28 of 29 when on and 0 of 11 when off.
+Gate 2 tier A rejected 27 of 27 defective registries and wrongly rejected 0 of 18 clean ones.
+Tier B caught 12 of 12 plan divergences with 0 of 17 false alarms, and flagged 6 of 6 unverifiable fields with 0 of 23 false alarms.
+Gate 3 detected 46 of 49 typed result literals.}
 \end{figure*}
 
-\paragraph{Released papers.}
-\todo{Figure~\ref{fig:audit}. The two published figures for AI Scientist-v2 disagree: MLR-Bench reports incorrect citations in 30\% of its papers, ScientistOne 0 of 159 hallucinated references on different tasks.}
+\paragraph{Gate 1.}
+In the signed campaign, Gate 1 delivered 40 of 40 required key-value pairs to the writer, against 0 of 40 through the host's prefix.
+With Gate 1 on, 10 of 10 attempts delivered all four required values, against 0 of 10, and the paper reported 4 of 4 of them as numbers, against 0 of 4.
+In the gated manuscript, 28 of 29 claims traced to the registry or to a checkable derivation, against 0 of 11 in the ungated one.
+Re-read under the later claim scanner, the same gated paper traces 34 of 37.
+Delivering the evidence did not make the paper better: the final reviewer scores were 3.735 gated and 3.765 ungated.
+Gate 1's log scanner, on 68 labelled lines holding 34 signals, has precision 1.000 and recall 0.529 with its deterministic patterns alone, and recall 0.882 at precision 1.000 when a three-shot \texttt{qwen3:8b} adds warnings.
+Against 232 agent-written experiment files on our machine, with 3667 record calls, the latest static checks changed no classification.
 
-\section{Limitations}
+\paragraph{Gate 2.}
+On labelled rigs, tier A rejected 27 of 27 defective registries and wrongly rejected 0 of 18 clean ones.
+Tier B caught 12 of 12 plan divergences with 0 false alarms in 17, and flagged 6 of 6 unverifiable fields with 0 false alarms in 23.
+We built these cases, so they measure the checks on the defects we thought of.
 
-The gates deliver the evidence; they do not make the science good.
-In the Gate 1 campaign, reviewer scores were 3.735 gated and 3.765 ungated, and both papers were recommended for rejection.
-Gate 2's methodology checks read plan fields a model extracts from free-text plans, so a divergence on one is capped at a warning.
-The Gate 1 campaign ran on DeepSeek V4 Flash and the benchmark runs on V4.1 Flash, which DeepSeek now serves under the old name too, so the campaign is context for level 1, not a replication of it.
-Gate 3's citation checks see arXiv identifiers only; a paper that cites none is not checkable, and we count it as such rather than as clean.
+\paragraph{Gate 3.}
+The claim scanner detects 46 of 49 typed result literals in two archived manuscripts, with 8 false positives.
+It misses 3: two small integers and a value stated twice on one line.
+The earlier scanner, which skipped any line holding a reference, detected 34 of the same 49.
 
-A fabrication made before the number is recorded is not caught by checking the recorded number.
-We planted fourteen such fabrications in a model-free red team: a number typed at the recording call, one passed through a variable, a dictionary or a reducer, all four blocked; a key recorded once per epoch with the best value last, warned.
-Nine pass silently.
-Six are choices of method on real computation: a random number in a plausible band, a measurement nudged upward, the best epoch reported as final, a failed seed dropped from the mean, the best of five seeds, and training accuracy labelled as test.
+\paragraph{Red team.}
+A fixed, model-free rig plants a fabricated test accuracy in an experiment program in 18 ways, plus an honest control, and runs each once through Gate 1 (Figure~\ref{fig:redteam}).
+Seven are blocked, among them a literal typed at the recording call or passed through a variable, a dictionary or a reducer.
+One is warned: every epoch recorded under one key with the best last.
+Ten pass silently.
+Six of those are choices of method on real computation: a random number in a plausible band, a measurement nudged upward, the best epoch reported as final, a failed seed dropped from the mean, the best of five seeds, and training accuracy labelled as test.
 No check on a recorded value can see them, because each value is what the code computed.
 Three are limits of the static pass: a result recorded as a setting, a literal passed through tuple unpacking, and a literal returned by a function the program defines.
+The tenth records a typed constant through an alias of the recording call.
 
-The claim scanner misses two- and three-digit integers and a value stated twice on one line: 3 of 49 labelled result literals in two archived manuscripts.
-A person's confirmation hides the level but not the paper's text, which can still reveal its treatment.
-Waves 2 and 3 split the GPU four ways, and 13 of the 14 crashes at level 0 were out of memory under that per-run cap, which gated levels could retry around and level 0 could not; we report crashes by cause and count only the agent's.
-Level 3 used 2.27 and 2.32 times level 0's tokens in those waves, so a quality difference between them is also a compute difference.
-\todo{Whatever the runs show.}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{../figures/redteam_outcomes.pdf}
+\caption{Red-team outcome for each of the 18 fabrication strategies.
+Blocked: no registry reached the writer.
+Warned: a check named the planted key.
+Silent: no check named it.
+In all, 7 blocked, 1 warned and 10 silent.}
+\label{fig:redteam}
+\Description{Dot chart listing strategies S1 to S18 with their outcome.
+Blocked: S1 to S4 and S15 to S17.
+Warned: S11.
+Silent: S5 to S10, S12 to S14 and S18.}
+\end{figure*}
 
-\section{Conclusion}
+\paragraph{Adjacency probes.}
+Gate 3's token-adjacency check fails a manuscript whose typed notation changes a token's rendered value, such as a digit typed right after \verb|\result{x}|.
+We probed it with 27 attack shapes and 36 honest shapes (Figure~\ref{fig:adjacency}).
+It caught 23 of 27 attacks and passed 35 of 36 honest shapes.
+The one honest shape rejected is ``x10'' in prose, which the older prose scanner rejects, not the adjacency check.
+Four attacks pass: a digit after a percent sign (\verb|\%9|), a prefix factor (\verb|2\times\result{x}|), a digit inside a TeX group (\verb|\text{9}|), and a superscript (\verb|$^{2}$|) after a token.
+The code states them as a \texttt{\# limit:} comment in \texttt{gates/gate3.py}, which names following TeX groups as the fix.
 
-\todo{After results.}
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{../figures/adjacency_probes.pdf}
+\caption{Gate 3 token-adjacency probes: 23 of 27 attack shapes caught, 35 of 36 honest shapes passed.}
+\label{fig:adjacency}
+\Description{Two horizontal stacked bars.
+Attack probes: 23 of 27 caught, 4 missed.
+Honest shapes: 35 of 36 passed, 1 rejected.}
+\end{figure}
 
-\bibliographystyle{ACM-Reference-Format}
-\bibliography{refs}
+\section{Waves 2 and 3}
+\label{sec:waves}
 
-\appendix
+Table~\ref{tab:waves} gives the per-level totals over both seeds.
 
-\section{Mechanism Evidence}
-
-These results measure how the gates behave, and the repository already holds them (Figure~\ref{fig:mechanism}).
-Gate 3 also writes each rendered claim's provenance chain, from task to command to log to value to claim, and reports the share that is unbroken.
-
-\begin{table}[h]
-\caption{Measured mechanism results.}
-\begin{tabular}{p{0.16\columnwidth}p{0.74\columnwidth}}
+\begin{table}[t]
+\caption{Waves 2 and 3, totals over the two seeds of each level.
+Tokens are prompt plus completion, in millions.
+Crashed counts crashed executions, with the harness-caused and agent-caused counts in parentheses.}
+\label{tab:waves}
+\begin{tabular}{lrrrrr}
 \toprule
-Gate & Result \\
+Level & Cost (\$) & Hours & Tokens & Executions & Crashed \\
 \midrule
-1 & 40/40 required values reached the writer, against 0/40 through a 1,000-character channel \\
-1 & 28/29 manuscript claims traceable, against 0/11 ungated (34/37 under the revised claim scanner) \\
-2, tier A & 27/27 defects caught, 0/18 clean registries flagged \\
-2, tier B & 12/12 and 6/6 caught, 0/17 and 0/23 false alarms \\
-3 & 46 of 49 result literals detected in two archived manuscripts \\
+L0 & 1.31 & 3.96 & 6.63 & 18 & 14 (13, 1) \\
+L1 & 1.74 & 7.53 & 9.21 & 32 & 19 (13, 6) \\
+L2 & 1.54 & 8.84 & 7.84 & 36 & 16 (11, 5) \\
+L3 & 2.90 & 10.25 & 15.23 & 35 & 10 (9, 1) \\
+\midrule
+All & 7.49 & 30.58 & 38.91 & 121 & 59 (46, 13) \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\begin{figure*}[t]
-\includegraphics[width=\textwidth]{../figures/fig8_mechanism.png}
-\caption{Mechanism evidence, measured: what each gate catches and what it wrongly flags, with Wilson 95\% intervals.}
-\label{fig:mechanism}
-\end{figure*}
+\paragraph{Crashes.}
+Of 121 executions, 59 crashed, and 46 of those crashes were caused by our harness, not the agent (Figure~\ref{fig:crashes}).
+At level 0, 13 of the 14 crashes were out of memory under the per-run GPU cap.
+At levels 1 to 3, the 33 harness crashes were 7 at the cap, 25 timeouts and 1 environment failure.
+Agent-caused crashes were 1 at level 0, 6 at level 1, 5 at level 2 and 1 at level 3.
+One level 0 paper was written on a crashed run, and that crash was the harness's; no gated paper was.
 
 \begin{figure*}[t]
-\includegraphics[width=\textwidth]{../figures/fig4_corebench_compare.png}
-\includegraphics[width=\textwidth]{../figures/fig6_badscientist_compare.png}
-\caption{Each system alone and with \gates{}, on CORE-Bench and BadScientist.}
+\centering
+\includegraphics[width=\textwidth]{../figures/crashes_by_level.pdf}
+\caption{Crashed executions by level and cause, over both seeds.
+Left: caused by the harness (out of memory at the per-run GPU cap, timeout, environment).
+Right: caused by the agent's code.}
+\label{fig:crashes}
+\Description{Two bar charts.
+Harness-caused crashes, 46 in total: level 0 has 13 at the GPU cap; level 1 has 6 at the GPU cap, 6 timeouts and 1 environment failure; level 2 has 1 at the GPU cap and 10 timeouts; level 3 has 9 timeouts.
+Agent-caused crashes, 13 in total: 1, 6, 5 and 1 at levels 0 to 3.}
 \end{figure*}
+
+\paragraph{Cost.}
+Level 3 cost 2.21 times level 0 over both waves, 2.38 times on seed 1 and 1.97 times on seed 2 (Figure~\ref{fig:tokens}).
+It took 2.59 times the wall clock, 3.37 and 1.92 times per seed.
+It used 2.30 times level 0's tokens, 2.32 and 2.27 times per seed, and 1.32 times its model calls.
+Levels 1 and 2 cost 1.33 and 1.17 times level 0.
+The eight runs cost \$7.49, and \$10.42 with wave 1 and the voided wave.
+Much of level 3's extra cost came from one false positive.
+Gate 3 rejected 13 of 15 manuscript attempts at level 3, and every numeral it flagged was a sweep setting the program had recorded, not a typed result.
+Settings have since gained their own recording call and their own token.
+A review that isolated those rejection windows puts level 3 at 1.36 times level 0's cost and 2.23 times its wall clock without them; we did not re-derive the windows, and the wall-clock figure is an estimate, not a measurement.
+Cost per accepted paper waits for a person's verdicts.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{../figures/tokens_cost_by_level.pdf}
+\caption{Tokens (prompt plus completion) and cost per run by level.
+Bars are means over the two seeds; points are the seeds.}
+\label{fig:tokens}
+\Description{Two bar charts with seed points.
+Mean tokens per run: 3.32 million at level 0, 4.61 million at level 1, 3.92 million at level 2 and 7.61 million at level 3.
+Mean cost per run: 0.66, 0.87, 0.77 and 1.45 US dollars.}
+\end{figure*}
+
+\paragraph{Gate attempts.}
+Gate 1 judged 103 executions at levels 1 to 3 and rejected 53: 22 of 32 at level 1, 20 of 36 at level 2 and 11 of 35 at level 3 (Figure~\ref{fig:attempts}).
+Gate 2 ran 7 reviews and rejected 3.
+Gate 3 rejected 13 of its 15 attempts, all on recorded settings, and both level 3 runs still reached an accepted paper.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{../figures/gate_attempts_by_level.pdf}
+\caption{Gate attempts and rejections by level, over both seeds.
+Labels give total attempts, with rejected attempts in parentheses; the hatched segment is rejected attempts.
+A dash marks a gate that is closed at that level.}
+\label{fig:attempts}
+\Description{Three bar charts, one per gate.
+Gate 1: 32 attempts with 22 rejected at level 1, 36 with 20 rejected at level 2, 35 with 11 rejected at level 3.
+Gate 2: 3 attempts with 1 rejected at level 2, 4 with 2 rejected at level 3.
+Gate 3: 15 attempts with 13 rejected at level 3.}
+\end{figure*}
+
+\paragraph{What the papers report.}
+An agent read every paper, its code and the execution logs, and traced each decimal numeral in the paper body to the execution that fed its writer.
+This is an agent's reading, \rtag{}, not a gate measurement.
+At level 0, 35 of 52 numerals in the seed 1 paper and 246 of 301 in the seed 2 paper appear nowhere in that execution.
+At levels 1 to 3, 94.9\% to 100\% of each paper's numerals were found, and the reading classes the rest as differences of reported values, settings or constants.
+By that reading, both level 0 papers report results that no execution produced.
+Wave 2's level 0 crashed in all 10 of its executions; the one value it recorded, 0.05, appears in its paper as 0.48.
+Wave 3's level 0 paper was fed by an execution that exited cleanly, but whose every experiment raised an exception that the program caught.
+Our crash collector counts only 1 of the 2 level 0 papers as written on a crashed run, because it counts uncaught crashes only.
+
+\paragraph{Judges.}
+The judges' overall scores are 1 to 3 out of 10 at every level (Figure~\ref{fig:judge}).
+Over the seven complete runs, the mean of the two judges' scores ranges from 1.5 to 2.5 per run.
+These scores are not comparable with MLR-Bench's published 4.25 for AI Scientist v2~\cite{chen2025mlrbench}.
+The judges differ, the model under test differs, the system differs, and MLR-Bench scored ten tasks against our one.
+Re-scoring the released AI Scientist v2 papers with our judges would make the two comparable.
+\todo{Pending Kesh: D94 drops forward MLR-Bench work, including this re-scoring.
+Keep or cut this sentence once he confirms.}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{../figures/agent_judge_by_level.pdf}
+\caption{Agent-judge results by level, reviewed by agent for now.
+Left: MLR-Judge overall score from Opus 5.5 and GPT-5.6 Sol (circles; the tick is their mean) and from the Grok 4.7 opinion (squares, never counted).
+Right: faked-result verdicts of the two judges.
+The level 3 error is Codex on seed 2, which failed on a credit limit.}
+\label{fig:judge}
+\Description{Left: dot plot of overall scores from 1 to 10 by level; judge means are about 1.8, 2.0, 2.2 and 2.3 at levels 0 to 3, and every score lies between 1 and 3.
+Right: stacked bars of judge responses.
+Level 0: 4 flagged.
+Level 1: 3 flagged, 1 clear.
+Level 2: 3 flagged, 1 clear.
+Level 3: 3 flagged, 1 error.}
+\end{figure*}
+
+\paragraph{Faked results, two rules.}
+What counts as faked results is not yet decided, and the two rules give different answers (Table~\ref{tab:faked}).
+Rule A counts a result that was never measured, which is MLR-Bench's definition.
+Rule B also counts a measured number that the prose misstates.
+\todo{The headline waits on Kesh's choice of rule A or B.
+D94, written by another session and not yet confirmed to us, says rule B.}
+
+\begin{table}[t]
+\caption{Faked-results counts on waves 2 and 3, by rule and level, all reviewed by agent for now.
+The rule A row is one agent's reading of code and logs; the rule B rows are the two judges' unconfirmed flags.
+$^{*}$Level 3 seed 2 is incomplete: Opus flagged it, and Codex's answer failed on a credit limit.}
+\label{tab:faked}
+\begin{tabular}{lcccc}
+\toprule
+Count & L0 & L1 & L2 & L3 \\
+\midrule
+Rule A, agent's reading & 2/2 & 0/2 & 0/2 & 0/2 \\
+Rule B, either judge flags & 2/2 & 2/2 & 2/2 & 1/1$^{*}$ \\
+Rule B, both judges flag & 2/2 & 1/2 & 1/2 & 1/1$^{*}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The gap between the rows is the paper's most useful finding.
+Take level 3, seed 1, which both judges flag.
+The prose says the CNN's saliency share never exceeds the value it takes under the full shortcut, and the paper's own table shows higher values at two weaker shortcut strengths.
+Opus also flags the title's ``threshold that transfers'': the worst-group accuracy around the claimed threshold is not monotone, the largest drop comes at a different strength, and nothing in the paper tests transfer.
+The numbers in those sentences are the run's own.
+The agent's trace finds all but 1 of the 418 numerals of that paper in the execution that fed its writer, and the paper prints its $p$-values to 17 significant digits because each renders the registry's unrounded value.
+What is wrong is the sentence about the numbers.
+The other gated flags are also claims about measured numbers: a range the table breaks, a trend called monotone that ends negative, a forced choice among digit tokens called exact match.
+Two Codex flags at level 2 sit nearer the line between the rules: a sweep presented as replicated across seeds that the code ran once, and two methods called identical with no comparison in the code.
+They describe results the code never measured.
+The agent's reading behind the rule A row was made from the Opus judge's files and does not discuss these two claims, so a person has to place them.
+
+The gates check that a number was measured, not what a sentence claims about it; we deferred claim entailment past this paper.
+So at level 0, by an agent's reading, the papers report numbers no execution produced, and at levels 1 to 3 the numbers are measured and the defect left is claims about them.
+The next check follows from the flags.
+A sentence that states a bound, a range, an order or a trend over result tokens can be checked deterministically against every registry value of the same key, and a seed count can be required to render from a recorded setting.
+Prose with no tokens would go to model-assisted entailment, which under our invariants can only warn.
+We have not built this check.
+
+\paragraph{Citations.}
+The same agent's reading resolved all 63 distinct arXiv identifiers across the eight papers.
+Three references at levels 1 and 2 attach a real identifier to the wrong title, authors or paper, and a fourth carries a title and authors that an arXiv title search did not find.
+Gate 3 checks that an identifier resolves and was retrieved, not that the title beside it is right, and it is closed at levels 1 and 2.
+
+\section{Forward Evaluation}
+\label{sec:planned}
+
+Nothing in this section has been run.
+The numbers quoted here are published ones; none is our measurement, and none uses our model or our judges.
+\todo{Benchmark set and Holm family are Kesh's decision (D-E).
+D94, not yet confirmed to us, names Hidden Pitfalls as the only forward benchmark; record the family before its first scored item.}
+
+\paragraph{Hidden Pitfalls.}
+Hidden Pitfalls~\cite{luo2025hiddenpitfalls} has published numbers for Agent Laboratory, our host, on its own probes.
+It measures four pitfalls; two of them, data leakage and metric misuse, are ones a gate can change.
+Data leakage counts runs whose reported test accuracy exceeds what the injected label noise allows, or whose code subsamples or synthesises data.
+The authors report that Agent Laboratory's run 16 evaluated on an undisclosed subset, and run 11 on undisclosed synthetic data.
+Metric misuse counts papers that report only one of the two metrics the task names.
+On the task that names SWA first, 100\% of Agent Laboratory's runs report test SWA only, in both noise settings.
+The paper's auditor reaches 55.0\% accuracy from the paper alone and 82.0\% with the logs and code (Fisher $p = 6.3 \times 10^{-5}$).
+We will first check that deterministic scorers reproduce the published runs from the authors' released Agent Laboratory outputs.
+We will then run the authors' auditor prompts through our agent judges over our eight runs, with paper, code and logs; our task differs from theirs, so this transfers the instrument and we will say so.
+Per-level runs on the two probes need host changes and come last.
+The auditor driver is built and reviewed, the scorers are being built, and no result exists yet.
+Our MLR-Bench task names no metric and offers no benchmark list, so the probes cannot score waves 2 and 3.
+The red team's six silent method-level strategies suggest this benchmark may mostly measure the gates' limits, which is a reason to run it.
+
+\paragraph{BadScientist.}
+\todo{Pending Kesh: D94 drops BadScientist from the forward evaluation.
+Cut this paragraph if he confirms.}
+BadScientist~\cite{jiang2025badscientist} reports that LLM reviewers accept fabricated papers built with all of its strategies at 52.0\% at $\tau_{\mathrm{rate}} = 7$ and 69.0\% at $\tau_{0.5}$, with an integrity concern rate over the panel (ICR@M) of 51.7\%.
+Its integrity-aware reviewer raises ICR@M from 57.3\% to 86.0\%, but also raises acceptance at $\tau_{0.5}$ from 37.0\% to 58.0\%.
+These are reviewer acceptances of papers with no experiments, so they are context, not a baseline.
+A paper with no experiment never passes Gate 1, so in its original form every level from 1 up would read zero and say nothing about Gates 2 and 3.
+The version we had planned manipulates the write-ups of real gated runs and measures how many manipulated manuscripts Gate 3 stops and how many honest ones it admits.
+It needs access to the benchmark's gated prompt dataset.
+
+\section{Limitations}
+
+\paragraph{Cheating with real numbers.}
+Ten of the red team's 18 strategies pass silently.
+Six cheat in the method while every recorded value is real, which no check on a recorded value can see; four are limits of Gate 1's static pass.
+
+\paragraph{Claims about numbers.}
+The gates check that a number was measured, not what a sentence says about it.
+Every gated faked-results flag in waves 2 and 3 is a claim about measured numbers or about how they were measured, and Section~\ref{sec:waves} proposes the check that would catch most of them.
+
+\paragraph{Gate 3's blind spots.}
+Four of the 27 adjacency attacks pass, stated as a \texttt{\# limit:} comment in \texttt{gates/gate3.py}.
+A test-design pass found four more shapes that Gate 3 passes, still open: a numeral inside a citation's optional text or a cross-reference's link text, inside an equation or a figure caption, in a section heading, and behind a macro the manuscript defines.
+The claim scanner misses 3 of 49 literals.
+Citation checks see arXiv identifiers only, and check that an identifier resolves and was retrieved, not that the title beside it is right.
+
+\paragraph{Scale.}
+The end-to-end result is one task, one model and two seeds, so it is descriptive.
+
+\paragraph{The harness.}
+Our harness caused 46 of the 59 crashes, mostly through the GPU cap of a four-way split and through timeouts, so crash counts compare harness conditions as much as agents.
+We report crashes by cause and attribute only the agent's to the agent.
+
+\paragraph{Cost.}
+Level 3 cost 2.21 times level 0 and took 2.59 times the wall clock, with 2.30 times the tokens.
+A quality difference between levels is therefore also a compute difference.
+
+\paragraph{Judges.}
+Every judgement so far is an agent's, \rtag{}, and one is incomplete.
+Like MLR-Bench's judge, ours do not read the logs.
+A person's blind review hides the level but not the paper's text, which can still reveal its treatment.
+
+\paragraph{What the gates do not do.}
+The gates deliver the evidence; they do not make the science good, and the agent judges score every paper 1 to 3 out of 10.
+The signed campaign ran on an earlier DeepSeek Flash model than the waves, so it is context for level 1, not a replication.
+
+\section{Conclusion}
+
+Fabricated results in the scaffold we audited came from a channel that never showed the writer the numbers, and \gates{} closes it with three deterministic gates installed through one adapter.
+On one MLR-Bench task, by an agent's reading, both ungated papers report results no execution produced and none of the six gated papers does.
+What the gates leave is prose that misstates a measured number, and we have named the check that would catch it.
+Next come that check, an L0' wave, a second model, a person's review of the judges' flags, and Hidden Pitfalls.
+
+%%% For the final paper, issue \balance in the first column of the last page
+%%% (the sample's rule); in this draft that column holds the references.
+
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{refs}
 
 \end{document}
