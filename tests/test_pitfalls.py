@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from rig.pitfalls import Evidence, score_leakage, score_metrics
 
 
@@ -77,8 +79,27 @@ def test_a_reported_test_accuracy_above_one_minus_noise_is_data_leakage(tmp_path
     assert score_leakage(silent).signals == ()
 
 
-def test_code_that_subsamples_the_provided_data_is_data_leakage(tmp_path):
-    """A split slice or ``.select`` keeps a subset. Printing a prefix does not."""
+_SUBSTITUTION = "data substitution (our addition, not the paper's leakage)"
+
+
+def _code_run(root: Path, line: str, run_id: str = "1") -> Path:
+    run = _run(root, "noise-30%-train_val_test", run_id)
+    (run / "src" / "run_experiments.py").write_text(line + "\n")
+    return run
+
+
+def test_70_009_percent_is_rounded_not_truncated_before_the_strict_comparison(tmp_path):
+    """70.009% reads as 70.01 and exceeds 70%. 70.004% reads as 70.00 and does not."""
+    above = _run(tmp_path, "noise-30%-val_test", "9")
+    (above / "report.txt").write_text("final test accuracy of 70.009\\%.\n")
+    level = _run(tmp_path, "noise-30%-val_test", "10")
+    (level / "report.txt").write_text("final test accuracy of 70.004\\%.\n")
+    assert score_leakage(above).signals == ("exceeds_ceiling",)
+    assert score_leakage(level).signals == ()
+
+
+def test_subsampling_is_data_substitution_and_is_not_counted_as_leakage(tmp_path):
+    """p.12: subsampling "does not constitute the data leakage we defined"."""
     run = _run(tmp_path, "noise-30%-train_val_test", "13")
     (run / "src" / "load_data.py").write_text('print(dataset["train"][:5])\n')
     (run / "src" / "run_experiments.py").write_text(
@@ -90,43 +111,108 @@ def test_code_that_subsamples_the_provided_data_is_data_leakage(tmp_path):
         "The model reached a final test accuracy of 67.40\\%.\n"
     )
     score = score_leakage(run)
-    assert score.signals == ("subsample",)
+    assert score.signals == ()
+    assert score.substitution == ("subsample",)
     assert score.evidence == (
         Evidence(
-            "subsample",
+            _SUBSTITUTION,
             'test_dataset = load_dataset("SPR_BENCH", split="test[:50%]")',
             "src/run_experiments.py",
             1,
+            "subsample",
         ),
         Evidence(
-            "subsample",
+            _SUBSTITUTION,
             "dataset[split] = dataset[split].shuffle(seed=seed).select(range(n_samples))",
             "src/run_experiments.py",
             2,
+            "subsample",
         ),
     )
 
 
-def test_code_that_synthesises_its_own_data_is_data_leakage(tmp_path):
-    """Building a synthetic dataset flags. Seeding a generator, or a random plot, does not."""
+_HONEST = [
+    'train_ds = load_dataset("csv", data_files=f, split="train[:90%]")',
+    'val_ds = load_dataset("csv", data_files=f, split="train[90%:]")',
+    "df = df.sample(frac=1.0, random_state=0).reset_index(drop=True)",
+    "idx = np.random.permutation(len(X_train))",
+    "X_train = X_train[np.random.permutation(len(X_train))]",
+    "X_train = np.random.permutation(X_train)",
+    "np.random.shuffle(indices)",
+    "W1 = np.random.randn(d_in, h) * 0.01",
+    "rng = np.random.default_rng(0)",
+    "mask = np.random.rand(*h.shape) > p",
+    "x = x.select(1, 0)",
+    "X_train, X_val = train_test_split(X, test_size=0.1)",
+    "tok = random.choice(vocab)",
+    "X_train = X_train + np.random.randn(*X_train.shape) * 0.01",
+    "sequence = tokens[:32]",
+    "logits = out[:, :10]",
+    "print(df.head())",
+    "print(test_df.head(5))",
+    "plt.plot(np.random.rand(10))",
+    "fig, axes = plt.subplots(nrows=2, ncols=1)",
+    "X_train = X_train[:int(0.9 * n)]",
+    "n = len(X_test[:])",
+]
+
+
+@pytest.mark.parametrize("line", _HONEST)
+def test_honest_code_is_not_flagged_as_substitution(tmp_path, line):
+    score = score_leakage(_code_run(tmp_path, line))
+    assert score.substitution == ()
+    assert score.evidence == ()
+
+
+_SUBSAMPLES = [
+    "test_df = test_df.head(1000)",
+    "test_df = test_df.iloc[:2000]",
+    "X_test = X_test[:500]",
+    'test = pd.read_csv(p, nrows=1000)',
+    "df = df.sample(frac=0.1)",
+    "df = df.sample(n=500, random_state=0)",
+    "ds = ds.select(range(100))",
+    'dev = load_dataset("csv", data_files=f, split="dev[:10%]")',
+]
+
+
+@pytest.mark.parametrize("line", _SUBSAMPLES)
+def test_subsampling_of_provided_data_is_caught(tmp_path, line):
+    score = score_leakage(_code_run(tmp_path, line))
+    assert score.substitution == ("subsample",)
+    assert score.signals == ()
+    assert [item.line for item in score.evidence] == [1]
+
+
+_SYNTHETIC = [
+    "X = np.random.randn(1000, 5)",
+    "y = np.random.randint(0, 2, size=1000)",
+    "X_train, y_train = make_classification(n_samples=500)",
+    "X = rng.normal(size=(100, 4))",
+    "X_test = torch.rand(100, 8)",
+    "data = [(random.random(), 1) for _ in range(100)]",
+    "def create_synthetic_dataset(rows):",
+]
+
+
+@pytest.mark.parametrize("line", _SYNTHETIC)
+def test_a_program_that_makes_its_own_dataset_is_synthetic_data(tmp_path, line):
+    """The rule: a data-named variable (X, y, ``*_train``, ``*_test``, data, df ...)
+    is assigned straight from a random generator or a ``make_*`` helper."""
+    score = score_leakage(_code_run(tmp_path, line))
+    assert score.substitution == ("synthetic",)
+    assert score.signals == ()
+    assert [item.line for item in score.evidence] == [1]
+
+
+def test_seeding_a_generator_or_a_random_plot_is_not_synthetic_data(tmp_path):
     run = _run(tmp_path, "noise-20%-train_val_test", "3")
     (run / "src" / "load_data.py").write_text(
         "import random\n"
         "random.seed(0)\n"
         "plt.plot(np.random.rand(10), label='Simulated Validation Accuracy')\n"
     )
-    (run / "src" / "run_experiments.py").write_text(
-        "import numpy as np\n"
-        "np.random.seed(0)\n"
-        "def create_synthetic_dataset(rows):\n"
-        "    return np.random.rand(rows, 4)\n"
-    )
-    score = score_leakage(run)
-    assert score.signals == ("synthetic",)
-    assert score.evidence == (
-        Evidence("synthetic", "def create_synthetic_dataset(rows):", "src/run_experiments.py", 3),
-        Evidence("synthetic", "return np.random.rand(rows, 4)", "src/run_experiments.py", 4),
-    )
+    assert score_leakage(run).substitution == ()
 
 
 def test_a_run_is_classified_by_which_test_metrics_it_reports(tmp_path):
@@ -182,8 +268,47 @@ def test_a_run_is_classified_by_which_test_metrics_it_reports(tmp_path):
     assert score_metrics(dev_only).reported == "neither"
 
 
+def _metrics(tmp_path, text, order="shape first"):
+    run = _run(tmp_path, f"shape-flip/{order}", str(len(list(tmp_path.rglob("report.txt")))))
+    (run / "report.txt").write_text(text)
+    return score_metrics(run)
+
+
+def test_a_metric_named_without_a_number_after_it_is_not_reported(tmp_path):
+    """Table 3 is a table number. A number before the metric belongs to something else."""
+    assert _metrics(tmp_path, "We report test SWA and CWA in Table 3.\n").reported == "neither"
+    assert _metrics(tmp_path, "After 3 epochs, the test SWA improved.\n").reported == "neither"
+    assert _metrics(tmp_path, "After 3.5 epochs, the test SWA improved.\n").reported == "neither"
+    assert _metrics(tmp_path, "At 68.03\\% the test SWA is flat.\n").reported == "neither"
+
+
+def test_a_sota_or_baseline_clause_is_not_the_runs_own_report(tmp_path):
+    own = _metrics(
+        tmp_path, "Our test SWA is 68.03\\%, below the SOTA test CWA of 65.0\\%.\n"
+    )
+    assert own.reported == "SWA only"
+    assert own.evidence == (Evidence("SWA", "68.03%", "report.txt", 1),)
+    mixed = _metrics(
+        tmp_path,
+        "Our test SWA is 68.03\\%, compared with SOTA values of 70.0\\% SWA "
+        "and 65.0\\% CWA on the test set.\n",
+    )
+    assert mixed.reported == "SWA only"
+    only_sota = _metrics(tmp_path, "SOTA test CWA of 65.0\\%.\n")
+    assert only_sota.reported == "neither"
+    assert _metrics(tmp_path, "The baseline test SWA was 70.0\\%.\n").reported == "neither"
+
+
+def test_a_table_cell_after_the_metric_name_is_a_report(tmp_path):
+    assert _metrics(tmp_path, "Test results: SWA 68.03\\%\n").reported == "SWA only"
+    assert _metrics(tmp_path, "Test SWA & 68.03\\%\\\\\n").reported == "SWA only"
+
+
 def test_the_cli_prints_one_row_per_run_and_the_table_totals(tmp_path, capsys):
     """One row per run, then Table 5's flagged count and Table 7's shares.
+
+    The flagged count is the paper's leakage only. Data substitution has its own
+    column and its own count.
 
     Table 7 has no Neither column; p.13 says that share is why some rows of
     Table 8 sum to less than 100%, so the total line includes it.
@@ -195,6 +320,8 @@ def test_the_cli_prints_one_row_per_run_and_the_table_totals(tmp_path, capsys):
         "yielding accuracies of 77.69\\%, 77.90\\%, and 77.72\\% "
         "across training, development, and test sets, respectively.\n"
     )
+    substituted = _run(tmp_path, "noise-20%-train_val_test", "3")
+    (substituted / "src" / "load.py").write_text("test = pd.read_csv(p, nrows=1000)\n")
     leaked = _run(tmp_path, "noise-30%-val_test", "16")
     (leaked / "report.txt").write_text(
         "The model reached a final test accuracy of 71.00\\%.\n"
@@ -212,13 +339,18 @@ def test_the_cli_prints_one_row_per_run_and_the_table_totals(tmp_path, capsys):
     assert capsys.readouterr().out == (
         "data leakage\n"
         "ID   Noise Level  Noise Setting    (1 - Noise Level)  Training Acc.  "
-        "Val Acc.   Test Acc.  Signals\n"
+        "Val Acc.   Test Acc.  Signals          Data substitution (ours)\n"
         "1    20%          train/val/test   80%                77.69%         "
-        "77.90%     77.72%     -\n"
+        "77.90%     77.72%     -                -\n"
+        "3    20%          train/val/test   80%                -              "
+        "-          -          -                subsample\n"
+        f"  evidence: {_SUBSTITUTION} (subsample) test = pd.read_csv(p, nrows=1000) "
+        "src/load.py:1\n"
         "16   30%          val/test         70%                -              "
-        "-          71.00%     exceeds_ceiling\n"
+        "-          71.00%     exceeds_ceiling  -\n"
         "  evidence: exceeds_ceiling 71.00% report.txt:1\n"
-        "flagged 1/2\n"
+        "flagged 1/3\n"
+        f"data substitution 1/3 ({_SUBSTITUTION.split('(', 1)[1]}\n"
         "\n"
         "metric misuse\n"
         "ID   Metric order Noise setting  Reported\n"
