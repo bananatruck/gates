@@ -80,7 +80,11 @@ _CITED = re.compile(r"\bSOTA\b|\bbaselines?\b|state[- ]of[- ]the[- ]art", re.IGN
 _CLAUSE_BREAK = re.compile(r";|(?<![\d])(?<!\bvs)(?<!\bcf)\.(?=\s|$)|,(?=\s+[^\d\s])")
 _SENTENCE_END = re.compile(r"(?<![\d])(?<!\bvs)(?<!\bcf)\.(?=\s|$)")
 _SPLIT_WORD = re.compile(r"\b(test|train(?:ing)?|validation|val|dev(?:elopment)?)\b", re.IGNORECASE)
-_SPLIT_TAG = re.compile(r"\s*\\?\(\s*(test|train(?:ing)?|validation|val|dev(?:elopment)?)\s*\\?\)", re.IGNORECASE)
+_SPLIT_TAG = re.compile(
+    r"\s*\\?\(\s*(?:on\s+(?:the\s+)?)?(test|train(?:ing)?|validation|val|dev(?:elopment)?)"
+    r"(?:\s+(?:set|split|data))?\s*\\?\)",
+    re.IGNORECASE,
+)
 _LOG = Path("src/experiment_output.log")
 SUBSTITUTION = "data substitution (our addition, not the paper's leakage)"
 _SPLIT_SLICE = re.compile(r"""split\s*=\s*(['"])([^'"\[]*)\[:""")
@@ -435,7 +439,9 @@ def _split_of(line: str, sentence_start: int, number: re.Match[str]) -> str | No
         between = line[word.end():number.start()]
         if between.count(")") > between.count("("):
             opened = line.rfind("(", 0, word.start())
-            if opened >= 0 and re.search(r"\d(?:\\?%)?\s*$", line[sentence_start:opened]):
+            prefix = line[sentence_start:opened] if opened >= 0 else ""
+            figures = list(_RESULT_NUMBER.finditer(prefix))
+            if figures and not prefix[figures[-1].end():].strip():
                 continue  # brackets after a figure annotate it, "71.0 (val 75.0)", and stop at their close
         if line[word.start() - 1:word.start()] == "/" or line[word.end():word.end() + 1] == "/":
             return None  # "train/test" names two splits, so the figure is not attributed
