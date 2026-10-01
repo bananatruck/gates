@@ -203,9 +203,6 @@ def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
     eligible_judges = eligible(judges, manifest["model"])
     eligible_opinions = eligible(opinions, manifest["model"])
     agent_judged = any(agent_judge_parts(judge) for judge in eligible_judges)
-    agent_recorded = agent_judged or any(
-        agent_judge_parts(opinion) for opinion in eligible_opinions
-    )
     summary = {
         "judges": {},
         "opinions": {},
@@ -214,7 +211,7 @@ def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
             if name not in eligible_judges and name not in eligible_opinions
         ],
     }
-    if agent_recorded:
+    if agent_judged:
         summary["review_tag"] = AGENT_REVIEW_TAG
     complete = True
     for role, names in (
@@ -295,7 +292,7 @@ def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
                 if "error" not in overall
                 else None
             )
-            summary[role][judge] = {
+            entry = {
                 "overall": score,
                 "faked": (
                     faked_findings(hallucination)
@@ -303,6 +300,9 @@ def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
                     else None
                 ),
             }
+            if agent_judge_parts(judge):
+                entry["review_tag"] = AGENT_REVIEW_TAG
+            summary[role][judge] = entry
 
     flags = [bool(v["faked"]) for v in summary["judges"].values() if v["faked"] is not None]
     summary["complete"] = complete and bool(summary["judges"])

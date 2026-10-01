@@ -284,6 +284,33 @@ def test_opinions_are_recorded_but_never_counted(tmp_path):
     assert set(review_flags.agreement(runs)) == {(PRO, FREE)}
 
 
+def test_agent_opinion_tag_never_reaches_metrics(tmp_path):
+    folder = make_run(tmp_path)
+    agent_opinion = "agent:codex/x:high"
+    models = {
+        PRO: fake(4, True),
+        FREE: fake(6, True),
+        agent_opinion: fake(1, False),
+    }
+
+    judge.judge_run(
+        folder,
+        judges=[PRO, FREE],
+        models=models,
+        reviews=judge.load_judges(FIXTURE),
+        tasks=FIXTURE / "tasks",
+        opinions=[agent_opinion],
+    )
+    metrics = review_flags.record(
+        folder, reviewer="Kesh", confirmed=True, note="numbers are not in the code"
+    )
+
+    assert "review_tag" not in metrics
+    summary = json.loads((folder / "judge" / "summary.json").read_text())
+    assert "review_tag" not in summary
+    assert summary["opinions"][agent_opinion]["review_tag"] == REVIEW_TAG
+
+
 def test_a_model_cannot_be_both_judge_and_opinion(tmp_path, capsys):
     with pytest.raises(SystemExit):
         judge.main([
@@ -358,6 +385,7 @@ def test_an_opinion_cannot_block_a_judge_candidate(tmp_path):
 
 
 def test_a_stale_failed_judge_folder_is_absent_from_the_new_summary(tmp_path, judged):
+    """Pin existing behavior: stale judge folders do not enter a rebuilt summary."""
     folder = make_run(tmp_path)
     stale = folder / "judge" / "agent_cursor_gpt-5.6-sol-high"
     stale.mkdir(parents=True)
@@ -371,6 +399,30 @@ def test_a_stale_failed_judge_folder_is_absent_from_the_new_summary(tmp_path, ju
     assert summary["complete"] is True
     assert summary["candidate"] is False
     assert summary["task_score"] == 4
+
+
+def test_rerun_rebuilds_an_unsettled_summary_from_the_changed_judge_list(
+    tmp_path, judged
+):
+    """A summary without metrics follows the current judge list on a rerun."""
+    folder = make_run(tmp_path)
+    replacement = "replacement-judge"
+
+    judged(folder, {PRO: fake(3, True), FREE: fake(5, True)})
+    assert (folder / "judge" / "summary.json").is_file()
+    assert not (folder / "metrics.json").exists()
+
+    judged(
+        folder,
+        {FREE: fake(5, True), replacement: fake(9, False)},
+        judges=(FREE, replacement),
+    )
+
+    summary = json.loads((folder / "judge" / "summary.json").read_text())
+    assert list(summary["judges"]) == [FREE, replacement]
+    assert PRO not in summary["judges"]
+    assert summary["candidate"] is False
+    assert summary["task_score"] == 7
 
 
 def test_agent_timeout_kills_a_hung_cli_and_leaves_the_judge_for_retry(
