@@ -80,11 +80,7 @@ _CITED = re.compile(r"\bSOTA\b|\bbaselines?\b|state[- ]of[- ]the[- ]art", re.IGN
 _CLAUSE_BREAK = re.compile(r";|(?<![\d])(?<!\bvs)(?<!\bcf)\.(?=\s|$)|,(?=\s+[^\d\s])")
 _SENTENCE_END = re.compile(r"(?<![\d])(?<!\bvs)(?<!\bcf)\.(?=\s|$)")
 _SPLIT_WORD = re.compile(r"\b(test|train(?:ing)?|validation|val|dev(?:elopment)?)\b", re.IGNORECASE)
-_SPLIT_TAG = re.compile(
-    r"\s*\\?\(\s*(?:on\s+(?:the\s+)?)?(test|train(?:ing)?|validation|val|dev(?:elopment)?)"
-    r"(?:\s+(?:set|split|data))?\s*\\?\)",
-    re.IGNORECASE,
-)
+_BRACKET_AFTER = re.compile(r"(?:\\ |\s)*\\?\(([^()]*)\\?\)")
 _LOG = Path("src/experiment_output.log")
 SUBSTITUTION = "data substitution (our addition, not the paper's leakage)"
 _SPLIT_SLICE = re.compile(r"""split\s*=\s*(['"])([^'"\[]*)\[:""")
@@ -425,24 +421,34 @@ def _own_number(text: str, start: int, end: int) -> re.Match[str] | None:
 
 
 def _split_of(line: str, sentence_start: int, number: re.Match[str]) -> str | None:
-    """The data split a figure belongs to: a "(split)" tag right after it, else the split
-    named nearest before it in its sentence, else none.
+    """The data split a figure belongs to, or none.
 
+    A bracket that holds its own result figure, "(val 75.0)", is an aside: the split it
+    names stays inside it. A bracket without one, "(validation)", "(dev set, 3 seeds)", is a
+    tag for the figure beside it: right after the figure, or between the metric and the
+    figure. Otherwise the split named nearest before the figure in its sentence decides.
+    A split word joined by a slash ("train/test") names two splits and decides nothing.
     Our rule, not the paper's (p.12 says only which criterion a run recorded).
     """
-    tag = _SPLIT_TAG.match(line, number.end())
-    if tag:
-        return _split_name(tag.group(1))
+    after = _BRACKET_AFTER.match(line, number.end())
+    if after and not _RESULT_NUMBER.search(after.group(1)):
+        named_in_tag = {_split_name(w) for w in _SPLIT_WORD.findall(after.group(1))}
+        if "other" in named_in_tag:
+            return "other"
+        if named_in_tag == {"test"}:
+            return "test"
     named = list(_SPLIT_WORD.finditer(line, sentence_start, number.start()))
-    # limit: the split is read within one sentence on one line, so a sentence wrapped across lines, a split named in the sentence before, a split named only after the figure ("80% during training"), a split word used as a plain noun ("Test SWA after 10 epochs of training was 71%" is missed), a negation ("did not evaluate on test"), "testing" used as a verb, a split word inside a tag bracket that is not the figure's split ("SWA (val split held at 20%) was 71%" is missed), square-bracket asides ("71% [val 75%]" stops later figures), and a table whose header row names the metrics and whose next row holds the numbers are misread or missed. Fix: join wrapped lines into sentences, read tables as a grid, and parse the clause's grammar instead of the nearest word.
+    # limit: the split is read within one sentence on one line, so a sentence wrapped across lines, a split named in the sentence before, a split named only after the figure outside a bracket ("80% during training"), a split word used as a plain noun ("Test SWA after 10 epochs of training was 71%" is missed), a negation ("did not evaluate on test"), "testing" used as a verb, square-bracket asides ("71% [val 75%]" stops later figures), and a table whose header row names the metrics and whose next row holds the numbers are misread or missed. Fix: join wrapped lines into sentences, read tables as a grid, and parse the clause's grammar instead of the nearest word.
     for word in reversed(named):
-        between = line[word.end():number.start()]
-        if between.count(")") > between.count("("):
-            opened = line.rfind("(", 0, word.start())
-            prefix = line[sentence_start:opened] if opened >= 0 else ""
-            figures = list(_RESULT_NUMBER.finditer(prefix))
-            if figures and not prefix[figures[-1].end():].strip():
-                continue  # brackets after a figure annotate it, "71.0 (val 75.0)", and stop at their close
+        opened = line.rfind("(", sentence_start, word.start())
+        closed = line.find(")", word.end(), number.start())
+        inside = opened >= 0 and closed >= 0 and ")" not in line[opened:word.start()]
+        if inside and _RESULT_NUMBER.search(line[opened:closed]):
+            continue  # an aside with its own figure keeps its split inside it
+        before = line[sentence_start:opened] if inside else ""
+        tags_a_figure = bool(re.search(r"(?:\d%|\d\\%|\d\.\d+)\s*$", before))
+        if inside and tags_a_figure and _split_name(word.group(1)) == "test":
+            continue  # "71% (on the test set)" tags that figure only; it never makes a later one test
         if line[word.start() - 1:word.start()] == "/" or line[word.end():word.end() + 1] == "/":
             return None  # "train/test" names two splits, so the figure is not attributed
         return _split_name(word.group(1))
