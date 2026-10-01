@@ -26,6 +26,9 @@ from rig import host_dir
 ModelFn = Callable[[str, str], str]
 AGENT_REVIEW_TAG = "reviewed by agent for now"
 DEFAULT_AGENT_TIMEOUT_S = 1800
+#: The version check has its own budget: a judging timeout bounds a judgement,
+#: and a short one must not also fail a slow `--version` start.
+VERSION_TIMEOUT_S = 30
 
 
 class AgentCLIError(RuntimeError):
@@ -128,7 +131,7 @@ def agent_model(
         raise AgentCLIError(f"{name!r} is not an agent judge")
     cli, model, effort = config
     command = _agent_command(cli, model, effort)
-    version = _run_agent((command[0], "--version"), timeout_s=timeout_s).strip()
+    version = _run_agent((command[0], "--version"), timeout_s=VERSION_TIMEOUT_S).strip()
     if not version:
         raise AgentCLIError(f"{command[0]} --version returned no version")
     return AgentModel(
