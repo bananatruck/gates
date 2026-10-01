@@ -37,14 +37,16 @@ def test_a_warning_naming_a_longer_key_is_not_counted():
 
 
 def test_the_honest_control_and_the_fabrications_are_all_there():
-    assert [s.id for s in STRATEGIES] == [f"S{i}" for i in range(18)]
+    assert [s.id for s in STRATEGIES] == [f"S{i}" for i in range(19)]
     assert STRATEGIES[0].expect == "silent"
-    assert sum(s.expect == "silent" for s in STRATEGIES[1:]) == 9
+    assert sum(s.expect == "silent" for s in STRATEGIES[1:]) == 10
+    by_id = {s.id: s for s in STRATEGIES}
+    assert by_id["S18"].expect == "silent"
 
 
 def test_the_rig_exits_zero_when_nothing_moved(capsys):
     assert main([]) == 0
-    assert "17 fabrications: 7 blocked, 1 warned, 9 silent" in capsys.readouterr().out
+    assert "18 fabrications: 7 blocked, 1 warned, 10 silent" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(

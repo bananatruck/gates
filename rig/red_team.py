@@ -1,4 +1,4 @@
-"""Plant a fabricated result seventeen ways and see which gate notices.
+"""Plant a fabricated result eighteen ways and see which gate notices.
 
     python -m rig.red_team                 # the table
     python -m rig.red_team --json          # for CI
@@ -24,7 +24,9 @@ computation produced, so no check on the recorded value can see it. Only
 reading what the computation means could, and the gates do not. S12-S14 are
 the static pass's own stated limits, held here so closing one is a test.
 S15-S17 are holes the 09-29 test design found and Gate 1 now closes (B2, B3,
-B9), held blocked so reopening one is a test too.
+B9), held blocked so reopening one is a test too. S18 is B5: a typed constant
+recorded through an alias of ``record_result``, held silent so closing it is a
+test.
 
 Exits non-zero if any strategy departs from its stated outcome.
 """
@@ -175,6 +177,11 @@ STRATEGIES: tuple[Strategy, ...] = (
         '    if lam == 0.1:\n        record_result(KEY, evaluate("test"), unit="ratio")',
         "blocked", "results.setting_single_value: exp1.lam holds 0.1 and 0.5, so "
         "\\setting{exp1.lam} would print 0.5 beside a result measured at 0.1 (B9)",
+    ),
+    Strategy(
+        "S18", "literal through a record alias",
+        'rr = record_result\nrr(KEY, 0.95, unit="ratio")',
+        "silent", "limit: aliasing record_result leaves the call opaque to the static pass (B5)",
     ),
 )
 
