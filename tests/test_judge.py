@@ -104,6 +104,9 @@ import sys
 
 name = os.path.basename(sys.argv[0])
 if "--version" in sys.argv:
+    if delay := os.environ.get("FAKE_AGENT_VERSION_SLEEP"):
+        import time
+        time.sleep(float(delay))
     print(f"fake {name} 1.2.3")
     raise SystemExit
 import json
@@ -448,6 +451,20 @@ def test_agent_timeout_kills_a_hung_cli_and_leaves_the_judge_for_retry(
     summary = json.loads((folder / "judge" / "summary.json").read_text())
     assert summary["complete"] is False
     assert not (folder / "metrics.json").exists()
+
+
+def test_a_short_judging_timeout_does_not_cover_the_version_check(
+    tmp_path, monkeypatch
+):
+    # macOS spends about 0.2 seconds on the first run of a new executable, so
+    # a 0.2 second judging timeout also applied to `--version` failed there.
+    _fake_agent_clis(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_AGENT_VERSION_SLEEP", "0.5")
+
+    model = agent_model("agent:claude/sonnet", timeout_s=0.2)
+
+    assert model.cli_version == "fake claude 1.2.3"
+    assert model.timeout_s == 0.2
 
 
 def test_agent_timeout_also_ends_the_clis_own_children(tmp_path):
