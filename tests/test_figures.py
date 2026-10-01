@@ -15,6 +15,7 @@ from paper.figures import (
     redteam_figure,
     tokens_cost_figure,
 )
+from matplotlib.text import Text
 
 
 FIELDS = ["benchmark", "level", "seed", "judge", "role", "overall", "faked", "status"]
@@ -33,9 +34,32 @@ def _visible_text(rendered) -> set[str]:
     return {text.get_text() for text in rendered.figure.texts}
 
 
+def _drawn_text(rendered) -> set[str]:
+    texts = list(rendered.figure.texts)
+    labels = set()
+    for axis in rendered.figure.axes:
+        texts.extend(axis.texts)
+        texts.extend((axis.xaxis.label, axis.yaxis.label))
+        texts.extend(axis.get_xticklabels())
+        texts.extend(axis.get_yticklabels())
+        labels.update(axis.get_title(loc=loc) for loc in ("left", "center", "right"))
+    return {text.get_text() for text in texts} | labels
+
+
 def _assert_saved(rendered) -> None:
     assert rendered.png.read_bytes().startswith(b"\x89PNG")
     assert rendered.pdf.read_bytes().startswith(b"%PDF")
+
+
+def _assert_publication_size(rendered, width: float) -> None:
+    assert rendered.figure.get_figwidth() == width
+    assert int.from_bytes(rendered.png.read_bytes()[16:20], "big") == round(width * 300)
+    undersized = {
+        text.get_text(): text.get_fontsize()
+        for text in rendered.figure.findobj(match=Text)
+        if text.get_text().strip() and text.get_fontsize() < 7
+    }
+    assert not undersized
 
 
 def test_agent_judge_fixture_draws_png_and_pdf_without_placeholder(tmp_path):
@@ -54,6 +78,27 @@ def test_agent_judge_fixture_draws_png_and_pdf_without_placeholder(tmp_path):
     assert rendered is not None
     _assert_saved(rendered)
     assert "PLACEHOLDER" not in _visible_text(rendered)
+
+
+def test_agent_judge_opinions_are_drawn_but_excluded_from_statistics(tmp_path):
+    fixture = _judging_csv(
+        tmp_path / "judging.csv",
+        [
+            {"benchmark": "MLR-Bench", "level": "L0", "seed": "1", "judge": "j1", "role": "judge", "overall": "4.0", "faked": "true", "status": ""},
+            {"benchmark": "MLR-Bench", "level": "L0", "seed": "1", "judge": "j2", "role": "opinion", "overall": "10.0", "faked": "false", "status": ""},
+            {"benchmark": "MLR-Bench", "level": "L0", "seed": "1", "judge": "j3", "role": "opinion", "overall": "", "faked": "", "status": ""},
+        ],
+    )
+
+    rendered = agent_judge_figure(fixture, tmp_path)
+
+    assert rendered is not None
+    text = _drawn_text(rendered)
+    assert "4.0" in text
+    assert "7.0" not in text
+    assert "flagged 1" in text
+    assert not {"clear 1", "error 1"} & text
+    assert any("opinion (not counted)" in label for label in text)
 
 
 def test_dummy_judging_row_keeps_placeholder_stamp(tmp_path):
@@ -89,6 +134,14 @@ def test_crashes_fixture_draws_real_causes_without_placeholder(tmp_path):
     assert "PLACEHOLDER" not in _visible_text(rendered)
 
 
+def test_crashes_figure_draws_measured_owner_totals(tmp_path):
+    rendered = crashes_figure(REPO / "paper" / "crashes.csv", tmp_path)
+
+    text = _drawn_text(rendered)
+    assert "Harness-caused crashes (46 total)" in text
+    assert "Agent-caused crashes (13 total)" in text
+
+
 def test_tokens_and_cost_fixture_draws_seed_points_without_placeholder(tmp_path):
     path = tmp_path / "waves23.csv"
     path.write_text(
@@ -104,6 +157,19 @@ def test_tokens_and_cost_fixture_draws_seed_points_without_placeholder(tmp_path)
 
     _assert_saved(rendered)
     assert "PLACEHOLDER" not in _visible_text(rendered)
+
+
+def test_tokens_draw_prompt_plus_completion_without_double_counting_reasoning(tmp_path):
+    path = tmp_path / "waves23.csv"
+    path.write_text(
+        "level,cost_usd,tokens_prompt,tokens_completion,tokens_reasoning\n"
+        "L0,0.50,1000000,2000000,750000\n",
+        encoding="utf-8",
+    )
+
+    rendered = tokens_cost_figure(path, tmp_path)
+
+    assert "3.00M" in _drawn_text(rendered)
 
 
 def test_gate_attempts_fixture_draws_rejections_without_placeholder(tmp_path):
@@ -139,6 +205,13 @@ def test_red_team_fixture_draws_each_strategy_without_placeholder(tmp_path):
     assert "PLACEHOLDER" not in _visible_text(rendered)
 
 
+def test_red_team_figure_draws_measured_outcome_totals(tmp_path):
+    rendered = redteam_figure(REPO / "paper" / "redteam.csv", tmp_path)
+
+    text = _drawn_text(rendered)
+    assert {"Blocked\n7", "Warned\n1", "Silent\n10"} <= text
+
+
 def test_adjacency_fixture_draws_catches_and_passes_without_placeholder(tmp_path):
     path = tmp_path / "adjacency.csv"
     path.write_text(
@@ -156,6 +229,14 @@ def test_adjacency_fixture_draws_catches_and_passes_without_placeholder(tmp_path
     assert "PLACEHOLDER" not in _visible_text(rendered)
 
 
+def test_adjacency_figure_draws_measured_probe_totals(tmp_path):
+    rendered = adjacency_figure(REPO / "paper" / "adjacency.csv", tmp_path)
+
+    text = _drawn_text(rendered)
+    assert "23/27 caught" in text
+    assert "35/36 passed" in text
+
+
 def test_mechanism_fixture_draws_vector_and_raster_without_placeholder(tmp_path):
     path = tmp_path / "mechanism.csv"
     path.write_text(
@@ -169,6 +250,28 @@ def test_mechanism_fixture_draws_vector_and_raster_without_placeholder(tmp_path)
 
     _assert_saved(rendered)
     assert "PLACEHOLDER" not in _visible_text(rendered)
+
+
+def test_figures_use_publication_widths_and_legible_text(tmp_path):
+    judging = _judging_csv(
+        tmp_path / "judging.csv",
+        [
+            {"benchmark": "MLR-Bench", "level": "L0", "seed": "1", "judge": "j1", "role": "judge", "overall": "4.0", "faked": "false", "status": ""},
+        ],
+    )
+    full_width = [
+        crashes_figure(output_dir=tmp_path),
+        tokens_cost_figure(output_dir=tmp_path),
+        gate_attempts_figure(output_dir=tmp_path),
+        redteam_figure(output_dir=tmp_path),
+        mechanism_figure(output_dir=tmp_path),
+        agent_judge_figure(judging, tmp_path),
+    ]
+
+    for rendered in full_width:
+        assert rendered is not None
+        _assert_publication_size(rendered, 7)
+    _assert_publication_size(adjacency_figure(output_dir=tmp_path), 3.3)
 
 
 def test_public_run_aggregates_contain_no_machine_path():

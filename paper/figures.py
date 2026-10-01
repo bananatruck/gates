@@ -2,10 +2,10 @@
 
     python3 paper/figures.py        # writes paper/figures/*.{pdf,png}
 
-The inputs are the aggregate CSV files beside this module. Unrun benchmarks in
-``results.csv`` never become bars. If a future input explicitly carries a row
-whose status is ``dummy``, the shared save path stamps its figure PLACEHOLDER.
-The agent-judge figure is skipped until ``judging.csv`` exists.
+The figures draw measured run aggregates, the signed red-team campaign, and
+model-free rig probes from the CSV files beside this module. If an input carries
+a row whose status is ``dummy``, the shared save path stamps its figure
+PLACEHOLDER. The agent-judge figure is skipped until ``judging.csv`` exists.
 
 Needs matplotlib. This is not part of the gates package, whose stdlib-only rule
 covers ``gates/`` alone.
@@ -98,7 +98,7 @@ def mechanism_figure(
         0.01,
         0.01,
         "Gate 1 uses the signed 08-15 campaign. Gates 2 and 3 use model-free rigs.",
-        fontsize=6.5,
+        fontsize=7,
         color=INK2,
     )
     fig.subplots_adjust(left=0.48, right=0.98, top=0.91, bottom=0.12)
@@ -132,8 +132,8 @@ def _save_publication_figure(fig, rows, output_dir: Path, stem: str) -> Rendered
     output_dir.mkdir(parents=True, exist_ok=True)
     png = output_dir / f"{stem}.png"
     pdf = output_dir / f"{stem}.pdf"
-    fig.savefig(png, dpi=300, facecolor=SURFACE, bbox_inches="tight")
-    fig.savefig(pdf, facecolor=SURFACE, bbox_inches="tight")
+    fig.savefig(png, dpi=300, facecolor=SURFACE)
+    fig.savefig(pdf, facecolor=SURFACE)
     plt.close(fig)
     return RenderedFigure(png=png, pdf=pdf, figure=fig)
 
@@ -194,7 +194,11 @@ def crashes_figure(
     fig, axes = plt.subplots(1, 2, figsize=(7, 2.75), facecolor=SURFACE, sharey=True)
     for ax, (title, causes) in zip(axes, panels, strict=True):
         _paper_axis(ax)
-        totals = []
+        owner_total = sum(
+            int(by_level[level][key])
+            for level in levels
+            for key, _, _, _ in causes
+        )
         for level_index, level in enumerate(levels):
             bottom = 0
             for key, label, color, hatch in causes:
@@ -211,17 +215,28 @@ def crashes_figure(
                     hatch=hatch,
                     linewidth=0.7,
                 )
-                ax.text(
-                    level_index,
-                    bottom + count / 2,
-                    f"{label}\n{count}",
-                    ha="center",
-                    va="center",
-                    fontsize=6.7,
-                    color=SURFACE if color == BLUE else INK,
-                )
+                if count == 1:
+                    ax.text(
+                        level_index + 0.37,
+                        bottom + count / 2,
+                        f"{count}",
+                        ha="left",
+                        va="center",
+                        fontsize=7,
+                        color=INK,
+                        clip_on=False,
+                    )
+                else:
+                    ax.text(
+                        level_index,
+                        bottom + count / 2,
+                        f"{label}\n{count}",
+                        ha="center",
+                        va="center",
+                        fontsize=7,
+                        color=SURFACE if color == BLUE else INK,
+                    )
                 bottom += count
-            totals.append(bottom)
             ax.text(
                 level_index,
                 bottom + maximum * 0.035,
@@ -233,13 +248,20 @@ def crashes_figure(
                 weight="bold",
             )
         ax.set_xticks(range(len(levels)), levels)
-        ax.set_title(title, loc="left", fontsize=9, weight="bold", color=INK)
+        ax.set_title(
+            f"{title} ({owner_total} total)",
+            loc="left",
+            fontsize=9,
+            weight="bold",
+            color=INK,
+        )
         ax.set_ylim(0, maximum * 1.18)
+        ax.set_xlim(-0.65, len(levels) - 0.15)
     axes[0].set_ylabel("Crashed executions", fontsize=7.5, color=INK2)
     fig.suptitle(
         "Crashes by level and cause",
         x=0.01,
-        y=1.01,
+        y=0.98,
         ha="left",
         fontsize=10,
         weight="bold",
@@ -247,9 +269,10 @@ def crashes_figure(
     )
     fig.text(
         0.01,
-        -0.01,
-        "Harness: GPU-share cap, timeout, or environment. Agent: uncapped OOM or agent code.",
-        fontsize=6.5,
+        0.02,
+        "Key: blue GPU cap; striped light blue timeout; crosshatched green environment; "
+        "orange OOM; striped pink agent code.",
+        fontsize=7,
         color=INK2,
     )
     fig.subplots_adjust(left=0.09, right=0.99, bottom=0.18, top=0.82, wspace=0.18)
@@ -269,7 +292,7 @@ def tokens_cost_figure(
             BLUE,
             lambda row: sum(
                 float(row[column])
-                for column in ("tokens_prompt", "tokens_completion", "tokens_reasoning")
+                for column in ("tokens_prompt", "tokens_completion")
             )
             / 1_000_000,
             "Million tokens",
@@ -287,10 +310,13 @@ def tokens_cost_figure(
         axes, measures, strict=True
     ):
         _paper_axis(ax)
-        all_values = []
+        values_by_level = {
+            level: [value_of(row) for row in rows if row["level"] == level]
+            for level in levels
+        }
+        measure_max = max(value for values in values_by_level.values() for value in values)
         for level_index, level in enumerate(levels):
-            values = [value_of(row) for row in rows if row["level"] == level]
-            all_values.extend(values)
+            values = values_by_level[level]
             mean = sum(values) / len(values)
             ax.bar(
                 level_index,
@@ -314,7 +340,7 @@ def tokens_cost_figure(
                 )
             ax.text(
                 level_index,
-                mean + max(all_values) * 0.055,
+                max(values) + measure_max * 0.055,
                 label_of(mean),
                 ha="center",
                 va="bottom",
@@ -323,7 +349,7 @@ def tokens_cost_figure(
                 weight="bold",
             )
         ax.set_xticks(range(len(levels)), levels)
-        ax.set_ylim(0, max(all_values) * 1.25)
+        ax.set_ylim(0, measure_max * 1.25)
         ax.set_ylabel(ylabel, fontsize=7.5, color=INK2)
         ax.set_title(title, loc="left", fontsize=9, color=INK, weight="bold")
     fig.suptitle(
@@ -335,7 +361,7 @@ def tokens_cost_figure(
         weight="bold",
         color=INK,
     )
-    fig.text(0.01, 0.01, "Bars: mean over seeds. Points: individual seeds.", fontsize=6.5, color=INK2)
+    fig.text(0.01, 0.01, "Bars: mean over seeds. Points: individual seeds.", fontsize=7, color=INK2)
     fig.subplots_adjust(left=0.1, right=0.99, bottom=0.2, top=0.8, wspace=0.3)
     return _save_publication_figure(fig, rows, Path(output_dir), "tokens_cost_by_level")
 
@@ -386,15 +412,16 @@ def gate_attempts_figure(
                 ax.text(
                     level_index,
                     attempts + maximum * 0.04,
-                    f"{attempts}\n{rejected} rejected",
+                    f"{attempts}\n({rejected})",
                     ha="center",
                     va="bottom",
-                    fontsize=6.3,
+                    fontsize=7,
                     color=INK,
                 )
             else:
                 ax.text(level_index, maximum * 0.025, "-", ha="center", fontsize=8, color=INK2)
         ax.set_xticks(range(len(levels)), levels)
+        ax.set_xlim(-0.65, len(levels) - 0.35)
         ax.set_ylim(0, maximum * 1.22)
         ax.set_title(gate_name, loc="left", fontsize=9, weight="bold", color=INK)
     axes[0].set_ylabel("Attempts across both seeds", fontsize=7.5, color=INK2)
@@ -410,8 +437,8 @@ def gate_attempts_figure(
     fig.text(
         0.01,
         0.01,
-        "Labels: total attempts, then rejected attempts. Hatched segment: rejected attempts.",
-        fontsize=6.5,
+        "Labels: total attempts, with rejected attempts in parentheses. Hatched segment: rejected attempts.",
+        fontsize=7,
         color=INK2,
     )
     fig.subplots_adjust(left=0.09, right=0.99, bottom=0.2, top=0.79, wspace=0.16)
@@ -486,7 +513,7 @@ def redteam_figure(
         0.01,
         "Blocked: no registry reached the writer. Warned: key named. Silent: no check named it.",
         ha="right",
-        fontsize=6.5,
+        fontsize=7,
         color=INK2,
     )
     fig.subplots_adjust(left=0.48, right=0.98, bottom=0.12, top=0.92)
@@ -536,27 +563,23 @@ def adjacency_figure(
             f"{successes}/{total} {success_word}",
             ha="center",
             va="center",
-            fontsize=6.8,
+            fontsize=7,
             color=SURFACE,
             weight="bold",
         )
         failures = total - successes
-        if failure_pct >= 12:
-            x, align, color = success_pct + failure_pct / 2, "center", INK
-        else:
-            x, align, color = 101.5, "left", VERMILLION
         ax.text(
-            x,
+            101.5,
             y,
             f"{failures} {failure_word}",
-            ha=align,
+            ha="left",
             va="center",
-            fontsize=6.5,
-            color=color,
+            fontsize=7,
+            color=VERMILLION,
         )
     ax.set_yticks(range(len(summary)), [row[0] for row in summary])
     ax.invert_yaxis()
-    ax.set_xlim(0, 118)
+    ax.set_xlim(0, 128)
     ax.set_xticks([0, 25, 50, 75, 100], ["0", "25", "50", "75", "100%"])
     ax.grid(axis="x", color=GRID, linewidth=0.6)
     ax.set_axisbelow(True)
@@ -575,7 +598,7 @@ def adjacency_figure(
         0.01,
         0.01,
         "Blue: desired outcome. Hatched red: miss or false rejection.",
-        fontsize=6,
+        fontsize=7,
         color=INK2,
     )
     fig.subplots_adjust(left=0.26, right=0.98, bottom=0.28, top=0.78)
@@ -621,7 +644,8 @@ def agent_judge_figure(
                 color, marker = role_style.get(role, (MUTED, "D"))
                 offset = (-0.09 if role == "judge" else 0.09) + 0.018 * (point_index % 3 - 1)
                 value = float(row["overall"])
-                scores.append(value)
+                if role == "judge":
+                    scores.append(value)
                 score_ax.scatter(
                     level_index + offset,
                     value,
@@ -647,6 +671,8 @@ def agent_judge_figure(
 
             counts = {"true": 0, "false": 0, "error": 0}
             for row in level_rows:
+                if row["role"].strip().lower() != "judge":
+                    continue
                 value = row["faked"].strip().lower()
                 counts[value if value in ("true", "false") else "error"] += 1
             left = 0
@@ -675,7 +701,7 @@ def agent_judge_figure(
                     f"{label} {count}",
                     ha="center",
                     va="center",
-                    fontsize=6.5,
+                    fontsize=7,
                     color=INK if key in ("true", "error") else SURFACE,
                 )
                 left += count
@@ -688,8 +714,8 @@ def agent_judge_figure(
         )
         score_ax.set_ylabel("Score, 1-10", fontsize=7.5, color=INK2)
         score_ax.set_xlabel(
-            "● judge    ■ opinion    black tick: mean",
-            fontsize=6.5,
+            "● judge    ■ opinion (not counted)    black tick: judge mean",
+            fontsize=7,
             color=INK2,
         )
         flag_ax.set_yticks(range(len(levels)), levels)
@@ -700,13 +726,13 @@ def agent_judge_figure(
     fig.suptitle(
         "Agent-judge results by level",
         x=0.01,
-        y=1.01,
+        y=0.98,
         ha="left",
         fontsize=10,
         weight="bold",
         color=INK,
     )
-    fig.tight_layout(pad=0.7, w_pad=1.4)
+    fig.tight_layout(pad=0.7, w_pad=1.4, rect=(0, 0, 1, 0.94))
     return _save_publication_figure(fig, rows, output_dir, "agent_judge_by_level")
 
 

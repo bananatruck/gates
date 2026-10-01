@@ -104,13 +104,13 @@ The significance test is fixed in advance in [`paper/PLAN.md`](paper/PLAN.md) §
 
 | Figure | What it will show |
 |---|---|
-| ![CORE-Bench by level](paper/figures/fig1_corebench_levels.png) | CORE-Bench at the four `GATES_LEVEL`s |
-| ![MLR-Bench by level](paper/figures/fig2_mlrbench_levels.png) | MLR-Bench at the four levels |
-| ![BadScientist by level](paper/figures/fig3_badscientist_levels.png) | BadScientist at the four levels, Gate 3's adversarial test |
-| ![CORE-Bench comparison](paper/figures/fig4_corebench_compare.png) | each system alone and with GATES, CORE-Bench |
-| ![MLR-Bench comparison](paper/figures/fig5_mlrbench_compare.png) | each system alone and with GATES, MLR-Bench |
-| ![BadScientist comparison](paper/figures/fig6_badscientist_compare.png) | each system alone and with GATES, BadScientist |
-| ![Audit of released papers](paper/figures/fig7_audit.png) | released papers citing an arXiv id that does not exist |
+| ![Crashes by level](paper/figures/crashes_by_level.png) | execution crashes by owner and cause |
+| ![Resource use by level](paper/figures/tokens_cost_by_level.png) | token use and cost across measured seeds |
+| ![Gate attempts by level](paper/figures/gate_attempts_by_level.png) | attempts and rejections at each gate |
+| ![Red-team outcomes](paper/figures/redteam_outcomes.png) | outcomes of the model-free red-team rig, 18 fabrication strategies |
+| ![Token-adjacency probes](paper/figures/adjacency_probes.png) | attack catches and honest-shape passes |
+| ![Mechanism evidence](paper/figures/fig8_mechanism.png) | measured detections and false positives for each gate |
+| ![Agent-judge results](paper/figures/agent_judge_by_level.png) | judge scores and faked-result verdicts by level |
 
 ## Install
 
