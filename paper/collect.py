@@ -69,7 +69,8 @@ REQUIRED = ("benchmark", "task", "system", "level", "seed")
 
 #: A crashed execution's cause, from its record alone.
 #: ``oom_at_cap``: out of memory under the runner's per-run GPU share, which
-#: PyTorch reports as "N GiB allowed"; ``oom``: out of memory with no cap named;
+#: PyTorch reports as "N GiB allowed" or "N MiB allowed"; ``oom``: out of memory
+#: with no cap named;
 #: ``timeout``: killed at the execution limit; ``environment``: a package the
 #: environment should provide failed to import; ``agent_code``: anything else.
 CRASH_CAUSES = ("oom_at_cap", "oom", "timeout", "environment", "agent_code")
@@ -143,12 +144,16 @@ def load_crash_runs(root: Path) -> list[dict]:
     return runs
 
 
-def _executions(folder: Path) -> list[dict]:
+def _executions(folder: Path, level: int | str) -> list[dict]:
     """Each execution a run made, in order: its cause, and whether Gate 1 passed it."""
     artifacts = folder / "gate_artifacts"
     out: list[dict] = []
+    ungated_dirs = [
+        path for path in artifacts.glob("ungated_*")
+        if path.name.removeprefix("ungated_").isdigit()
+    ]
     for execution_dir in sorted(
-        artifacts.glob("ungated_*"), key=lambda path: int(path.name.removeprefix("ungated_"))
+        ungated_dirs, key=lambda path: int(path.name.removeprefix("ungated_"))
     ):
         results = execution_dir / "results.json"
         if not results.exists():
@@ -161,7 +166,15 @@ def _executions(folder: Path) -> list[dict]:
         key=lambda path: int(path.parent.name.removeprefix("attempt_")),
     ):
         report = json.loads(report_path.read_text(encoding="utf-8"))
-        execution = report.get("execution") or {}
+        execution = report.get("execution")
+        if execution is None and level == "0d":
+            results = report_path.parent / "results.json"
+            execution = (
+                json.loads(results.read_text(encoding="utf-8"))
+                if results.exists()
+                else {"timed_out": True}
+            )
+        execution = execution or {}
         out.append({
             "cause": crash_cause(execution.get("exception"), bool(execution.get("timed_out"))),
             "passed": report.get("verdict") == "PASS",
@@ -196,7 +209,7 @@ def crash_table(runs: list[dict]) -> dict[tuple[str, str, str], dict[str, int]]:
             **dict.fromkeys(CRASH_CAUSES, 0),
             "papers": 0, "papers_on_crashed_run": 0, "papers_on_harness_crash": 0,
         })
-        executions = _executions(Path(run["folder"]))
+        executions = _executions(Path(run["folder"]), run["level"])
         row["runs"] += 1
         row["executions"] += len(executions)
         for execution in executions:

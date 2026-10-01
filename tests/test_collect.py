@@ -198,6 +198,17 @@ def _attempt(folder: Path, index: int, exception: dict | None, timed_out=False, 
         {"verdict": verdict, "execution": {"exception": exception, "timed_out": timed_out}}))
 
 
+def _rejected_l0_prime_attempt(
+    folder: Path, index: int, exception: dict | None, *, write_results=True
+):
+    d = folder / "gate_artifacts" / "gate1" / f"attempt_{index:02d}"
+    d.mkdir(parents=True)
+    (d / "gate1_report.json").write_text(json.dumps(
+        {"verdict": "FAIL", "execution": None}))
+    if write_results:
+        (d / "results.json").write_text(json.dumps({"exception": exception}))
+
+
 def test_an_ungated_execution_killed_at_the_timeout_is_a_crash(tmp_path):
     runs = tmp_path / "runs"
     l0 = write_run(runs, level=0, metrics=False, paper_present=True)
@@ -212,6 +223,20 @@ def test_an_ungated_execution_killed_at_the_timeout_is_a_crash(tmp_path):
     assert row["executions"] == 2
     assert row["timeout"] == 1
     assert row["papers_on_harness_crash"] == 1
+
+
+def test_a_non_numeric_ungated_entry_is_ignored(tmp_path):
+    runs = tmp_path / "runs"
+    l0 = write_run(runs, level=0, metrics=False)
+    _ungated(l0, 1, None)
+    stray = l0 / "gate_artifacts" / "ungated_notes"
+    stray.mkdir(parents=True)
+    (stray / "results.json").write_text(json.dumps({"exception": None}))
+
+    table = collect.crash_table(collect.load_crash_runs(runs))
+
+    row = table[("MLR-Bench", "Agent Lab", "L0")]
+    assert row["executions"] == 1
 
 
 def test_crashes_are_counted_per_cell_and_split_harness_from_agent(tmp_path):
@@ -242,22 +267,43 @@ def test_a_level_0_paper_comes_from_its_last_execution_even_beside_gate_1_attemp
     l0 = write_run(runs, level=0, metrics=False, paper_present=True)
     _ungated(l0, 1, {"type": "TypeError", "message": "last level 0 execution"})
     _attempt(l0, 1, None, verdict="PASS")
-    l0_prime = write_run(runs, level="0d", metrics=False, paper_present=True)
-    _attempt(l0_prime, 1, None, verdict="PASS")
-    _attempt(
-        l0_prime,
-        2,
-        {"type": "TypeError", "message": "last L0' execution"},
-        verdict="FAIL",
-    )
 
     table = collect.crash_table(collect.load_crash_runs(runs))
 
     assert table[("MLR-Bench", "Agent Lab", "L0")]["papers_on_crashed_run"] == 1
-    assert table[("MLR-Bench", "Agent Lab", "L0'")]["papers_on_crashed_run"] == 1
 
 
-def test_attempts_past_99_keep_their_order(tmp_path):
+def test_l0_prime_reads_a_statically_rejected_execution_from_results_json(tmp_path):
+    runs = tmp_path / "runs"
+    l0_prime = write_run(runs, level="0d", metrics=False, paper_present=True)
+    _rejected_l0_prime_attempt(
+        l0_prime,
+        1,
+        {"type": "TypeError", "message": "L0' execution crashed"},
+    )
+
+    table = collect.crash_table(collect.load_crash_runs(runs))
+
+    row = table[("MLR-Bench", "Agent Lab", "L0'")]
+    assert row["executions"] == 1
+    assert row["agent_code"] == 1
+    assert row["papers_on_crashed_run"] == 1
+
+
+def test_l0_prime_counts_a_statically_rejected_execution_without_results_as_timeout(tmp_path):
+    runs = tmp_path / "runs"
+    l0_prime = write_run(runs, level="0d", metrics=False, paper_present=True)
+    _rejected_l0_prime_attempt(l0_prime, 1, None, write_results=False)
+
+    table = collect.crash_table(collect.load_crash_runs(runs))
+
+    row = table[("MLR-Bench", "Agent Lab", "L0'")]
+    assert row["executions"] == 1
+    assert row["timeout"] == 1
+    assert row["papers_on_harness_crash"] == 1
+
+
+def test_ungated_attempts_past_99_keep_their_order(tmp_path):
     runs = tmp_path / "runs"
     l0 = write_run(runs, level=0, metrics=False, paper_present=True)
     _ungated(l0, 99, None)
@@ -266,6 +312,24 @@ def test_attempts_past_99_keep_their_order(tmp_path):
     table = collect.crash_table(collect.load_crash_runs(runs))
 
     row = table[("MLR-Bench", "Agent Lab", "L0")]
+    assert row["executions"] == 2
+    assert row["papers_on_crashed_run"] == 1
+
+
+def test_gate_1_attempts_past_99_keep_their_order(tmp_path):
+    runs = tmp_path / "runs"
+    l3 = write_run(runs, level=3, metrics=False, paper_present=True)
+    _attempt(l3, 99, None, verdict="PASS")
+    _attempt(
+        l3,
+        100,
+        {"type": "TypeError", "message": "last Gate 1 execution"},
+        verdict="PASS",
+    )
+
+    table = collect.crash_table(collect.load_crash_runs(runs))
+
+    row = table[("MLR-Bench", "Agent Lab", "L3")]
     assert row["executions"] == 2
     assert row["papers_on_crashed_run"] == 1
 
