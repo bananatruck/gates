@@ -133,7 +133,7 @@ README_GROUPS = {
     "Evaluation tooling and this status check": (
         "test_tuning", "test_paper_audit", "test_stats", "test_live_tools", "test_collect",
         "test_mechanism", "test_posthoc_audit", "test_judge", "test_progress", "test_red_team", "test_stage_released",
-        "test_pitfalls_audit",
+        "test_pitfalls_audit", "test_stage_pitfalls",
     ),
 }
 
