@@ -99,6 +99,7 @@ It did not make the science better, and no number here says it did.
 ## Planned evaluation
 
 These seven figures are the paper's evaluation, and every one is a placeholder.
+Since D94/D99 (`progress.md`, 10-01) the MLR-Bench and BadScientist figures are no longer planned: Hidden Pitfalls is the forward benchmark, the MLR-Bench waves 2-3 stay as the end-to-end pilot, and a faked result is a reported number no run measured.
 `paper/figures.py` stamps PLACEHOLDER on any figure that still draws a dummy row, and `paper/collect.py` turns rows to measured as runs finish.
 The significance test is fixed in advance in [`paper/PLAN.md`](paper/PLAN.md) §9: an exact McNemar test per benchmark on level 0 against level 3, Holm across the three, and a non-inferiority bound on each task score.
 

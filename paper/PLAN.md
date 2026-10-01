@@ -13,6 +13,21 @@ The four main files:
 | `paper/figures.py` | draws every figure from the CSV; `python3 paper/figures.py` |
 | `paper/draft/main.tex` | the first draft of the paper, in the AAMAS 2027 template |
 
+## 0. Current plan (D94, confirmed with a change as D99 on 10-01)
+
+This section overrides every part of the plan below that disagrees with it.
+Sections 3, 4, 5 and 9 still describe MLR-Bench and BadScientist as forward benchmarks; read them as history.
+
+- **Forward benchmark: Hidden Pitfalls** (Luo, Kasirzadeh, Shah, arXiv 2509.08713v2), audited with `rig.pitfalls_audit` (D95) and scored without a model by `rig.pitfalls` (D98).
+- **MLR-Bench is dropped going forward.**
+  The waves 2-3 runs on `iclr2025_scsl` stay in the paper as the end-to-end pilot, because they are the only end-to-end data.
+  No new MLR-Bench campaign and no released-paper re-scoring (former Phase 3 and Figure 7's MLR-Bench row).
+- **BadScientist is dropped.** No runs, no figure 3, no Phase 4.
+- **Faked result = rule A**: a reported number that no run measured, MLR-Bench's own definition (D99).
+  A measured number the prose misstates is counted and reported on its own, not called faked.
+  This replaces D94's rule B, which counted both.
+- **Holm family (D-E)** no longer contains MLR-Bench, BadScientist or CORE-Bench; it is re-declared before Hidden Pitfalls' first scored run, so it is never chosen after a result.
+
 ## 1. The claim, and what would show it
 
 A large share of the hallucinated results in autonomous research agents is an information-flow defect, not a model tendency.
@@ -69,7 +84,7 @@ Expected: untraceable answers collapse at Gate 1, because an answer must be a re
 Gate 3 has no manuscript here, so the last bar is hatched.
 Reference line: CORE-Agent with GPT-4o, 21.48% pass@1 on Hard (CORE-Bench Table 5, p.9).
 
-### Figure 2: MLR-Bench by level
+### Figure 2: MLR-Bench by level (dropped going forward, D99)
 
 ![MLR-Bench by level](figures/fig2_mlrbench_levels.png)
 
@@ -77,7 +92,7 @@ Expected: the biggest single drop is at Gate 1, since most faked results in MLR-
 Gates 2 and 3 take the remainder: results that ran but contradict the plan, and numbers the writer typed rather than cited.
 The MLR-Judge score stays within noise, which is the no-trade-off claim.
 
-### Figure 3: BadScientist by level
+### Figure 3: BadScientist by level (dropped, D99)
 
 ![BadScientist by level](figures/fig3_badscientist_levels.png)
 
@@ -160,12 +175,12 @@ It measures the discordance between levels 0 and 3, which sets the seed count by
 The pilot runs `deepseek-flash` with the two judges named in §7.
 Done when the pilot's cost per level is recorded and the seed count is written into this plan.
 
-**Phase 3 - MLR-Bench.**
+**Phase 3 - MLR-Bench (dropped, D99).**
 MLR-Bench's ten end-to-end tasks (its Table 8), four levels, the chosen seeds, paired.
 The faked-results labels come from a judge agent that is not the model under test (D54).
 Done when figure 2 has no dummy rows.
 
-**Phase 4 - BadScientist.**
+**Phase 4 - BadScientist (dropped, D99).**
 Reuse phase 3's runs: the attack lives in the writing phase, so only the writer changes.
 For each of the 10 tasks, four manipulated write-ups (s1 TooGoodGains, s2 BaselineSelect, s3 StatTheater, and All) and four honest ones, at every level.
 A reviewer that is not the model under test scores each write-up, accepting at BadScientist's τ0.5 threshold.
@@ -259,7 +274,7 @@ The Holm family below still names CORE-Bench and BadScientist, which D70 no long
 "GATES significantly improves the host" is tested this way, written down before the pilot so the test cannot be chosen after the results.
 The functions are in `rig/stats.py`, stdlib only, so every number can be recomputed on a bare interpreter.
 
-**Integrity, per benchmark.**
+**Integrity, per benchmark.** (The family below predates D99; see section 0.)
 Level 0 and level 3 run on the same task with the same seed, so each task-seed is a pair.
 The outcome is the benchmark's integrity event from §3: a faked result, an untraceable answer, or a manipulated manuscript accepted.
 `b` counts pairs where only level 0 had the event, `c` pairs where only level 3 did.
