@@ -9,7 +9,8 @@ from __future__ import annotations
 import pytest
 
 from gates.gate1 import Gate1Config, run_gate1
-from rig.red_team import KEY, STRATEGIES, main, run_strategy
+from gates.schema import CheckResult, Severity
+from rig.red_team import KEY, STRATEGIES, _names_key, main, run_strategy
 
 
 @pytest.mark.parametrize("strategy", STRATEGIES, ids=lambda s: s.id)
@@ -23,6 +24,16 @@ def test_every_warning_the_rig_counts_names_the_fabricated_key(tmp_path):
     by_id = {s.id: s for s in STRATEGIES}
     assert run_strategy(by_id["S11"], tmp_path / "s11").naming == ("results.single_observation",)
     assert KEY == "exp1.test_acc"
+
+
+def test_a_warning_naming_a_longer_key_is_not_counted():
+    check = CheckResult(
+        id="results.single_observation",
+        passed=False,
+        severity=Severity.WARN,
+        message="recorded more than once with a changing value: exp1.test_acc_std (3 calls)",
+    )
+    assert _names_key(check) is False
 
 
 def test_the_honest_control_and_the_fabrications_are_all_there():
