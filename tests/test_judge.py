@@ -587,9 +587,10 @@ def test_a_run_without_a_paper_gets_no_score_and_no_judge(tmp_path, judged):
 
 
 def _api_meta_with_overall_prompt(judge_name: str, overall_entry: dict) -> dict:
+    digest = overall_entry["prompt_sha256"]
     return {
         "judge": judge_name,
-        "prompt_sha256": [overall_entry["prompt_sha256"]],
+        "prompt_sha256": list(digest) if isinstance(digest, list) else [digest],
         "images_dropped": overall_entry.get("images_dropped", 0),
         "system_message": "",
         "json_mode": False,
@@ -831,3 +832,148 @@ def test_agreement_skips_pilot_void_and_rescored_runs(tmp_path):
         (folder / "manifest.json").write_text(json.dumps(manifest | change))
         _write_summary(folder, {PRO: _verdict(True), FREE: _verdict(True)})
     assert review_flags.agreement(tmp_path)[(PRO, FREE)]["n"] == 1
+
+
+def _seed_half_done_judge(folder, name):
+    """A judge folder with a valid overall.json and an errored hallucination.json."""
+    judge_dir = folder / "judge" / judge.slug(name)
+    judge_dir.mkdir(parents=True)
+    (judge_dir / "overall.json").write_text(json.dumps(overall(3), indent=2) + "\n")
+    (judge_dir / "hallucination.json").write_text(
+        json.dumps({"error": "no valid JSON after 3 attempts"}) + "\n"
+    )
+    return judge_dir
+
+
+def _failing(prompts):
+    def model(prompt, _system):
+        prompts.append(prompt)
+        return "not JSON"
+
+    return model
+
+
+class _FakeAgent(judge.AgentModel):
+    def __call__(self, prompt, system):
+        return "not JSON"
+
+
+def _agent(cli_version, model="sonnet"):
+    return _FakeAgent(
+        command=("claude", "-p", "--model", model),
+        cli_version=cli_version,
+        cli="claude",
+        model=model,
+        effort=None,
+    )
+
+
+def test_partial_rerun_migrates_an_old_format_meta_and_keeps_the_kept_prompt(
+    tmp_path, judged
+):
+    # The format on disk before per-prompt meta: no "prompts" key, one flat hash list,
+    # overall's 1 attempt then hallucination's 3 failed attempts.
+    folder = make_run(tmp_path)
+    judge_dir = _seed_half_done_judge(folder, PRO)
+    old_hashes = ["o1" + "0" * 62, "h1" + "0" * 62, "h2" + "0" * 62, "h3" + "0" * 62]
+    (judge_dir / "meta.json").write_text(json.dumps({
+        "judge": PRO,
+        "prompt_sha256": old_hashes,
+        "images_dropped": 1,
+        "system_message": "",
+        "json_mode": False,
+        "at_utc": "2020-01-01T00:00:00+00:00",
+        "judge_kind": "api",
+        "max_tokens": 16384,
+        "temperature": 0.0,
+    }, indent=2) + "\n")
+
+    judged(folder, {PRO: _failing([])}, judges=(PRO,))
+
+    meta = json.loads((judge_dir / "meta.json").read_text())
+    kept = meta["prompts"]["overall"]
+    assert kept["prompt_sha256"] == old_hashes[:1]
+    assert kept["attempts"] == 1
+    assert kept["at_utc"] == "2020-01-01T00:00:00+00:00"
+    assert meta["prompt_sha256"][:1] == old_hashes[:1]
+    assert len(meta["prompt_sha256"]) == 1 + 3
+
+
+def test_a_kept_answer_stays_credited_to_the_cli_version_that_produced_it(tmp_path):
+    folder = make_run(tmp_path)
+    name = "agent:claude/sonnet"
+    judge_dir = _seed_half_done_judge(folder, name)
+    kept = {
+        "prompt_sha256": ["a" * 64], "attempts": 1,
+        "at_utc": "2020-01-01T00:00:00+00:00", "images_dropped": 0,
+        "command": ["claude", "-p", "--model", "sonnet"], "cli": "claude",
+        "model": "sonnet", "effort": None, "cli_version": "old 1.0",
+    }
+    meta = _api_meta_with_overall_prompt(name, kept)
+    meta["judge_kind"] = "agent"
+    (judge_dir / "meta.json").write_text(json.dumps(meta))
+
+    judge.judge_run(
+        folder, judges=[name], models={name: _agent("new 2.0")},
+        reviews=judge.load_judges(FIXTURE), tasks=FIXTURE / "tasks",
+    )
+
+    meta = json.loads((judge_dir / "meta.json").read_text())
+    assert meta["prompts"]["overall"] == kept
+    reasked = meta["prompts"]["hallucination"]
+    assert reasked["cli_version"] == "new 2.0"
+    assert reasked["command"] == ["claude", "-p", "--model", "sonnet"]
+    assert reasked["cli"] == "claude" and reasked["model"] == "sonnet"
+    assert "effort" in reasked
+
+
+def test_every_attempt_hash_is_kept_and_the_top_level_is_their_concatenation(
+    tmp_path, judged
+):
+    folder = make_run(tmp_path)
+    judge_dir = _seed_half_done_judge(folder, PRO)
+    kept = {
+        "prompt_sha256": ["a" * 64, "b" * 64], "attempts": 2,
+        "at_utc": "2030-01-01T00:00:00+00:00", "images_dropped": 0,
+    }
+    meta = _api_meta_with_overall_prompt(PRO, kept)
+    (judge_dir / "meta.json").write_text(json.dumps(meta))
+
+    judged(folder, {PRO: _failing([])}, judges=(PRO,))
+
+    meta = json.loads((judge_dir / "meta.json").read_text())
+    halluc = meta["prompts"]["hallucination"]
+    assert isinstance(halluc["prompt_sha256"], list)
+    assert len(halluc["prompt_sha256"]) == halluc["attempts"] == 3
+    assert meta["prompts"]["overall"] == kept
+    # compatibility field: overall's attempts first, then hallucination's; at_utc newest
+    assert meta["prompt_sha256"] == kept["prompt_sha256"] + halluc["prompt_sha256"]
+    assert meta["at_utc"] == "2030-01-01T00:00:00+00:00"
+
+
+def test_a_rerun_by_another_kind_of_judge_leaves_no_stale_top_level_fields(
+    tmp_path, judged
+):
+    folder = make_run(tmp_path)
+    judge_dir = _seed_half_done_judge(folder, PRO)
+    kept = {
+        "prompt_sha256": ["a" * 64], "attempts": 1,
+        "at_utc": "2020-01-01T00:00:00+00:00", "images_dropped": 0,
+    }
+    meta = _api_meta_with_overall_prompt(PRO, kept)
+    meta.update({
+        "judge_kind": "agent", "command": ["claude"], "cli": "claude",
+        "model": "m", "effort": None, "cli_version": "old", "review_tag": "t",
+        "mlr_bench_deviations": {"temperature": "x"},
+        "stale_unknown_field": 1,
+    })
+    (judge_dir / "meta.json").write_text(json.dumps(meta))
+
+    judged(folder, {PRO: _failing([])}, judges=(PRO,))
+
+    meta = json.loads((judge_dir / "meta.json").read_text())
+    assert meta["judge_kind"] == "api"
+    for stale in ("command", "cli", "model", "effort", "cli_version", "review_tag",
+                  "mlr_bench_deviations", "stale_unknown_field"):
+        assert stale not in meta
+    assert meta["max_tokens"] == 16384 and meta["temperature"] == 0.0

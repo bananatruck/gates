@@ -186,8 +186,23 @@ def _read_meta(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _judge_identity(model: ModelFn) -> dict:
+    """What produced an answer: kept inside each prompt entry, so a kept answer
+    stays credited to the CLI version that gave it even after a rerun."""
+    if isinstance(model, AgentModel):
+        return {
+            "command": list(model.command),
+            "cli": model.cli,
+            "model": model.model,
+            "effort": model.effort,
+            "cli_version": model.cli_version,
+        }
+    return {}
+
+
 def _prompt_provenance(
     client: Client,
+    model: ModelFn,
     *,
     start_prompts: int,
     start_images: int,
@@ -195,10 +210,11 @@ def _prompt_provenance(
 ) -> dict:
     hashes = client.prompts[start_prompts:]
     return {
-        "prompt_sha256": hashes[-1] if hashes else None,
+        "prompt_sha256": list(hashes),
         "attempts": len(hashes),
         "at_utc": at_utc,
         "images_dropped": client.images_dropped - start_images,
+        **_judge_identity(model),
     }
 
 
@@ -211,11 +227,7 @@ def _judge_shared_meta(judge_name: str, model: ModelFn) -> dict:
     if isinstance(model, AgentModel):
         meta.update({
             "judge_kind": "agent",
-            "command": list(model.command),
-            "cli": model.cli,
-            "model": model.model,
-            "effort": model.effort,
-            "cli_version": model.cli_version,
+            **_judge_identity(model),
             "review_tag": AGENT_REVIEW_TAG,
             "mlr_bench_deviations": {
                 "temperature": (
@@ -237,28 +249,108 @@ def _judge_shared_meta(judge_name: str, model: ModelFn) -> dict:
     return meta
 
 
-def _refresh_meta_compat_fields(meta: dict) -> None:
-    """Top-level copies other tools read; derived from per-prompt provenance."""
-    prompts = meta.get("prompts") or {}
+_ROLES = ("overall", "hallucination")
+_LEGACY_IDENTITY = ("command", "cli", "model", "effort", "cli_version")
+_FAILED_ATTEMPTS = 3  # the review functions try 3 times, then the file holds an error
+
+
+def _hashes(entry: dict) -> list[str]:
+    digest = entry.get("prompt_sha256")
+    if not digest:
+        return []
+    return list(digest) if isinstance(digest, list) else [digest]
+
+
+def _legacy_split(n: int, states: dict[str, str]) -> dict[str, int] | None:
+    """Split an old flat hash list between the prompts, or None if it cannot be known.
+
+    An errored file means 3 attempts; a valid file used the rest.
+    """
+    if n == 2:
+        return {"overall": 1, "hallucination": 1}  # one attempt each, whatever the files say now
+    known = {r: _FAILED_ATTEMPTS for r in _ROLES if states[r] == "error"}
+    unknown = [r for r in _ROLES if r not in known]
+    if not unknown:
+        return known if sum(known.values()) == n else None
+    rest = n - sum(known.values())
+    if len(unknown) == 1:
+        return known | {unknown[0]: rest} if rest >= 1 else None
+    return None
+
+
+def _migrate_old_meta(meta: dict, out: Path) -> dict:
+    """Give a pre-"prompts" meta.json the per-prompt shape, losing nothing.
+
+    The old file has one flat prompt_sha256 list (every attempt, overall first),
+    one at_utc and the identity fields at top level. It must be migrated before a
+    partial rerun overwrites those, or the kept prompt's provenance is gone.
+    """
+    if "prompts" in meta or not meta:
+        return meta
+    hashes = _hashes(meta)
+    states = {}
+    for role in _ROLES:
+        path = out / f"{role}.json"
+        states[role] = "missing" if not path.is_file() else (
+            "error" if "error" in json.loads(path.read_text(encoding="utf-8")) else "ok"
+        )
+    split = _legacy_split(len(hashes), states)
+    guessed = split is None
+    if guessed:
+        # limit: attempts per prompt cannot be recovered from this old file; all
+        # hashes are filed under overall, in order, and both entries say so.
+        # Fix: none, the information was never written.
+        split = {"overall": len(hashes), "hallucination": 0}
+    identity = {k: meta[k] for k in _LEGACY_IDENTITY if k in meta}
+    prompts = {}
+    start = 0
+    for role in _ROLES:
+        mine = hashes[start:start + split[role]]
+        start += split[role]
+        entry = {
+            "prompt_sha256": mine,
+            "attempts": len(mine),
+            "at_utc": meta.get("at_utc"),
+            "images_dropped": meta.get("images_dropped", 0) if role == "overall" else 0,
+            **identity,
+        }
+        if guessed:
+            entry["legacy_attempt_split"] = "unknown"
+        prompts[role] = entry
+    return {**meta, "prompts": prompts}
+
+
+def _compat_fields(prompts: dict) -> dict:
+    """Top-level copies of the per-prompt provenance, for readers of the old shape.
+
+    prompt_sha256 is the concatenation of both prompts' attempt hashes, overall
+    first, which is what the old single list held; at_utc is the newest of the two.
+    """
     ordered: list[str] = []
     latest_utc = ""
     images = 0
-    for role in ("overall", "hallucination"):
+    for role in _ROLES:
         entry = prompts.get(role)
         if not entry:
             continue
-        digest = entry.get("prompt_sha256")
-        if digest:
-            ordered.append(digest)
+        ordered.extend(_hashes(entry))
         images += int(entry.get("images_dropped") or 0)
-        at = entry.get("at_utc") or ""
-        if at > latest_utc:
-            latest_utc = at
+        latest_utc = max(latest_utc, entry.get("at_utc") or "")
+    compat: dict = {"images_dropped": images}
     if ordered:
-        meta["prompt_sha256"] = ordered
-    meta["images_dropped"] = images
+        compat["prompt_sha256"] = ordered
     if latest_utc:
-        meta["at_utc"] = latest_utc
+        compat["at_utc"] = latest_utc
+    return compat
+
+
+def migrate_meta_file(out: Path) -> None:
+    """Rewrite an old-format meta.json in place, before any prompt is re-asked."""
+    path = out / "meta.json"
+    old = _read_meta(path)
+    new = _migrate_old_meta(old, out)
+    if new is not old:
+        _write(path, new)
 
 
 def _write_judge_meta(
@@ -270,16 +362,17 @@ def _write_judge_meta(
     hallucination: dict | None,
 ) -> None:
     path = out / "meta.json"
-    meta = _read_meta(path)
-    meta.update(_judge_shared_meta(judge_name, model))
-    prompts = dict(meta.get("prompts") or {})
+    prompts = dict(_read_meta(path).get("prompts") or {})
     if overall is not None:
         prompts["overall"] = overall
     if hallucination is not None:
         prompts["hallucination"] = hallucination
-    meta["prompts"] = prompts
-    _refresh_meta_compat_fields(meta)
-    _write(path, meta)
+    # Rebuilt, not updated: nothing of a previous judge kind survives at top level.
+    _write(path, {
+        **_judge_shared_meta(judge_name, model),
+        "prompts": prompts,
+        **_compat_fields(prompts),
+    })
 
 
 def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
@@ -328,6 +421,7 @@ def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
             out = folder / "judge" / slug(judge)
             if not _judge_outputs_complete(out):
                 out.mkdir(parents=True, exist_ok=True)
+                migrate_meta_file(out)
                 need_overall = _output_needs_prompt(out / "overall.json")
                 need_hallucination = _output_needs_prompt(out / "hallucination.json")
                 os.environ[USAGE_ENV] = str(out / "usage.jsonl")
@@ -354,6 +448,7 @@ def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
                     )
                     overall_prov = _prompt_provenance(
                         client,
+                        model,
                         start_prompts=start_prompts,
                         start_images=start_images,
                         at_utc=at_utc,
@@ -373,6 +468,7 @@ def judge_run(folder: Path, *, judges: list[str], models: dict[str, ModelFn],
                     )
                     hallucination_prov = _prompt_provenance(
                         client,
+                        model,
                         start_prompts=start_prompts,
                         start_images=start_images,
                         at_utc=at_utc,
