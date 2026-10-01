@@ -14,7 +14,7 @@ released AI Scientist v2's papers at ``f728d57``. The stager writes, per task,
 
 ``manifest.json``
     task, model, ``phase: rescore``, the task text's hash (which ``rig.judge``
-    checks), the PDF's hash, and the text extractor and its version;
+    checks), the PDF's hash, the text extractor and its version;
 ``paper/report.txt``
     the PDF's text; ``paper/source.pdf`` beside it;
 ``code/``
@@ -65,6 +65,30 @@ def _slug(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "-", name).strip("-")
 
 
+def _experiment_scripts(source: Path) -> list[Path]:
+    root = source / "experiments"
+    if not root.is_dir():
+        return []
+    return sorted(p for p in root.rglob("*.py") if p.is_file())
+
+
+def _run_folder(out: Path, task: str, system: str) -> Path:
+    return out / "MLR-Bench" / task / _slug(system) / "released" / "seed0"
+
+
+def _folder_skip_note(folder: Path, task: str, system: str) -> str:
+    manifest_path = folder / "manifest.json"
+    if manifest_path.is_file():
+        existing = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if existing.get("system") == system:
+            return f"{task}: already staged at {folder}"
+        other = existing.get("system", "?")
+        slug = _slug(system)
+        return (f"{task}: slug clash between {other!r} and {system!r} "
+                f"(both map to {slug}) at {folder}")
+    return f"{task}: already staged at {folder}"
+
+
 def stage_all(
     papers: Path,
     *,
@@ -77,6 +101,7 @@ def stage_all(
 ) -> tuple[list[Path], list[str]]:
     """Stage every task folder under ``papers``. Returns the folders and a note per skip."""
     extractor = extractor or default_extractor()
+    slug = _slug(system)
     staged: list[Path] = []
     skipped: list[str] = []
     for source in sorted(p for p in papers.iterdir() if p.is_dir()):
@@ -89,16 +114,32 @@ def stage_all(
         if not pdf.is_file():
             skipped.append(f"{task}: no pdf at {pdf}")
             continue
-        folder = out / "MLR-Bench" / task / _slug(system) / "released" / "seed0"
-        if folder.exists():
-            skipped.append(f"{task}: already staged at {folder}")
+        if not slug:
+            skipped.append(f"{task}: system {system!r} slugs to an empty path")
             continue
+        folder = _run_folder(out, task, system)
+        if folder.exists():
+            skipped.append(_folder_skip_note(folder, task, system))
+            continue
+        try:
+            report = extract(pdf)
+        except Exception as exc:
+            skipped.append(f"{task}: extraction failed ({exc})")
+            continue
+        if not report:
+            skipped.append(f"{task}: empty extraction from {pdf}")
+            continue
+        scripts = _experiment_scripts(source)
+        code_files = [str(p.relative_to(source / "experiments")) for p in scripts]
         (folder / "paper").mkdir(parents=True)
-        (folder / "code").mkdir()
         shutil.copyfile(pdf, folder / "paper" / "source.pdf")
-        (folder / "paper" / "report.txt").write_text(extract(pdf), encoding="utf-8")
-        for script in sorted((source / "experiments").glob("*.py")):
-            shutil.copyfile(script, folder / "code" / script.name)
+        (folder / "paper" / "report.txt").write_text(report, encoding="utf-8")
+        if code_files:
+            for script in scripts:
+                rel = script.relative_to(source / "experiments")
+                dest = folder / "code" / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(script, dest)
         manifest = {
             "benchmark": "MLR-Bench",
             "task": task,
@@ -111,6 +152,7 @@ def stage_all(
             "source_pdf_sha256": hashlib.sha256(pdf.read_bytes()).hexdigest(),
             "text_extractor": extractor,
             "source": str(source),
+            "code_files": code_files,
         }
         (folder / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         staged.append(folder)
