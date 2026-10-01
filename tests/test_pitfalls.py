@@ -327,7 +327,10 @@ def test_a_clause_naming_another_split_does_not_inherit_test(tmp_path):
     ("Test SWA 71.0 (val 75.0), CWA 69.0.\n", (("SWA", "71.0"), ("CWA", "69.0"))),
     ("Train/test SWA: 95\\%/71\\%.\n", ()),
     ("Test SWA 71\\%, and the val/test gap in CWA is 5\\%.\n", (("SWA", "71%"),)),
-    ("Testing SWA was 71\\%.\n", (("SWA", "71%"),)),
+    ("Testing SWA was 71\\%.\n", ()),
+    ("Testing hyperparameters, CWA hit 75\\%.\n", ()),
+    ("Test SWA is 71\\%, and CWA (validation, 3 seeds) is 75\\%.\n", (("SWA", "71%"),)),
+    ("Splits are train, val, test, etc. Our CWA is 75\\%.\n", ()),
     ("SWA (test) 71\\%, CWA (val) 74\\%.\n", (("SWA", "71%"),)),
     ("Test SWA 71\\% vs. 65\\% for prior work, CWA 69\\%.\n", (("SWA", "71%"), ("CWA", "69%"))),
 ])
