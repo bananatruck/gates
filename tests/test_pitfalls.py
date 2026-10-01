@@ -324,6 +324,12 @@ def test_a_clause_naming_another_split_does_not_inherit_test(tmp_path):
     ("We did not evaluate on test; validation SWA 75\\%, CWA 70\\%.\n", ()),
     ("Our model reached SWA 70.1\\% (test) and CWA 68.2\\% (validation).\n", (("SWA", "70.1%"),)),
     ("Validation CWA reached 75\\% before the test.\n", ()),
+    ("Test SWA 71.0 (val 75.0), CWA 69.0.\n", (("SWA", "71.0"), ("CWA", "69.0"))),
+    ("Train/test SWA: 95\\%/71\\%.\n", ()),
+    ("Test SWA 71\\%, and the val/test gap in CWA is 5\\%.\n", (("SWA", "71%"),)),
+    ("Testing SWA was 71\\%.\n", (("SWA", "71%"),)),
+    ("SWA (test) 71\\%, CWA (val) 74\\%.\n", (("SWA", "71%"),)),
+    ("Test SWA 71\\% vs. 65\\% for prior work, CWA 69\\%.\n", (("SWA", "71%"), ("CWA", "69%"))),
 ])
 def test_a_figure_belongs_to_the_split_named_nearest_before_it(tmp_path, text, expected):
     """Each figure takes the split named closest before it in its sentence, or a (split) tag right after it."""

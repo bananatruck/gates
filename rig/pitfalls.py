@@ -77,10 +77,10 @@ _METRIC_TOKEN = re.compile(
 _RESULT_NUMBER = re.compile(r"(?<![\w.])(?:(\d+(?:\.\d+)?)(\\?%)|(\d+\.\d+))")
 _REFERENCE_NUMBER = re.compile(r"(?:Table|Figure|Fig\.|Section|Eq\.|Appendix)\s*$", re.IGNORECASE)
 _CITED = re.compile(r"\bSOTA\b|\bbaselines?\b|state[- ]of[- ]the[- ]art", re.IGNORECASE)
-_CLAUSE_BREAK = re.compile(r";|(?<![\d])\.(?=\s|$)|,(?=\s+[^\d\s])")
-_SENTENCE_END = re.compile(r"(?<![\d])\.(?=\s|$)")
-_SPLIT_WORD = re.compile(r"\b(test|train(?:ing)?|validation|val|dev(?:elopment)?)\b", re.IGNORECASE)
-_SPLIT_TAG = re.compile(r"\s*\\?\(\s*(test|train(?:ing)?|validation|val|dev(?:elopment)?)\s*\\?\)", re.IGNORECASE)
+_CLAUSE_BREAK = re.compile(r";|(?<![\d])(?<!\bvs)(?<!\betc)(?<!\bcf)\.(?=\s|$)|,(?=\s+[^\d\s])")
+_SENTENCE_END = re.compile(r"(?<![\d])(?<!\bvs)(?<!\betc)(?<!\bcf)\.(?=\s|$)")
+_SPLIT_WORD = re.compile(r"\b(test(?:ing)?|train(?:ing)?|validation|val|dev(?:elopment)?)\b", re.IGNORECASE)
+_SPLIT_TAG = re.compile(r"\s*\\?\(\s*(test(?:ing)?|train(?:ing)?|validation|val|dev(?:elopment)?)\s*\\?\)", re.IGNORECASE)
 _LOG = Path("src/experiment_output.log")
 SUBSTITUTION = "data substitution (our addition, not the paper's leakage)"
 _SPLIT_SLICE = re.compile(r"""split\s*=\s*(['"])([^'"\[]*)\[:""")
@@ -430,12 +430,21 @@ def _split_of(line: str, sentence_start: int, number: re.Match[str]) -> str | No
     if tag:
         return _split_name(tag.group(1))
     named = list(_SPLIT_WORD.finditer(line, sentence_start, number.start()))
-    # limit: the split is read within one sentence on one line, so a sentence wrapped across lines, a split named in the sentence before, a split named only after the figure ("80% during training"), or a negation ("did not evaluate on test") is misread or missed; a table whose header row names the metrics and whose next row holds the numbers is not read. Fix: join wrapped lines into sentences, read tables as a grid, and attach trailing split phrases.
-    return _split_name(named[-1].group(1)) if named else None
+    # limit: the split is read within one sentence on one line, so a sentence wrapped across lines, a split named in the sentence before, a split named only after the figure ("80% during training"), a split word used as a plain noun ("Test SWA after 10 epochs of training was 71%" is missed), a negation ("did not evaluate on test"), and a table whose header row names the metrics and whose next row holds the numbers are misread or missed. Fix: join wrapped lines into sentences, read tables as a grid, and parse the clause's grammar instead of the nearest word.
+    for word in reversed(named):
+        between = line[word.end():number.start()]
+        if between.count(")") > between.count("("):
+            aside = between[:between.index(")")]
+            if re.search(r"\d", aside):
+                continue  # an aside with its own figure, "(val 75.0)", does not reach past its bracket
+        if line[word.start() - 1:word.start()] == "/" or line[word.end():word.end() + 1] == "/":
+            return None  # "train/test" names two splits, so the figure is not attributed
+        return _split_name(word.group(1))
+    return None
 
 
 def _split_name(word: str) -> str:
-    return "test" if word.lower() == "test" else "other"
+    return "test" if word.lower() in ("test", "testing") else "other"
 
 
 def _metrics_in_text(text: str) -> list[tuple[str, str, int]]:
