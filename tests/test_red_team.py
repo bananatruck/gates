@@ -39,9 +39,10 @@ def test_a_warning_naming_a_longer_key_is_not_counted():
 def test_the_honest_control_and_the_fabrications_are_all_there():
     assert [s.id for s in STRATEGIES] == [f"S{i}" for i in range(20)]
     assert STRATEGIES[0].expect == "silent"
-    assert sum(s.expect == "silent" for s in STRATEGIES[1:]) == 10
+    assert sum(s.expect == "silent" for s in STRATEGIES[1:]) == 7
     by_id = {s.id: s for s in STRATEGIES}
-    assert by_id["S18"].expect == "silent"
+    # D101: the static pass's three stated limits are closed.
+    assert {by_id[i].expect for i in ("S13", "S14", "S18")} == {"blocked"}
     # Q4: a result recorded as a setting the config never declared is refused;
     # one declared in the config before the run is the stated limit.
     assert by_id["S12"].expect == "blocked"
@@ -52,7 +53,7 @@ def test_the_honest_control_and_the_fabrications_are_all_there():
 
 def test_the_rig_exits_zero_when_nothing_moved(capsys):
     assert main([]) == 0
-    assert "19 fabrications: 8 blocked, 1 warned, 10 silent" in capsys.readouterr().out
+    assert "19 fabrications: 11 blocked, 1 warned, 7 silent" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(

@@ -243,7 +243,7 @@ def test_literal_vs_computed_classification(call, expected):
         "total = compute()\n"
         "scores = [compute()]\n"
         "typed = 0.816\n"
-        "def compute(): return 1\n"
+        "def compute(): return evaluate()\n"
     )
     kinds = classify_record_calls(f"{preamble}{call}\n")
     assert list(kinds.values()) == [expected]
@@ -256,7 +256,8 @@ def test_literal_vs_computed_classification(call, expected):
         "acc = 0.0\nacc += 0.816",
         "def f(acc=0.816):\n    pass\nacc = 0.816",
         "import math as acc",
-        "acc, _ = (0.816, 0)",
+        "acc, *_ = (0.816, 0)",
+        "acc, _ = pair",
         "with open('f') as acc:\n    pass",
     ],
 )
@@ -338,6 +339,76 @@ def test_a_literal_behind_a_container_or_a_reducer_is_constant(body):
 def test_a_container_the_run_fills_is_not_called_constant(body):
     kinds = classify_record_calls(body + "\n")
     assert list(kinds.values()) == ["computed"]
+
+
+@pytest.mark.parametrize(
+    ("body", "kind"),
+    [
+        # red team S13: a literal through tuple unpacking
+        ("acc, _ = 0.95, 0\nrecord_result('k', acc)", "constant"),
+        ("acc, _ = (0.95, 0)\nrecord_result('k', acc)", "constant"),
+        ("[n, acc] = [3, 0.95]\nrecord_result('k', acc)", "constant"),
+        ("acc, _ = evaluate(), 0\nrecord_result('k', acc)", "computed"),
+        ("acc, _ = 0.95, 0\nacc, _ = evaluate(), 0\nrecord_result('k', acc)", "computed"),
+        ("acc, *rest = 0.95, 0, 1\nrecord_result('k', acc)", "computed"),
+        ("acc, _ = 0.95, 0, 1\nrecord_result('k', acc)", "computed"),
+        ("(acc, b), c = (0.95, 1), 2\nrecord_result('k', acc)", "computed"),
+    ],
+)
+def test_a_literal_unpacked_into_a_name_is_followed(body, kind):
+    assert list(classify_record_calls(body + "\n").values()) == [kind]
+
+
+@pytest.mark.parametrize(
+    ("body", "kind"),
+    [
+        # red team S14: a literal returned by a function the program defines
+        ("def measured():\n    return 0.95\nrecord_result('k', measured())", "constant"),
+        ("def measured():\n    acc = 0.95\n    return acc\nrecord_result('k', measured())", "constant"),
+        ("def measured():\n    return 0.95\nacc = measured()\nrecord_result('k', acc)", "constant"),
+        ("def a():\n    return 0.95\ndef b():\n    return a()\nrecord_result('k', b())", "constant"),
+        ("def measured(n):\n    return n\nrecord_result('k', measured(0.95))", "computed"),
+        ("def measured():\n    return evaluate()\nrecord_result('k', measured())", "computed"),
+        ("def measured():\n    if flag:\n        return 0.95\n    return evaluate()\n"
+         "record_result('k', measured())", "computed"),
+        ("def measured():\n    def inner():\n        return 0.95\n    return evaluate()\n"
+         "record_result('k', measured())", "computed"),
+        ("def measured():\n    yield 0.95\nrecord_result('k', next(measured()))", "computed"),
+        ("@cache\ndef measured():\n    return 0.95\nrecord_result('k', measured())", "computed"),
+        ("def measured():\n    return 0.95\ndef measured():\n    return evaluate()\n"
+         "record_result('k', measured())", "computed"),
+        ("def measured():\n    return 0.95\nmeasured = evaluate\nrecord_result('k', measured())", "computed"),
+        ("async def measured():\n    return 0.95\nrecord_result('k', measured())", "computed"),
+        ("def r():\n    return r()\nrecord_result('k', r())", "computed"),
+    ],
+)
+def test_a_literal_returned_by_a_defined_function_is_followed(body, kind):
+    assert list(classify_record_calls(body + "\n").values()) == [kind]
+
+
+@pytest.mark.parametrize(
+    ("body", "kind"),
+    [
+        # red team S18: the recording call reached through an alias
+        ("rr = record_result\nrr('k', 0.95)", "literal"),
+        ("rr = record_result\nr2 = rr\nr2('k', 0.95)", "literal"),
+        ("rr = record_result\nacc = 0.95\nrr('k', acc)", "constant"),
+        ("rr = record_result\nrr('k', evaluate())", "computed"),
+    ],
+)
+def test_a_recording_call_through_an_alias_is_classified(body, kind):
+    assert list(classify_record_calls(body + "\n").values()) == [kind]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "rr = record_result if flag else print\nrr('k', 0.95)",
+        "rr = record_result\nrr = print\nrr('k', 0.95)",
+    ],
+)
+def test_a_name_that_is_not_only_the_recording_call_is_no_alias(body):
+    assert classify_record_calls(body + "\n") == {}
 
 
 def test_a_scalar_passed_to_a_call_still_reads_as_constant():
@@ -839,7 +910,8 @@ def test_a_configured_value_is_recorded_as_a_setting_and_passes(config):
         "lr = 0.001\n"
         "steps = [lr * i for i in range(3)]\n"
         "record_setting('config.lr', lr)\n"
-        "correct, total = 408, 500\n"
+        "outcomes = [i % 5 != 0 for i in range(500)]\n"
+        "correct, total = sum(outcomes), len(outcomes)\n"
         "record_result('exp1.acc', correct / total, unit='ratio')\n"
     )
     report = run_gate1(src, config())
@@ -856,7 +928,7 @@ def test_the_writer_sees_the_settings_apart_from_the_results(config):
 
     src = (
         "record_metadata('seed', 0)\nlr = 0.001\nsteps = [lr * i for i in range(3)]\n"
-        "record_setting('config.lr', lr)\ncorrect, total = 408, 500\n"
+        "record_setting('config.lr', lr)\noutcomes = [i < 408 for i in range(500)]\ncorrect, total = sum(outcomes), len(outcomes)\n"
         "record_result('exp1.acc', correct / total, unit='ratio')\n"
     )
     bundle = build_evidence_bundle(run_gate1(src, config()))
@@ -873,7 +945,8 @@ def test_a_setting_the_run_never_reads_is_the_decoy(config):
         "lr = 0.001\n"
         "used = [0.01 * i for i in range(3)]\n"
         "record_setting('config.lr', lr)\n"
-        "correct, total = 408, 500\n"
+        "outcomes = [i % 5 != 0 for i in range(500)]\n"
+        "correct, total = sum(outcomes), len(outcomes)\n"
         "record_result('exp1.acc', correct / total + used[0], unit='ratio')\n"
     )
     report = run_gate1(src, config())

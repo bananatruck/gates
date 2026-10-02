@@ -27,7 +27,7 @@ from gates import llm  # noqa: E402
 LLM_SOURCE = Path(llm.__file__).read_text(encoding="utf-8")
 
 CLEAN = (
-    "correct, total = 408, 500\n"
+    "outcomes = [i < 408 for i in range(500)]\ncorrect, total = sum(outcomes), len(outcomes)\n"
     "acc = correct / total\n"
     "record_metadata('seed', 0)\n"
     "record_result('exp1.acc', acc, unit='ratio')\n"

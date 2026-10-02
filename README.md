@@ -168,7 +168,8 @@ The results contract:
 
 - `results.contract_present`, `results.expected_keys_present`.
 - `results.values_computed`: no metric value is a literal in the source.
-- `results.values_traced` warns when a value resolves to source literals once its variables are followed back to their bindings. `results.values_computed` reads only the call site, so `record_result("k", 0.816)` fails it and `acc = 0.816` then `record_result("k", acc)` passes it. This check follows the names. It warns instead of failing because a constant recorded on purpose, like a configured batch size, looks the same as a fabricated one until you know what the number means, and that is Gate 2's question.
+- `results.values_traced` fails when a value resolves to source literals once its variables are followed back to their bindings. `results.values_computed` reads only the call site, so `record_result("k", 0.816)` fails it and `acc = 0.816` then `record_result("k", acc)` passes it. This check follows the names, through containers and pure reducers (D73), flat tuple unpacking, functions the program defines once, and aliases of `record_result` (D101). It fails since D75: a configured value now has its own call, `record_setting`, so a constant recorded as a result is a fabrication.
+- `results.settings_declared` fails when a recorded setting is not in the config the plan phase fixed before the run, or carries another value (D100). Absent when the host fixed no config.
 - `results.values_finite`.
 - `results.declared_keys_only` warns on keys the plan never declared. `results.expected_keys_present` tests presence, not equality, so an experiment can meet its contract and record anything else too. When a scaffold prepends an earlier phase's code, the earlier keys arrive here and can satisfy a contract this run never met.
 - `results.single_observation` warns on a key recorded many times with changing values. Gate 1 keeps every call, so a metric written once per epoch arrives with its whole trajectory, and the report has to say whether it means the final value or the best one.
@@ -201,7 +202,7 @@ It has nothing to record, so its registry is empty, but the file exists and says
 Gate 1 answers one question: did this code run, and did these numbers come from this run?
 These are outside that question on purpose.
 
-- `results.values_computed` checks the call site for a literal. It does not prove a measurement. `results.values_traced` follows variable bindings, but a constant that passes through a function call, a loop, or a container the pass cannot evaluate comes out as computed. Neither check proves a number was not fabricated.
+- `results.values_computed` checks the call site for a literal. It does not prove a measurement. `results.values_traced` follows variable bindings, but a constant that passes through a loop, a function's parameters, or a container the pass cannot evaluate comes out as computed. Neither check proves a number was not fabricated.
 - Whether a value means anything scientifically is Gate 2's question. Gate 1 passes a correctly measured number that means nothing.
 - Whether the prose follows from the numbers is Gate 3's. In the campaign, the gated writer derived a scaling exponent from two points and called a single seeded dataset free of sampling variance. Gate 1 passed the run that produced them, correctly.
 - Gate 1 does not check task compliance. The gated code imported a fixture despite a NumPy-only instruction, and it ran, so Gate 1 passed it.
@@ -268,13 +269,13 @@ pip install -e ".[dev]" && pytest && ruff check .
 
 | Suite | Tests |
 |---|---:|
-| Gate 1: checks, loop, level-0 bypass | 245 |
+| Gate 1: checks, loop, level-0 bypass | 274 |
 | Gate 2: checks, loop, tier comparison | 138 |
 | Gate 3: checks, loop, model layer, scanner miss, arXiv resolver | 231 |
 | Model layer and log scanning | 149 |
 | Wiring, levels, setup, install skills, key handling | 106 |
-| Evaluation tooling and this status check | 272 |
-| **Total** | **1141** |
+| Evaluation tooling and this status check | 275 |
+| **Total** | **1173** |
 
 One test, the live arXiv lookup, is skipped unless `GATES_LIVE_ARXIV=1`.
 The suite runs with every socket refused, so no test can quietly depend on the network (D61 in `progress.md`).

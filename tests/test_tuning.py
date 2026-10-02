@@ -209,7 +209,7 @@ CRASH_AFTER_OUTPUT = (
 RECORDS = (
     "import random\nrandom.seed(0)\nrecord_metadata('seed', 0)\n"
     "for i in range(60):\n    print(f'epoch {i} loss 1.0')\n"
-    "correct, total = 408, 500\nacc = correct / total\nrecord_result('exp1.test_acc', acc, unit='ratio')\n"
+    "outcomes = [i < 408 for i in range(500)]\ncorrect, total = sum(outcomes), len(outcomes)\nacc = correct / total\nrecord_result('exp1.test_acc', acc, unit='ratio')\n"
 )
 
 

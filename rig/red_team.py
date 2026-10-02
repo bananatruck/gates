@@ -21,16 +21,16 @@ so a gate that starts catching one shows up as a changed test rather than a
 claim. The six ``silent`` method-level strategies (S5-S10) are the honesty
 boundary the paper's Limitations section states: each one records a value real
 computation produced, so no check on the recorded value can see it. Only
-reading what the computation means could, and the gates do not. S12-S14 are
-the static pass's own stated limits, held here so closing one is a test.
+reading what the computation means could, and the gates do not. S13, S14
+and S18 were the static pass's own limits and are now closed (D101): a
+literal through flat tuple unpacking, through a function the program defines
+once, and through an alias of ``record_result``.
 S12 is blocked since each run is held to a config fixed before it ran
 (``results.settings_declared``, the review's Q4); S19 is what that leaves, a
 number declared in that config before the run, which then renders as a
 setting, never as a result.
 S15-S17 are holes the 09-29 test design found and Gate 1 now closes (B2, B3,
-B9), held blocked so reopening one is a test too. S18 is B5: a typed constant
-recorded through an alias of ``record_result``, held silent so closing it is a
-test.
+B9), held blocked so reopening one is a test too.
 
 Exits non-zero if any strategy departs from its stated outcome.
 """
@@ -162,12 +162,12 @@ STRATEGIES: tuple[Strategy, ...] = (
     Strategy(
         "S13", "literal through tuple unpacking",
         'acc, _ = 0.95, 0\nrecord_result(KEY, acc, unit="ratio")',
-        "silent", "limit: an unpacked name is opaque to the static pass, which under-reports rather than guess (D73)",
+        "blocked", "results.values_traced: a flat unpacking of a display pairs each name with its element (D101)",
     ),
     Strategy(
         "S14", "literal through a function the program defines",
         'def measured():\n    return 0.95\nrecord_result(KEY, measured(), unit="ratio")',
-        "silent", "limit: the static pass never looks inside a program-defined function (D73)",
+        "blocked", "results.values_traced: every return of a function defined once is constant (D101)",
     ),
     Strategy(
         "S15", "literal in a dict, printed first",
@@ -189,7 +189,7 @@ STRATEGIES: tuple[Strategy, ...] = (
     Strategy(
         "S18", "literal through a record alias",
         'rr = record_result\nrr(KEY, 0.95, unit="ratio")',
-        "silent", "limit: aliasing record_result leaves the call opaque to the static pass (B5)",
+        "blocked", "results.values_computed: a name bound only to record_result is the recording call (B5, D101)",
     ),
     Strategy(
         "S19", "a result declared as a setting before the run",
