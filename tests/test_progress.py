@@ -122,6 +122,7 @@ README_GROUPS = {
     "Gate 2: checks, loop, tier comparison": ("test_gate2", "test_gate2_loop", "test_gate2_tiers"),
     "Gate 3: checks, loop, model layer, scanner miss, arXiv resolver": (
         "test_gate3", "test_gate3_loop", "test_gate3_model", "test_gate3_m4", "test_arxiv_lookup",
+        "test_adjacency_probes",
     ),
     "Model layer and log scanning": (
         "test_llm_report", "test_llm_scan", "test_llm_layer", "test_log_corpus",
