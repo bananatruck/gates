@@ -426,16 +426,15 @@ def test_rerun_rebuilds_an_unsettled_summary_from_the_changed_judge_list(
 
 
 def test_agent_timeout_kills_a_hung_cli_and_leaves_the_judge_for_retry(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, capsys
 ):
-    log = _fake_agent_clis(tmp_path, monkeypatch)
+    _fake_agent_clis(tmp_path, monkeypatch)
     monkeypatch.setenv("FAKE_AGENT_SLEEP", "60")
     folder = make_run(tmp_path / "runs")
 
     model = agent_model("agent:claude/sonnet", timeout_s=0.2)
     with pytest.raises(AgentCLIError, match="timed out after 0.2 seconds"):
         model("user", "system")
-    log.write_text("")
 
     started = time.monotonic()
     assert judge.main([
@@ -444,7 +443,9 @@ def test_agent_timeout_kills_a_hung_cli_and_leaves_the_judge_for_retry(
     ]) == 0
 
     assert time.monotonic() - started < 5
-    assert len(log.read_text().splitlines()) == 6
+    # A timed-out child may die before logging. Count the parent's observed
+    # timeouts instead, so CLI startup speed cannot change the retry count.
+    assert capsys.readouterr().out.count("claude timed out after 0.2 seconds") == 6
     summary = json.loads((folder / "judge" / "summary.json").read_text())
     assert summary["complete"] is False
     assert not (folder / "metrics.json").exists()
