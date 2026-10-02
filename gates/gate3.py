@@ -696,10 +696,9 @@ def _check_cited_papers_in_registry(
     )
 
 
-#: LaTeX's abstract environment. ``prose._heading`` deliberately does not see it
-#: (D40): presence is a different question from claim scanning, and teaching the
-#: scanner to read inside it would restate the published Gate 1 number. The
-#: unscanned abstract is G3-M4's to report, not this check's to close.
+#: LaTeX's abstract environment, which ``prose._heading`` does not see. It
+#: satisfies a declared "abstract" here (D40); the claim scanner reads it
+#: through ``prose.findings_lines`` since D104.
 _ABSTRACT_ENV = re.compile(r"\\begin\{abstract\}")
 
 
