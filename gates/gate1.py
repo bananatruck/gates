@@ -223,6 +223,7 @@ def run_gate1(
                 _check_values_traced(execution),
                 _check_values_finite(execution),
                 _check_single_observation(execution),
+                _check_no_selection(execution, source),
                 _check_non_degenerate(execution, config),
             ]
         )
@@ -856,6 +857,43 @@ def _check_single_observation(execution: ExecutionRecord) -> CheckResult:
             + " — the registry holds the last call, not the best one"
         ),
         evidence={"varied": rows},
+    )
+
+
+def _check_no_selection(execution: ExecutionRecord, source: str) -> CheckResult:
+    """A recorded result picked from several, or drawn at random (S5, S7-S9).
+
+    The best epoch, the best seed, the mean after dropping the worst seed: each
+    records a number real computation produced, so no check on the value can
+    object (the 09-29 review's issue 1). The source still shows the pick.
+
+    A warning, never a failure: the maximum over validation scores that chose
+    a model is honest and looks the same as the maximum over test scores. It
+    reaches the writer as something the paper must state.
+    """
+    try:
+        selected = static_checks.find_selected_record_values(source)
+    except SyntaxError:
+        selected = {}
+    rows = [
+        {"key": m.key, "lineno": m.lineno, "reason": selected[m.lineno]}
+        for m in execution.metrics.values()
+        if m.lineno in selected
+    ]
+    return CheckResult(
+        id="results.no_selection",
+        passed=not rows,
+        severity=Severity.WARN,
+        message=(
+            "no recorded result is picked from several values or drawn at random"
+            if not rows
+            else (
+                f"{len(rows)} recorded result(s) picked from several values or "
+                f"drawn at random: "
+                + "; ".join(f"{r['key']} ({r['reason']})" for r in rows)
+            )
+        ),
+        evidence={"selected": rows},
     )
 
 

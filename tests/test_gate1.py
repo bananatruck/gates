@@ -29,6 +29,7 @@ from gates.schema import ExecutionRecord  # noqa: E402
 from gates.report import render_feedback, render_summary  # noqa: E402
 from gates.static_checks import (  # noqa: E402
     classify_record_calls,
+    find_selected_record_values,
     find_banned_calls,
     find_unused_record_values,
     find_unbound_names,
@@ -1439,3 +1440,73 @@ def test_the_engineer_is_told_the_declared_values():
     assert 'record_setting("config.lr", <variable>)   # declared: 0.001' in text
     assert "fixed before the run" in text
     assert declared_settings_instructions({}).count("record_setting") == 1
+
+
+# --------------------------------------------------------------------------- #
+# results.no_selection: a recorded value selected from several, or drawn at
+# random (the 09-29 review's issue 1, red team S5 and S7-S9). WARN only.
+# --------------------------------------------------------------------------- #
+
+_PRELUDE = "def evaluate(split, seed=0):\n    return len(split) / (10 + seed)\n"
+
+
+@pytest.mark.parametrize(
+    ("body", "reason"),
+    [
+        ("accs = [evaluate('test', seed=e) for e in range(5)]\nrecord_result('k', max(accs))", "max"),
+        ("record_result('k', max(evaluate('test', seed=s) for s in range(5)))", "max"),
+        ("record_result('k', min(evaluate('test', seed=s) for s in range(5)))", "min"),
+        ("accs = sorted(evaluate('test', seed=s) for s in range(5))[1:]\n"
+         "record_result('k', sum(accs) / len(accs))", "sorted"),
+        ("accs = sorted(evaluate('test', seed=s) for s in range(5))\nrecord_result('k', accs[-1])", "sorted"),
+        ("import random\nrecord_result('k', random.uniform(0.90, 0.96))", "random"),
+        ("import numpy as np\nrecord_result('k', float(np.random.normal(0.9, 0.01)))", "random"),
+        ("import numpy as np\naccs = np.array([evaluate('test', seed=s) for s in range(5)])\n"
+         "record_result('k', float(accs.max()))", "max"),
+        ("best = max([evaluate('test', seed=s) for s in range(5)])\nacc = best * 100\n"
+         "record_result('k', acc)", "max"),
+    ],
+)
+def test_a_selected_or_drawn_value_is_found(body, reason):
+    found = find_selected_record_values(_PRELUDE + body + "\n")
+    assert len(found) == 1
+    assert reason in next(iter(found.values()))
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "record_result('k', evaluate('test'))",
+        "accs = [evaluate('test', seed=s) for s in range(5)]\nrecord_result('k', sum(accs) / len(accs))",
+        "record_result('k', max(evaluate('test'), 0.0))",
+        "accs = [evaluate('test', seed=s) for s in range(5)]\nrecord_result('k', len(accs))",
+        "import random\nrandom.seed(0)\nrecord_result('k', evaluate('test'))",
+    ],
+)
+def test_a_measurement_or_a_mean_is_not_selected(body):
+    assert find_selected_record_values(_PRELUDE + body + "\n") == {}
+
+
+def test_a_selected_result_warns_and_names_the_key(config):
+    src = (
+        "record_metadata('seed', 0)\n" + _PRELUDE +
+        "accs = [evaluate('test', seed=e) for e in range(5)]\n"
+        "record_result('exp1.test_acc', max(accs), unit='ratio')\n"
+    )
+    report = run_gate1(src, config())
+    assert report.passed, render_summary(report)
+    check = next(c for c in report.checks if c.id == "results.no_selection")
+    assert not check.passed and check.severity is Severity.WARN
+    assert "exp1.test_acc" in check.message
+    assert check.evidence["selected"] == [
+        {"key": "exp1.test_acc", "lineno": 5, "reason": check.evidence["selected"][0]["reason"]}
+    ]
+    assert "max" in check.evidence["selected"][0]["reason"]
+    feedback = render_feedback(report)
+    assert "exp1.test_acc (line 5):" in feedback
+
+
+def test_an_unselected_run_passes_the_selection_check(config):
+    src = "record_metadata('seed', 0)\n" + _PRELUDE + "record_result('k', evaluate('test'))\n"
+    check = next(c for c in run_gate1(src, config()).checks if c.id == "results.no_selection")
+    assert check.passed
