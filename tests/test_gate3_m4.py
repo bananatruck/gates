@@ -41,21 +41,22 @@ def test_the_measured_totals_are_the_ones_the_paper_will_quote(results):
     false_positives = sum(len(results[a].false_positives) for a in ARMS)
 
     # D48 measured 34 of 49 with 6 false positives while a \ref skipped its
-    # whole line; D76 masks the reference instead and recovers all 12 of those.
-    assert (claims, detected, missed) == (49, 46, 3)
-    assert false_positives == 8
-    assert results["gated"].claims == 39 and results["gated"].detected == 36
+    # whole line; D76 masks the reference instead and recovers all 12 of those;
+    # D104 gives a repeat on one line its own context (47) and reads the
+    # ungated abstract, whose one new number is ln 3, a false positive; the
+    # thresholds stated twice on lines 305 and 320 count twice each (13).
+    assert (claims, detected, missed) == (49, 47, 2)
+    assert false_positives == 13
+    assert results["gated"].claims == 39 and results["gated"].detected == 37
     assert results["ungated"].claims == 10 and results["ungated"].detected == 10
 
 
 def test_no_miss_is_a_skipped_line_any_more(results):
     """D48: 12 of 15 misses came from one line-level rule. D76 removed the rule
     for references and citations, so what is left is the scanner's by design:
-    small integers and a value repeated on one line."""
+    small integers. D104 gave a value repeated on one line its own context."""
     causes = [f.cause for a in ARMS for f in results[a].missed]
-    assert causes.count("skipped_line") == 0
-    assert causes.count("small_integer") == 2
-    assert causes.count("duplicate_context") == 1
+    assert causes == ["small_integer", "small_integer"]
 
 
 def test_every_miss_carries_an_explanation(results):
@@ -66,22 +67,13 @@ def test_every_miss_carries_an_explanation(results):
             assert finding.cause in labels.CAUSES, finding
 
 
-def test_an_unreadable_findings_section_is_reported_not_ignored(results):
-    """D40 leaves \\begin{abstract} unscanned. The ungated paper uses it, so the
-    measurement must say the section was unreachable. Reporting it as a section
-    that made no claims would be the defect this project exists to catch."""
-    assert results["ungated"].sections_invisible
-    assert "begin{abstract}" in results["ungated"].sections_invisible[0]
-    # The gated paper writes \section{Abstract}, so it has nothing unreadable.
-    assert results["gated"].sections_invisible == []
-
-
-def test_the_ungated_abstract_costs_no_claims_on_this_corpus(results):
-    """Honest scoping. The unreadable abstract is a real gap, and on this
-    manuscript it hides nothing, because the ungated run recorded no metrics and
-    its abstract states none. The readout must not imply otherwise."""
-    assert not any(
-        f.cause == "invisible_section" for f in results["ungated"].missed
+def test_the_abstract_environment_is_scanned(results):
+    """D104: the ungated paper writes \\begin{abstract}, which D40 left unread.
+    It is a findings section now, and on this corpus it adds no claim: its one
+    number is ln 3, labelled a false positive."""
+    assert "abstract" in results["ungated"].sections_scanned
+    assert (19, "1.0986", "mathematical constant: ln 3, arithmetic, not a measurement") in (
+        results["ungated"].false_positives
     )
 
 

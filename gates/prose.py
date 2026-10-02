@@ -23,6 +23,12 @@ references and citations per token instead of skipping their lines, and
 re-measures both numbers it restates: G3-M4 from 34 to 46 of 49, and Gate 1
 traceability on the 08-15 campaign's gated paper from 28 of 29 claims to 34 of
 37. The signed package keeps its vintage.
+
+D104 reads LaTeX's abstract environment as the abstract, and gives each repeat
+of a value on one line its own context, after both level 3 manuscripts of
+waves 2-3 turned out to write ``\\begin{abstract}``: a number typed there
+passed Gate 3 unread. Re-measured: G3-M4 47 of 49, and Gate 1 traceability
+on the 08-15 gated paper 35 of 38 (ungated 15 of 22, archived 0 of 69).
 """
 
 from __future__ import annotations
@@ -133,6 +139,12 @@ def _heading(line: str) -> str | None:
     return None
 
 
+#: LaTeX's abstract environment. ``_heading`` does not see it, so the line
+#: walk below does: it is the abstract, a findings section (D104).
+_ABSTRACT_BEGIN = re.compile(r"\\begin\{abstract\}")
+_ABSTRACT_END = re.compile(r"\\end\{abstract\}")
+
+
 def claim_sections(paper_text: str) -> list[str]:
     """Which findings-bearing sections the scanner actually reached.
 
@@ -145,7 +157,62 @@ def claim_sections(paper_text: str) -> list[str]:
         section = _heading(line)
         if section and any(s in section for s in CLAIM_SECTIONS):
             found.append(section)
+        elif _ABSTRACT_BEGIN.search(line):
+            found.append("abstract")
     return found
+
+
+def findings_lines(paper_text: str) -> list[tuple[int, str, str]]:
+    """``(line number, section, text)`` for every line of a findings section.
+
+    A ``\\begin{abstract}`` block is the abstract (D104). Until D104 the
+    walk followed headings only, so an abstract written as an environment was
+    never read, and a number typed there passed Gate 3. Text on the
+    environment's own begin and end lines is kept; the markers are not.
+    """
+    out: list[tuple[int, str, str]] = []
+    section = "preamble"
+    in_abstract = False
+    for number, line in enumerate(paper_text.splitlines(), 1):
+        heading = _heading(line)
+        if heading is not None:
+            section = heading
+            continue
+        text = line
+        begin = _ABSTRACT_BEGIN.search(text)
+        if begin:
+            in_abstract = True
+            text = text[begin.end():]
+        end = _ABSTRACT_END.search(text) if in_abstract else None
+        if end:
+            text = text[: end.start()]
+        current = "abstract" if in_abstract else section
+        if end:
+            in_abstract = False
+        if any(s in current for s in CLAIM_SECTIONS) and text.strip():
+            out.append((number, current, text))
+    return out
+
+
+def line_claim_tokens(line: str) -> list[tuple[str, str]]:
+    """``(token, context)`` for each claim on one line, as the scanner reads it.
+
+    Each occurrence gets the words around its own position, so a value stated
+    twice on one line is two claims (D104); ``line.find`` used to give every
+    repeat the first one's context, and the repeat was deduplicated away.
+    """
+    text = scannable(line)
+    if text is None:
+        return []
+    out: list[tuple[str, str]] = []
+    for match in NUMBER.finditer(text):
+        token = match.group(1)
+        if not is_claim(token):
+            continue
+        pair = (token, _context_at(text, match.start(), match.end()))
+        if pair not in out:
+            out.append(pair)
+    return out
 
 
 def flags_claim(line: str) -> bool:
@@ -175,32 +242,22 @@ def sections(paper_text: str) -> list[tuple[str, str]]:
 def extract_claims(paper_text: str) -> list[Claim]:
     """Numeric claims in the sections where a paper states its findings."""
     claims: list[Claim] = []
-    section = "preamble"
     seen: set[tuple[str, str]] = set()
-    for line in paper_text.splitlines():
-        heading = _heading(line)
-        if heading is not None:
-            section = heading
-            continue
-        if not any(s in section for s in CLAIM_SECTIONS):
-            continue
-        line = scannable(line)
-        if line is None:
-            continue
-        for token in NUMBER.findall(line):
-            if not is_claim(token):
-                continue
-            value = float(token)
-            context = context_of(line, token)
+    for _, _, text in findings_lines(paper_text):
+        for token, context in line_claim_tokens(text):
             if (token, context) in seen:
                 continue
             seen.add((token, context))
-            claims.append(Claim(value=value, context=context))
+            claims.append(Claim(value=float(token), context=context))
     return claims
 
 
 def context_of(line: str, token: str) -> str:
-    """The words around a number, for a report a human has to read."""
+    """The words around a number's first occurrence, for a human to read."""
     i = line.find(token)
-    raw = line[max(0, i - 60) : i + len(token) + 30]
+    return _context_at(line, i, i + len(token))
+
+
+def _context_at(line: str, start: int, end: int) -> str:
+    raw = line[max(0, start - 60) : end + 30]
     return " ".join(re.sub(r"\\[a-zA-Z]+|[{}$\\]", " ", raw).split())

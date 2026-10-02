@@ -9,4 +9,4 @@ g2b_detect,Gate 2 tier B,Plan divergences caught,,12,12,yes,rig/gate2_tier_b_eva
 g2b_fpr,Gate 2 tier B,Divergence false alarms,,0,17,yes,rig/gate2_tier_b_eval.py
 g2b_trace,Gate 2 tier B,Unverifiable fields flagged,,6,6,yes,rig/gate2_tier_b_eval.py
 g2b_trace_fpr,Gate 2 tier B,Traceability false alarms,,0,23,yes,rig/gate2_tier_b_eval.py
-g3_detect,Gate 3,Typed result literals detected,,46,49,no,rig/gate3_scanner_miss.py (two manuscripts: no interval, D39)
+g3_detect,Gate 3,Typed result literals detected,,47,49,no,rig/gate3_scanner_miss.py (two manuscripts: no interval, D39)
