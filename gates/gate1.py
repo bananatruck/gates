@@ -9,9 +9,13 @@ No model is consulted. The runtime already knows.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from . import llm_report, llm_scan, log_checks, static_checks
 from .llm import (
@@ -20,6 +24,7 @@ from .llm import (
     ModelFn,
     ModelLayer,
 )
+from .errors import GateError
 from .registry import write_registry
 from .runner import DEFAULT_TIMEOUT_S, code_sha256, run_experiment
 from .schema import (
@@ -75,6 +80,28 @@ class Gate1Config:
     consult_model: ModelFn | None = None
     model_timeout_s: float = DEFAULT_MODEL_TIMEOUT_S
     max_prompt_chars: int = DEFAULT_MAX_PROMPT_CHARS
+    #: The settings the run was configured with, fixed before it executed
+    #: (the 09-29 review's Q4). When given, every ``record_setting`` key must
+    #: be declared here with the value the run records, so a setting cannot be
+    #: a number the run produced. ``None`` means no config was fixed, and
+    #: ``results.settings_declared`` is absent rather than green.
+    declared_settings: Mapping[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        if self.declared_settings is None:
+            return
+        for key, value in self.declared_settings.items():
+            if not isinstance(key, str) or not isinstance(value, (bool, int, float, str)):
+                raise GateError(
+                    f"declared setting {key!r} must map a string key to a number, "
+                    f"string or bool, not {type(value).__name__}"
+                )
+            if isinstance(value, float) and not math.isfinite(value):
+                raise GateError(f"declared setting {key!r} is {value}, not a finite number")
+        # Copied, so the config the run is checked against is the one it was
+        # given, whatever the caller does with its own dict later. A plain dict
+        # rather than a read-only view, because the host pickles its state.
+        self.declared_settings = dict(self.declared_settings)
 
     def attempt_dir(self, attempt: int) -> Path:
         return Path(self.artifact_root) / "gate1" / f"attempt_{attempt:02d}"
@@ -201,6 +228,8 @@ def run_gate1(
         )
     if execution.settings:
         checks.append(_check_setting_single_value(execution))
+        if config.declared_settings is not None:
+            checks.append(_check_settings_declared(execution, config.declared_settings))
     checks.append(_check_untruncated(execution))
     guard = _check_parent_guard(execution)
     if guard is not None:
@@ -874,6 +903,66 @@ def _check_setting_single_value(execution: ExecutionRecord) -> CheckResult:
             )
         ),
         evidence={"varied": rows},
+    )
+
+
+def declared_settings_sha256(declared: Mapping[str, Any]) -> str:
+    """The hash a run's evidence records for the config it was checked against."""
+    text = json.dumps(dict(declared), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _same_setting(recorded: Any, declared: Any) -> bool:
+    """Numbers agree by value, a bool only with a bool, a string only exactly."""
+    if isinstance(recorded, bool) or isinstance(declared, bool):
+        return type(recorded) is type(declared) and recorded == declared
+    if isinstance(recorded, (int, float)) and isinstance(declared, (int, float)):
+        return float(recorded) == float(declared)
+    return type(recorded) is type(declared) and recorded == declared
+
+
+def _check_settings_declared(
+    execution: ExecutionRecord, declared: Mapping[str, Any]
+) -> CheckResult:
+    """Every recorded setting was declared, with that value, before the run (Q4).
+
+    ``record_setting`` is the agent's word that a number configured the run
+    (D75), and Gate 3 renders it as configuration. Without a config fixed
+    beforehand, a measured or invented result could be recorded as a setting
+    and cited as one (red team S12). With one, a setting can only be a value
+    that existed before the run did.
+
+    It fails rather than warns because the fix is the agent's own: record the
+    declared value, or leave an undeclared number out of the registry. It does
+    not fail a declared key the run never records; whether the run honoured
+    each declared setting is Gate 2 tier B's question.
+    """
+    undeclared, mismatched = [], []
+    for key, setting in sorted(execution.settings.items()):
+        if key not in declared:
+            undeclared.append({"key": key, "recorded": setting.value})
+        elif not _same_setting(setting.value, declared[key]):
+            mismatched.append(
+                {"key": key, "recorded": setting.value, "declared": declared[key]}
+            )
+    bad = [row["key"] for row in undeclared + mismatched]
+    return CheckResult(
+        id="results.settings_declared",
+        passed=not bad,
+        severity=Severity.FAIL,
+        message=(
+            f"every recorded setting matches the {len(declared)} declared before the run"
+            if not bad
+            else (
+                f"{len(bad)} setting(s) differ from the config fixed before the "
+                f"run: {', '.join(bad)}"
+            )
+        ),
+        evidence={
+            "undeclared": undeclared,
+            "mismatched": mismatched,
+            "declared_sha256": declared_settings_sha256(declared),
+        },
     )
 
 

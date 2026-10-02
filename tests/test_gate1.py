@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from gates import (  # noqa: E402
     Gate1Config,
+    GateError,
     GateFailure,
     Ledger,
     Severity,
@@ -950,6 +951,123 @@ def test_a_run_with_no_setting_emits_no_setting_check(config):
     assert "results.setting_single_value" not in {c.id for c in report.checks}
 
 
+_CONFIGURED = (
+    "record_metadata('seed', 0)\n"
+    "lr = {lr}\n"
+    "record_setting({key}, lr)\n"
+    "record_result('exp1.acc', sum(lr * e for e in range(3)) + 0.5)\n"
+)
+
+
+def _settings_check(report):
+    return next(c for c in report.checks if c.id == "results.settings_declared")
+
+
+def test_a_setting_the_config_never_declared_fails(config):
+    """The 09-29 review's Q4: a result recorded as a setting (red team S12) is refused."""
+    src = (
+        "record_metadata('seed', 0)\n"
+        "record_setting('exp1.test_acc', 0.95)\n"
+        "record_result('exp1.loss', len('abc') / 4)\n"
+    )
+    report = run_gate1(src, config(declared_settings={"config.lr": 0.001}))
+    assert not report.passed
+    check = _settings_check(report)
+    assert not check.passed and check.severity is Severity.FAIL
+    assert "exp1.test_acc" in check.message
+    assert check.evidence["undeclared"] == [{"key": "exp1.test_acc", "recorded": 0.95}]
+    assert check.evidence["mismatched"] == []
+    feedback = render_feedback(report)
+    assert "exp1.test_acc: recorded 0.95, never declared" in feedback
+    assert "fixed before the run" in feedback
+
+
+def test_a_declared_setting_recorded_with_its_value_passes(config):
+    report = run_gate1(
+        _CONFIGURED.format(lr="0.001", key="'config.lr'"),
+        config(declared_settings={"config.lr": 0.001, "config.epochs": 3}),
+    )
+    assert report.passed, render_summary(report)
+    check = _settings_check(report)
+    assert check.passed
+    assert check.evidence["declared_sha256"] == gate1.declared_settings_sha256(
+        {"config.lr": 0.001, "config.epochs": 3}
+    )
+
+
+def test_a_setting_recorded_with_another_value_than_declared_fails(config):
+    report = run_gate1(
+        _CONFIGURED.format(lr="0.01", key="'config.lr'"),
+        config(declared_settings={"config.lr": 0.001}),
+    )
+    check = _settings_check(report)
+    assert not check.passed
+    assert check.evidence["mismatched"] == [
+        {"key": "config.lr", "recorded": 0.01, "declared": 0.001}
+    ]
+    assert "config.lr: recorded 0.01, declared 0.001" in render_feedback(report)
+
+
+@pytest.mark.parametrize(
+    ("declared", "recorded", "agrees"),
+    [
+        (3, "3.0", True),
+        (0.001, "1e-3", True),
+        ("adam", "'adam'", True),
+        (True, "True", True),
+        (True, "1", False),
+        (1, "True", False),
+        ("3", "3", False),
+        (0.1, "0.1 + 1e-12", False),
+    ],
+)
+def test_a_declared_value_agrees_by_number_or_exact_string(config, declared, recorded, agrees):
+    """Numbers compare by value; a bool is never a number; a string never equals a number."""
+    src = (
+        "record_metadata('seed', 0)\n"
+        f"v = {recorded}\n"
+        "record_setting('config.x', v)\n"
+        "record_result('exp1.acc', len(str(v)) / 10)\n"
+    )
+    report = run_gate1(src, config(declared_settings={"config.x": declared}))
+    assert _settings_check(report).passed is agrees
+
+
+def test_a_declared_config_must_hold_plain_values(config):
+    with pytest.raises(GateError, match="config.lr"):
+        Gate1Config(declared_settings={"config.lr": [0.1, 0.01]})
+    with pytest.raises(GateError, match="nan"):
+        Gate1Config(declared_settings={"config.lr": float("nan")})
+
+
+def test_a_declared_config_survives_the_hosts_pickled_state_save(tmp_path):
+    """Agent Laboratory pickles the whole lab after each phase (``save_state``)."""
+    import copy
+    import pickle
+
+    declared = {"config.lr": 0.001}
+    cfg = Gate1Config(artifact_root=str(tmp_path), declared_settings=declared)
+    declared["config.lr"] = 0.1
+    assert cfg.declared_settings == {"config.lr": 0.001}
+    assert pickle.loads(pickle.dumps(cfg)).declared_settings == {"config.lr": 0.001}
+    assert copy.deepcopy(cfg).declared_settings == {"config.lr": 0.001}
+
+
+def test_with_no_declared_config_the_check_is_absent(config):
+    """No input, no check: a host that fixed no config gets no settings_declared row."""
+    report = run_gate1(_CONFIGURED.format(lr="0.001", key="'config.lr'"), config())
+    assert report.passed
+    assert "results.settings_declared" not in {c.id for c in report.checks}
+
+
+def test_a_declared_config_with_no_setting_recorded_emits_no_check(config):
+    report = run_gate1(
+        "record_metadata('seed', 0)\nrecord_result('k', len('abc') / 4)\n",
+        config(declared_settings={"config.lr": 0.001}),
+    )
+    assert "results.settings_declared" not in {c.id for c in report.checks}
+
+
 def test_a_redefined_record_setting_is_caught(config):
     src = "def record_setting(k, v):\n    print(k, v)\nrecord_setting('config.lr', 0.1)\n"
     report = run_gate1(src, config())
@@ -1175,3 +1293,76 @@ def test_a_local_variable_named_similarly_is_not_flagged(config):
         "record_result('exp1.acc', v * 2)\n"
     )
     assert run_gate1(src, config()).passed
+
+
+# --------------------------------------------------------------------------- #
+# the adapter's half of Q4: a config the agent declares in the plan phase,
+# frozen before Gate 1 runs
+# --------------------------------------------------------------------------- #
+
+
+def test_the_plan_phase_settings_block_is_parsed():
+    from gates.adapters.agentlab import parse_declared_settings
+
+    reply = (
+        "```PLAN\nTrain a CNN.\n```\n"
+        '```SETTINGS\n{"config.lr": 0.001, "config.optimizer": "adam", "config.augment": true}\n```\n'
+    )
+    settings, problems = parse_declared_settings(reply)
+    assert settings == {"config.lr": 0.001, "config.optimizer": "adam", "config.augment": True}
+    assert problems == []
+
+
+@pytest.mark.parametrize(
+    ("reply", "problem"),
+    [
+        ("```PLAN\nTrain a CNN.\n```\n", "no SETTINGS block"),
+        ("```SETTINGS\nlr = 0.001\n```\n", "not a JSON object"),
+        ('```SETTINGS\n[0.001]\n```\n', "not a JSON object"),
+        ('```SETTINGS\n{"config.lrs": [0.1, 0.01]}\n```\n', "config.lrs"),
+        ('```SETTINGS\n{"bad key!": 1}\n```\n', "bad key!"),
+        ('```SETTINGS\n{"config.lr": NaN}\n```\n', "config.lr"),
+    ],
+)
+def test_a_missing_or_bad_settings_block_declares_nothing_and_says_why(reply, problem):
+    """Fail safe: a config that cannot be read declares no setting, so none can pass."""
+    from gates.adapters.agentlab import parse_declared_settings
+
+    settings, problems = parse_declared_settings(reply)
+    assert settings == {}
+    assert any(problem in p for p in problems), problems
+
+
+def test_declared_settings_freeze_before_gate_1_and_never_after(tmp_path):
+    from gates.adapters.agentlab import (
+        freeze_declared_settings,
+        load_declared_settings,
+        make_context,
+    )
+
+    assert load_declared_settings(str(tmp_path)) is None
+    path = freeze_declared_settings(str(tmp_path), {"config.lr": 0.001}, [])
+    assert json.loads(Path(path).read_text()) == {
+        "settings": {"config.lr": 0.001},
+        "problems": [],
+        "sha256": gate1.declared_settings_sha256({"config.lr": 0.001}),
+    }
+    # The plan phase may repeat before any experiment runs.
+    freeze_declared_settings(str(tmp_path), {"config.lr": 0.01}, [])
+    assert load_declared_settings(str(tmp_path)) == {"config.lr": 0.01}
+
+    ctx = make_context(research_dir=str(tmp_path), declared_settings={"config.lr": 0.01})
+    assert dict(ctx.config.declared_settings) == {"config.lr": 0.01}
+    run_gate1("record_metadata('seed', 0)\nrecord_result('k', len('ab') / 4)\n", ctx.config)
+    with pytest.raises(GateError, match="Gate 1 has already run"):
+        freeze_declared_settings(str(tmp_path), {"config.lr": 0.1}, [])
+    assert load_declared_settings(str(tmp_path)) == {"config.lr": 0.01}
+
+
+def test_the_engineer_is_told_the_declared_values():
+    from gates.adapters.agentlab import declared_settings_instructions
+
+    text = declared_settings_instructions({"config.lr": 0.001, "config.optimizer": "adam"})
+    assert 'record_setting("config.lr", <variable>)   # declared: 0.001' in text
+    assert "fixed before the run" in text
+    assert declared_settings_instructions({}).count("record_setting") == 1

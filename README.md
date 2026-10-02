@@ -268,13 +268,13 @@ pip install -e ".[dev]" && pytest && ruff check .
 
 | Suite | Tests |
 |---|---:|
-| Gate 1: checks, loop, level-0 bypass | 220 |
+| Gate 1: checks, loop, level-0 bypass | 245 |
 | Gate 2: checks, loop, tier comparison | 138 |
 | Gate 3: checks, loop, model layer, scanner miss, arXiv resolver | 231 |
-| Model layer and log scanning | 148 |
-| Wiring, levels, setup, install skills, key handling | 101 |
-| Evaluation tooling and this status check | 270 |
-| **Total** | **1108** |
+| Model layer and log scanning | 149 |
+| Wiring, levels, setup, install skills, key handling | 106 |
+| Evaluation tooling and this status check | 272 |
+| **Total** | **1141** |
 
 One test, the live arXiv lookup, is skipped unless `GATES_LIVE_ARXIV=1`.
 The suite runs with every socket refused, so no test can quietly depend on the network (D61 in `progress.md`).
