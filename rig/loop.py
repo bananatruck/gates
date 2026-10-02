@@ -215,6 +215,7 @@ def run_loop(
         num_classes=scenario.num_classes,
         task_ref=scenario.summary,
         consult_model=consult_model,
+        declared_settings=scenario.declared_settings,
     )
     outcome = LoopOutcome(
         scenario=scenario.name,

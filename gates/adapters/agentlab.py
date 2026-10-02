@@ -16,6 +16,7 @@ the host has one module to import from.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 from pathlib import Path
@@ -59,12 +60,17 @@ def make_context(
     reward_model: str | None = None,
     task_ref: str | None = None,
     consult_model: Any = None,
+    declared_settings: dict[str, Any] | None = None,
 ) -> GateContext:
     """Build the gate context for one solver phase.
 
     ``task_ref`` is the plan or task text the experiment implements. Passing it
     closes the first link of each value's provenance chain; omitting it leaves
     that link recorded as unresolved rather than assumed.
+
+    ``declared_settings`` is the config the plan phase fixed, read back with
+    ``load_declared_settings``. Given, Gate 1 fails any setting the run records
+    that it does not declare with that value (``results.settings_declared``).
     """
     artifact_root = os.path.join(research_dir, "gate_artifacts")
     config = Gate1Config(
@@ -80,6 +86,7 @@ def make_context(
         # inference.query_model; absent one, the gate issues the same verdict and
         # falls back to the deterministic feedback template.
         consult_model=consult_model,
+        declared_settings=declared_settings,
     )
     return GateContext(
         config=config,
@@ -233,6 +240,111 @@ def plan_field_instructions(fields: tuple[PlanField, ...]) -> str:
     lines += [
         "",
         "The paper writer cites a recorded setting as \\setting{<key>}, never as \\result{}.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+#: What the plan phase is asked for beside its plan (the 09-29 review's Q4).
+DECLARED_SETTINGS_PROMPT = """Beside the plan, declare every setting the experiment will be configured
+with, in a separate block, as one JSON object of numbers, strings and true/false:
+```SETTINGS
+{"config.learning_rate": 0.001, "config.epochs": 10, "config.optimizer": "adam"}
+```
+Declare each row of a sweep under its own key, such as "exp1.lam0.5.lam": 0.5.
+This config is fixed before any experiment runs. The experiment may record only
+these settings, with these values, and the paper cites only these as settings.
+"""
+
+_SETTINGS_BLOCK = re.compile(r"```SETTINGS[ \t]*\n(.*?)```", re.DOTALL)
+_SETTING_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*")
+_DECLARED_FILE = "declared_settings.json"
+
+
+def parse_declared_settings(reply: str) -> tuple[dict[str, Any], list[str]]:
+    """The config a plan-phase reply declares, and why any of it was refused.
+
+    Fails safe: a missing block, one that is not a JSON object, or one with
+    any entry that is not a dotted key mapped to a finite number, string or
+    bool declares nothing at all. An empty config then fails every setting the
+    run records, rather than a partial one quietly letting the rest through.
+    """
+    blocks = _SETTINGS_BLOCK.findall(reply or "")
+    if not blocks:
+        return {}, ["the plan phase gave no SETTINGS block"]
+    try:
+        data = json.loads(blocks[-1])
+    except ValueError as error:
+        return {}, [f"the SETTINGS block is not a JSON object: {error}"]
+    if not isinstance(data, dict):
+        return {}, ["the SETTINGS block is not a JSON object"]
+    problems = []
+    for key, value in data.items():
+        if not _SETTING_KEY.fullmatch(key):
+            problems.append(f"{key!r} is not a dotted setting key")
+        elif not isinstance(value, (bool, int, float, str)):
+            problems.append(f"{key!r} is {type(value).__name__}, not a number, string or bool")
+        elif isinstance(value, float) and not math.isfinite(value):
+            problems.append(f"{key!r} is {value}, not a finite number")
+    return ({}, problems) if problems else (data, [])
+
+
+def _declared_path(research_dir: str) -> Path:
+    return Path(research_dir) / "gate_artifacts" / _DECLARED_FILE
+
+
+def freeze_declared_settings(
+    research_dir: str, settings: dict[str, Any], problems: list[str]
+) -> str:
+    """Write the config Gate 1 will hold the run to, before Gate 1 runs.
+
+    The plan phase may repeat and rewrite it, but once any Gate 1 attempt
+    exists the config is fixed: rewriting it then would let a setting follow
+    the results, which is what declaring it beforehand exists to prevent.
+    """
+    path = _declared_path(research_dir)
+    if (path.parent / "gate1").exists():
+        raise GateError(
+            "Gate 1 has already run in this research directory, so its declared "
+            f"settings are fixed: {path}"
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    from ..gate1 import declared_settings_sha256
+
+    record = {
+        "settings": settings,
+        "problems": problems,
+        "sha256": declared_settings_sha256(settings),
+    }
+    path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return str(path)
+
+
+def load_declared_settings(research_dir: str) -> dict[str, Any] | None:
+    """The frozen config, or None when the plan phase fixed none."""
+    path = _declared_path(research_dir)
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))["settings"]
+
+
+def declared_settings_instructions(settings: dict[str, Any]) -> str:
+    """The engineer's half of Q4: the settings it may record, with their values."""
+    lines = ["============= DECLARED SETTINGS (FIXED) =============="]
+    if not settings:
+        lines += [
+            "The config fixed before the run declares no setting, so call no",
+            "record_setting. State configuration in the paper's methods instead.",
+        ]
+        return "\n".join(lines) + "\n"
+    lines += [
+        "These settings were fixed before the run. Record each with record_setting,",
+        "passing the variable your code uses, with exactly the declared value.",
+        "Record no other setting; a number the run produces is a result:",
+        "",
+    ]
+    lines += [
+        f'    record_setting("{key}", <variable>)   # declared: {value!r}'
+        for key, value in settings.items()
     ]
     return "\n".join(lines) + "\n"
 

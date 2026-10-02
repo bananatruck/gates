@@ -40,7 +40,7 @@ UNBOUND = (
 NO_CONTRACT = "print('Final test accuracy: 0.8160')\n"
 
 CLEAN = (
-    "correct, total = 408, 500\n"
+    "outcomes = [i < 408 for i in range(500)]\ncorrect, total = sum(outcomes), len(outcomes)\n"
     "v = correct / total\n"
     "record_metadata('seed', 0)\n"
     "record_result('exp1.acc', v, unit='ratio')\n"

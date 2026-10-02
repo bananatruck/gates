@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import tempfile
 from collections import Counter
 from pathlib import Path
 
@@ -211,7 +212,7 @@ def test_red_team_figure_draws_measured_outcome_totals(tmp_path):
     rendered = redteam_figure(REPO / "paper" / "redteam.csv", tmp_path)
 
     text = _drawn_text(rendered)
-    assert {"Blocked\n7", "Warned\n1", "Silent\n10"} <= text
+    assert {"Blocked\n11", "Warned\n5", "Silent\n3"} <= text
 
 
 def test_adjacency_fixture_draws_catches_and_passes_without_placeholder(tmp_path):
@@ -235,7 +236,7 @@ def test_adjacency_figure_draws_measured_probe_totals(tmp_path):
     rendered = adjacency_figure(REPO / "paper" / "adjacency.csv", tmp_path)
 
     text = _drawn_text(rendered)
-    assert "23/27 caught" in text
+    assert "27/27 caught" in text
     assert "35/36 passed" in text
 
 
@@ -293,14 +294,36 @@ def test_rig_csvs_hold_the_measured_totals():
         adjacency = list(csv.DictReader(handle))
 
     assert Counter(row["outcome"] for row in redteam) == {
-        "blocked": 7,
-        "warned": 1,
-        "silent": 10,
+        "blocked": 11,
+        "warned": 5,
+        "silent": 3,
     }
     attacks = [row for row in adjacency if row["kind"] == "attack"]
     honest = [row for row in adjacency if row["kind"] == "honest"]
-    assert (sum(row["caught"] == "true" for row in attacks), len(attacks)) == (23, 27)
+    assert (sum(row["caught"] == "true" for row in attacks), len(attacks)) == (27, 27)
     assert (sum(row["passed"] == "true" for row in honest), len(honest)) == (35, 36)
+
+
+def test_rig_csvs_are_what_the_rigs_measure_today():
+    """The CSVs were typed snapshots and went stale when D100-D103 moved the
+    rigs; each row is now held to the rig's own output."""
+    from rig.adjacency_probes import run_all as adjacency_probes
+    from rig.red_team import run_all as red_team
+
+    with open(REPO / "paper" / "redteam.csv", newline="", encoding="utf-8") as handle:
+        redteam = [(r["id"], r["description"], r["outcome"]) for r in csv.DictReader(handle)]
+    assert redteam == [(r.strategy.id, r.strategy.name, r.outcome) for r in red_team()[1:]]
+
+    with open(REPO / "paper" / "adjacency.csv", newline="", encoding="utf-8") as handle:
+        rows = [(r["kind"], r["shape"].replace("\\n", "\n"), r["caught"], r["passed"])
+                for r in csv.DictReader(handle)]
+    measured = [
+        (p.kind, p.body,
+         ("true" if p.adjacency is False else "false") if p.kind == "attack" else "",
+         ("true" if p.adjacency is True else "false") if p.kind == "honest" else "")
+        for p in adjacency_probes()
+    ]
+    assert rows == measured
 
 
 def test_audit_figure_draws_every_run_and_rater_from_the_csvs(tmp_path):
@@ -315,11 +338,26 @@ def test_audit_figure_draws_every_run_and_rater_from_the_csvs(tmp_path):
 
 
 def test_audit_figure_shows_a_missing_judge_answer_as_none(tmp_path):
-    rendered = audit_figure(output_dir=tmp_path)
+    judging = tmp_path / "judging.csv"
+    rows = (REPO / "paper" / "judging.csv").read_text(encoding="utf-8").splitlines()
+    blanked = [
+        "MLR-Bench,L3,2,agent:codex/gpt-5.6-sol:high,judge,,"
+        if row.startswith("MLR-Bench,L3,2,agent:codex/") else row
+        for row in rows
+    ]
+    judging.write_text("\n".join(blanked) + "\n", encoding="utf-8")
+    rendered = audit_figure(judging_path=judging, output_dir=tmp_path)
 
     texts = [t.get_text() for axis in rendered.figure.axes for t in axis.texts]
-    assert texts.count("none") == 2  # L3 seed 2, GPT-5.6 Sol: flag and score
+    assert texts.count("none") == 2  # one judge's flag and score left blank
     assert texts.count("open") == 2  # L2 rule A waits on a person (D99)
+
+
+def test_every_counting_judge_answered_every_run():
+    """L3 seed 2's Sol answer was lost to a credit limit (D96) and rerun on 10-01."""
+    rendered = audit_figure(output_dir=Path(tempfile.mkdtemp()))
+    texts = [t.get_text() for axis in rendered.figure.axes for t in axis.texts]
+    assert texts.count("none") == 0
 
 
 def test_provenance_csv_holds_the_ledger_counts():

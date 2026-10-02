@@ -9,8 +9,10 @@ unmeasured false-negative rate is a scanner a reviewer will not trust, and
 number came from this scanner reading ``.tex`` (see ``gates/prose.py``), so
 D38 froze it and D48 reported 34 of 49. D76 lifted the freeze for one rule,
 masking references per token instead of skipping their lines, and the
-measurement moved to 46 of 49. Every remaining gap is reported and left in
-place.
+measurement moved to 46 of 49. D104 reads the abstract environment and gives
+each repeat of a value on one line its own context: 47 of 49, the two small
+integers left, 13 false positives. Every remaining gap is reported and left
+in place.
 
 **Denominator (D39).** Two manuscripts, the gated and ungated arms of the
 archived run. That is a small and non-independent sample, so this reports counts
@@ -33,11 +35,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from gates.prose import (  # noqa: E402
-    CLAIM_SECTIONS,
-    NUMBER,
-    _heading,
-    is_claim,
-    scannable,
+    claim_sections,
+    findings_lines,
+    line_claim_tokens,
 )
 
 from rig.gate3_m4_labels import (  # noqa: E402
@@ -56,14 +56,6 @@ PAPERS = (
     / "papers"
 )
 
-#: LaTeX's abstract environment, which ``_heading`` does not see (D40). Tracked
-#: here so a manuscript using it is not silently credited with no abstract: the
-#: ungated paper's abstract is invisible to the scanner, and this measurement is
-#: where that gap gets reported rather than closed.
-_ABSTRACT_BEGIN = "\\begin{abstract}"
-_ABSTRACT_END = "\\end{abstract}"
-
-
 @dataclass
 class Finding:
     """One labelled claim and whether the scanner reported it."""
@@ -78,9 +70,8 @@ class Finding:
 @dataclass
 class ArmResult:
     arm: str
-    #: Findings sections the scanner reached, and the ones it could not.
+    #: Findings sections the scanner reached.
     sections_scanned: list[str] = field(default_factory=list)
-    sections_invisible: list[str] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)
     false_positives: list[tuple[int, str, str]] = field(default_factory=list)
 
@@ -97,49 +88,20 @@ class ArmResult:
         return [f for f in self.findings if not f.found]
 
 
-def _claim_lines(text: str) -> dict[int, tuple[str, bool]]:
-    """Findings-section lines as ``{line: (text, visible)}``.
+def _claim_lines(text: str) -> dict[int, str]:
+    """Findings-section lines as ``{line: text}``, walked as ``extract_claims`` walks.
 
-    Mirrors ``extract_claims``'s walk, with one deliberate difference: a
-    ``\\begin{abstract}`` block counts as the abstract and is marked
-    ``visible=False``. ``_heading`` does not see that environment (D40), so the
-    scanner never reaches those lines at all. Treating the section as absent
-    would hide the gap; marking it unreadable measures it.
+    The walk is ``prose.findings_lines`` itself, so this measurement and the
+    scanner cannot drift apart. Since D104 it reads a ``\\begin{abstract}``
+    block as the abstract; until then the ungated paper's abstract was
+    reported here as a section the scanner never reached.
     """
-    out: dict[int, tuple[str, bool]] = {}
-    section = "preamble"
-    in_abstract = False
-    for number, line in enumerate(text.splitlines(), 1):
-        heading = _heading(line)
-        if heading is not None:
-            section = heading
-            continue
-        if _ABSTRACT_BEGIN in line:
-            in_abstract = True
-            continue
-        if _ABSTRACT_END in line:
-            in_abstract = False
-            continue
-        current = "abstract" if in_abstract else section
-        if any(s in current for s in CLAIM_SECTIONS):
-            out[number] = (line, not in_abstract)
-    return out
+    return {number: text for number, _, text in findings_lines(text)}
 
 
-def _scanner_reports(line: str, visible: bool = True) -> Counter[str]:
-    """The tokens ``extract_claims`` would take from this line, as it takes them.
-
-    Rebuilt rather than called, because ``extract_claims`` returns floats with no
-    line numbers and this measurement needs to know which line a finding came
-    from. The steps below are its steps, in its order.
-    """
-    stripped = scannable(line) if visible else None
-    if stripped is None:
-        return Counter()
-    kept = [t for t in NUMBER.findall(stripped) if is_claim(t)]
-    # context_of() locates a token with line.find(), so repeats of one token on
-    # one line share a context and all but the first are deduplicated away.
-    return Counter(dict.fromkeys(kept, 1))
+def _scanner_reports(line: str) -> Counter[str]:
+    """The tokens ``extract_claims`` takes from this line, one per occurrence."""
+    return Counter(token for token, _ in line_claim_tokens(line))
 
 
 def measure(arm: str) -> ArmResult:
@@ -157,30 +119,15 @@ def measure(arm: str) -> ArmResult:
 
     result = ArmResult(arm=arm)
     lines = _claim_lines(text)
-    unreadable = sorted(n for n, (_, visible) in lines.items() if not visible)
-    if unreadable:
-        result.sections_invisible.append(
-            f"abstract, written as \\begin{{abstract}}: "
-            f"{len(unreadable)} findings line(s) the scanner never reaches"
-        )
-    result.sections_scanned = sorted(
-        {s for s in CLAIM_SECTIONS if any(
-            s in (_heading(line) or "") for line in text.splitlines()
-        )}
-    )
+    result.sections_scanned = sorted(set(claim_sections(text)))
 
     for line_no, tokens in sorted(CLAIMS[arm].items()):
-        line, visible = lines[line_no]
-        reported = _scanner_reports(line, visible)
+        reported = _scanner_reports(lines[line_no])
         seen: Counter[str] = Counter()
         for token in tokens:
             seen[token] += 1
             found = seen[token] <= reported.get(token, 0)
-            # Invisibility outranks the hand label: if the scanner cannot reach
-            # the line, no property of the token explains the miss.
-            cause = "" if found else (
-                "invisible_section" if not visible else MISS_CAUSE[(arm, line_no)]
-            )
+            cause = "" if found else MISS_CAUSE[(arm, line_no)]
             result.findings.append(Finding(arm, line_no, token, found, cause))
 
     for line_no, rows in sorted(FALSE_POSITIVES.get(arm, {}).items()):
@@ -190,13 +137,16 @@ def measure(arm: str) -> ArmResult:
     # Cross-check: every token the scanner reports is either a labelled claim or
     # a declared false positive. A third case means the labels are incomplete,
     # and absorbing it silently is the defect this project exists to catch.
-    labelled = {(n, t) for n, ts in CLAIMS[arm].items() for t in ts}
-    declared = {(n, t) for n, rows in FALSE_POSITIVES.get(arm, {}).items() for t, _ in rows}
+    # Counted, not matched: a token reported twice on a line and labelled once
+    # is one report nobody accounted for.
     unaccounted = sorted(
         (n, t)
-        for n, (line, visible) in lines.items()
-        for t in _scanner_reports(line, visible)
-        if (n, t) not in labelled and (n, t) not in declared
+        for n, line in lines.items()
+        for t in (
+            _scanner_reports(line)
+            - Counter(CLAIMS[arm].get(n, ()))
+            - Counter(t for t, _ in FALSE_POSITIVES.get(arm, {}).get(n, ()))
+        ).elements()
     )
     if unaccounted:
         raise SystemExit(
@@ -220,8 +170,6 @@ def main() -> int:
     for arm in arms:
         print(f"  {arm.arm:8}  {arm.detected:3} of {arm.claims:3} claims detected"
               f"   {len(arm.false_positives)} false positive(s)")
-        for note in arm.sections_invisible:
-            print(f"            findings section the scanner cannot read: {note}")
     print()
     print(f"  detected      {detected} of {claims}")
     print(f"  missed        {len(missed)} of {claims}"

@@ -96,9 +96,17 @@ FALSE_POSITIVES: dict[str, dict[int, tuple[tuple[str, str], ...]]] = {
         240: (("0.5", "predicted exponent quoted from arXiv 2412.07942v1"),),
     },
     "ungated": {
+        # The abstract, a \begin{abstract} environment the scanner reads since
+        # D104. Labelled 10-01 by the module docstring's own example of a
+        # mathematical constant, pending Kesh's review (D37).
+        19: (("1.0986", "mathematical constant: ln 3, arithmetic, not a measurement"),),
         # "0000" is the step index in "[arm=25][step=0000]", read as 0.0.
         276: (("0000", "step index in a quoted log line, parsed as 0.0"),),
+        # Each threshold is stated twice on the line; since D104 each
+        # occurrence is its own report, so both are listed.
         305: (
+            ("0.99", "decision threshold fixed before the run"),
+            ("0.95", "decision threshold fixed before the run"),
             ("0.99", "decision threshold fixed before the run"),
             ("0.95", "decision threshold fixed before the run"),
         ),
@@ -106,6 +114,8 @@ FALSE_POSITIVES: dict[str, dict[int, tuple[tuple[str, str], ...]]] = {
         # once D76 masked the reference instead of skipping the line. Added
         # 09-29 by the same rule as line 305, pending Kesh's review (D37).
         320: (
+            ("0.99", "decision threshold fixed before the run"),
+            ("0.95", "decision threshold fixed before the run"),
             ("0.99", "decision threshold fixed before the run"),
             ("0.95", "decision threshold fixed before the run"),
         ),
@@ -129,7 +139,9 @@ MISS_CAUSE: dict[tuple[str, int], str] = {
     ("ungated", 280): "skipped_line",    # "Table~\ref{tab:observed-loss}"
 }
 # Since D76 every skipped_line entry above is detected: a reference is masked
-# per token, not the whole line. The entries stay as D48's record of the causes.
+# per token, not the whole line; since D104 the duplicate_context one is too,
+# each occurrence taking its own context. The entries stay as the record of
+# the causes.
 
 #: What each cause is, for the readout. ``skipped_line`` and ``small_integer``
 #: are the readout's; ``duplicate_context`` is not, and is the one this
@@ -146,16 +158,14 @@ CAUSES = {
         "three-digit integer result is invisible by construction."
     ),
     "duplicate_context": (
-        "context_of() locates a token with line.find(), which always returns "
-        "the first occurrence, so a value stated twice on one line yields one "
-        "context and the second is deduplicated away. This understates the "
-        "literal count; it does not let a line through, since the first "
-        "occurrence still reports."
+        "Until D104, context_of() located a token with line.find(), which "
+        "always returns the first occurrence, so a value stated twice on one "
+        "line yielded one context and the second was deduplicated away. Each "
+        "occurrence now takes the words around its own position."
     ),
     "invisible_section": (
-        "The claim sits in a \\begin{abstract} environment, which _heading does "
-        "not match, so the scanner never enters the section and reads none of "
-        "its lines. D40 leaves this open deliberately: teaching the scanner to "
-        "read the environment would restate the published Gate 1 number."
+        "Until D104, a claim in a \\begin{abstract} environment was never read: "
+        "the walk followed headings only. prose.findings_lines now reads the "
+        "environment as the abstract."
     ),
 }

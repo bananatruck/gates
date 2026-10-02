@@ -767,9 +767,7 @@ def test_a_host_that_declares_no_sections_gets_no_section_check(tmp_path):
 
 
 def test_a_latex_abstract_environment_counts_as_a_declared_abstract(tmp_path):
-    """D40. `prose._heading` does not see `\\begin{abstract}` and is not changed:
-    presence is a different question from claim scanning, and altering the
-    scanner would restate the published Gate 1 traceability number."""
+    """D40 for presence; since D104 the scanner reads the environment too."""
     paper = (
         "\\begin{abstract}\nWe study SGC.\n\\end{abstract}\n" + RESULTS_ONLY
     )
@@ -777,7 +775,7 @@ def test_a_latex_abstract_environment_counts_as_a_declared_abstract(tmp_path):
         paper, registry(RECORDED), config(tmp_path, sections=("abstract", "results"))
     )
     assert check(report, "style.sections_present").passed
-    assert claim_sections(paper) == ["results"]
+    assert claim_sections(paper) == ["abstract", "results"]
 
 
 def test_a_declared_section_is_found_inside_a_longer_heading(tmp_path):
@@ -1515,7 +1513,7 @@ def test_gate_3_turns_are_not_counted_as_gate_2_reviews(tmp_path):
 def gate1_registry(tmp_path, *, task_ref):
     """A registry Gate 1 actually wrote, so every link has something to resolve."""
     src = (
-        "record_metadata('seed', 0)\ncorrect, total = 4, 5\nlr = 0.001\n"
+        "record_metadata('seed', 0)\noutcomes = [i < 4 for i in range(5)]\ncorrect, total = sum(outcomes), len(outcomes)\nlr = 0.001\n"
         "rates = [lr * t for t in range(total)]\nrecord_setting('config.lr', lr)\n"
         "v = correct / total\nrecord_result('acc', v)\n"
     )
@@ -1630,8 +1628,9 @@ def test_the_archived_manuscript_types_its_own_numbers(tmp_path):
     assert literals.evidence["sections_scanned"] == [
         "abstract", "results", "discussion"
     ]
-    # 29 while any \ref skipped its whole line; 37 once the reference is masked (D76).
-    assert len(literals.evidence["literals"]) == 37
+    # 29 while any \ref skipped its whole line; 37 once the reference is masked
+    # (D76); 38 once a value repeated on one line counts twice (D104).
+    assert len(literals.evidence["literals"]) == 38
 
 
 # --------------------------------------------------------------------------- #
@@ -1665,3 +1664,71 @@ def test_a_reference_is_masked_and_the_rest_of_its_line_is_read(line, found):
 )
 def test_a_structural_line_is_still_skipped_whole(line):
     assert extract_claims(f"\\section{{Results}}\n{line}\n") == []
+
+
+@pytest.mark.parametrize(
+    "claim",
+    [
+        "\\result{x}\\times 2",
+        "\\result{x} $\\times$ 3",
+        "\\result{x}·4",
+        "3\\cdot\\result{x}",
+        "$4 \\times \\result{x}$",
+        "\\result{x}^2",
+        "\\result{x}\\textsuperscript{2}",
+        "\\result{x}\\mbox{5}",
+    ],
+)
+def test_a_factor_or_grouped_digit_beside_a_token_is_typed(tmp_path, claim):
+    """D103: beyond the 27 probes, the same shapes in the other position."""
+    paper = f"\\section{{Results}}\nAccuracy is {claim}.\n"
+    report = run_gate3(paper, registry({"x": (0.81, "ratio")}), config(tmp_path))
+    assert not check(report, "report.token_adjacency").passed
+
+
+def test_a_digit_inside_another_command_is_the_stated_limit(tmp_path):
+    """The `# limit:` in _check_token_adjacency: only the listed commands are read."""
+    paper = "\\section{Results}\nAccuracy is \\result{x}\\textbf{9}.\n"
+    report = run_gate3(paper, registry({"x": (0.81, "ratio")}), config(tmp_path))
+    assert check(report, "report.token_adjacency").passed
+
+
+# --------------------------------------------------------------------------- #
+# D104: the abstract environment is a findings section, and a value stated
+# twice on one line is two claims
+# --------------------------------------------------------------------------- #
+
+_ENV_ABSTRACT = (
+    "\\begin{abstract}\n"
+    "Our method reaches 0.947 accuracy.\n"
+    "\\end{abstract}\n"
+    "\\section{Introduction}\n"
+    "Prior work reports 0.912.\n"
+)
+
+
+def test_a_number_in_the_abstract_environment_is_a_claim():
+    from gates.prose import claim_sections, extract_claims
+
+    assert [c.value for c in extract_claims(_ENV_ABSTRACT)] == [0.947]
+    assert claim_sections(_ENV_ABSTRACT) == ["abstract"]
+
+
+def test_a_number_typed_into_the_abstract_environment_fails_gate_3(tmp_path):
+    """Both level 3 manuscripts of waves 2-3 write \\begin{abstract}; until D104
+    a number typed there passed Gate 3 unread."""
+    paper = _ENV_ABSTRACT + "\\section{Results}\nAccuracy is \\result{x}.\n"
+    report = run_gate3(paper, registry({"x": (0.81, "ratio")}), config(tmp_path))
+    literals = check(report, "report.no_numeric_literals_in_results")
+    assert not literals.passed
+    assert [row["value"] for row in literals.evidence["literals"]] == [0.947]
+    assert "abstract" in literals.evidence["sections_scanned"]
+
+
+def test_a_value_stated_twice_on_one_line_is_two_claims():
+    from gates.prose import extract_claims
+
+    text = "\\section{Results}\nAccuracy rose from 0.94 on the first split to 0.94 on the second.\n"
+    claims = extract_claims(text)
+    assert [c.value for c in claims] == [0.94, 0.94]
+    assert claims[0].context != claims[1].context

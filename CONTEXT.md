@@ -57,5 +57,5 @@ _Avoid_: clean run, which says nothing about which conditions held.
 
 **Faked-results candidate** - a paper every eligible judge flags for "Faked Experimental Results"; a person's verdict decides whether it counts (D63).
 
-**Setting** - a value the run was configured with, such as a learning rate or a sweep's lambda: recorded with `record_setting`, cited as `\setting{key}`, never a result (D75).
-_Avoid_: calling a setting a result, or a result a setting; the red team's S12 is exactly that.
+**Setting** - a value the run was configured with, such as a learning rate or a sweep's lambda: declared in a config fixed before the run, recorded with `record_setting`, cited as `\setting{key}`, never a result (D75, D100).
+_Avoid_: calling a setting a result, or a result a setting; the red team's S12 is exactly that, and Gate 1 refuses it when the setting was never declared.
