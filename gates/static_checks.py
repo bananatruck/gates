@@ -373,9 +373,14 @@ def _selection(
         if name in _SELECTORS:
             # max(xs), max(x for ...), xs.max(): one value picked from several.
             # max(a, b) clips or compares two values and is left alone.
-            if isinstance(node.func, ast.Attribute) and not node.args and name in ("max", "min"):
-                if not _is_dotted_name(node.func.value) or _root_name(node.func.value) in bindings:
-                    return f"{name}() of several values"
+            receiver = node.func.value if isinstance(node.func, ast.Attribute) else None
+            if (
+                receiver is not None
+                and not node.args
+                and name in ("max", "min")
+                and (not _is_dotted_name(receiver) or _root_name(receiver) in bindings)
+            ):
+                return f"{name}() of several values"
             if len(node.args) == 1:
                 return f"{name} of several values"
         if isinstance(node.func, ast.Attribute) and _in_random_namespace(node.func):
