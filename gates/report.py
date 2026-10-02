@@ -237,6 +237,13 @@ def _evidence_setting_values(check: CheckResult) -> list[str]:
     return out
 
 
+def _evidence_selection(check: CheckResult) -> list[str]:
+    return [
+        f"  {row['key']} (line {row['lineno']}): {row['reason']}"
+        for row in check.evidence.get("selected", [])[:_MAX_EVIDENCE_ROWS]
+    ]
+
+
 def _evidence_settings_declared(check: CheckResult) -> list[str]:
     rows = [
         f"  {row['key']}: recorded {row['recorded']}, never declared"
@@ -482,6 +489,7 @@ _EVIDENCE_RENDERERS = {
     "results.single_observation": _evidence_varied,
     "results.setting_single_value": _evidence_setting_values,
     "results.settings_declared": _evidence_settings_declared,
+    "results.no_selection": _evidence_selection,
     # Gate 2.
     "coherence.range_valid": _evidence_range,
     "coherence.plausibility": _evidence_plausibility,
@@ -571,6 +579,14 @@ _FIXES = {
         "record_result(f\"exp1.lam{lam}.acc\", acc). A value that changes "
         "during the run, such as a scheduled learning rate, is recorded once, "
         "as the value the run was configured with."
+    ),
+    "results.no_selection": (
+        "A recorded result above is the best of several values, or a random "
+        "draw. If it chose a model on validation data, record the test score of "
+        "that model instead of the best test score. Across seeds, record the "
+        "mean and spread of every seed, not the best or a trimmed mean. A random "
+        "draw is not a measurement. If the selection is intended, the paper "
+        "states how the value was chosen."
     ),
     "results.settings_declared": (
         "The settings this run may record were fixed before the run, and the "

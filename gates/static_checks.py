@@ -299,6 +299,129 @@ def classify_record_calls(
     return kinds
 
 
+#: Reducers that pick one of several values rather than summarise them.
+_SELECTORS = frozenset({"max", "min", "amax", "amin", "nanmax", "nanmin"})
+
+
+def find_selected_record_values(
+    source: str, filename: str = "<experiment>", func_name: str = "record_result"
+) -> dict[int, str]:
+    """Map each recording call line whose value was selected or drawn to why.
+
+    The 09-29 review's method-level fabrications record a value real
+    computation produced, so the value checks cannot see them. Some leave a
+    trace in the source all the same: the best of several runs (``max``,
+    ``min``, an index or slice of ``sorted``), and a number drawn from a random
+    generator rather than measured. Following the value back through its plain
+    bindings, as ``classify_record_calls`` does, finds those.
+
+    This reads the shape, not the meaning: the maximum of validation scores
+    used to pick a model is honest, the maximum of test scores is not, and the
+    two look alike. So it is a warning the paper must state, never a verdict.
+    """
+    # limit: a program-defined function is not looked inside, so
+    # def best(xs): return max(xs) then best(accs) is not found; neither is a
+    # generator imported by bare name (from random import uniform).
+    tree = parse(source, filename)
+    names = _record_names(tree, func_name)
+    bindings = _plain_bindings(tree)
+    found: dict[int, str] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        called = _called_name(node.func)
+        if called != func_name and not (isinstance(node.func, ast.Name) and called in names):
+            continue
+        value = _value_argument(node)
+        reason = _selection(value, bindings, frozenset()) if value is not None else None
+        if reason:
+            found[node.lineno] = reason
+    return found
+
+
+def _plain_bindings(tree: ast.AST) -> dict[str, list[ast.expr]]:
+    """Every name bound only by plain assignment, measured or not."""
+    values: dict[str, list[ast.expr]] = {}
+    other: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(
+            node.targets[0], ast.Name
+        ):
+            values.setdefault(node.targets[0].id, []).append(node.value)
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                other.update(_stored_names(target))
+        elif isinstance(node, (ast.AugAssign, ast.For, ast.AsyncFor, ast.comprehension)):
+            other.update(_stored_names(node.target))
+    return {name: exprs for name, exprs in values.items() if name not in other}
+
+
+def _selection(
+    node: ast.expr, bindings: dict[str, list[ast.expr]], seen: frozenset[str]
+) -> str | None:
+    """Why ``node`` is a selected or drawn value, or None."""
+    if isinstance(node, ast.Name):
+        if node.id in seen or node.id not in bindings:
+            return None
+        # Every binding must be a selection, as every binding must be a literal
+        # for a constant: the map is flat across scopes, so one other scope's
+        # draw bound to the same name says nothing about this value.
+        reasons = [_selection(e, bindings, seen | {node.id}) for e in bindings[node.id]]
+        return reasons[0] if all(reasons) else None
+    if isinstance(node, ast.Call):
+        name = _called_name(node.func)
+        if name in _SELECTORS:
+            # max(xs), max(x for ...), xs.max(): one value picked from several.
+            # max(a, b) clips or compares two values and is left alone.
+            if isinstance(node.func, ast.Attribute) and not node.args and name in ("max", "min"):
+                if not _is_dotted_name(node.func.value) or _root_name(node.func.value) in bindings:
+                    return f"{name}() of several values"
+            if len(node.args) == 1:
+                return f"{name} of several values"
+        if isinstance(node.func, ast.Attribute) and _in_random_namespace(node.func):
+            return f"drawn from a random generator ({ast.unparse(node.func)})"
+        for arg in [*node.args, *(k.value for k in node.keywords)]:
+            reason = _selection(arg, bindings, seen)
+            if reason:
+                return reason
+        if isinstance(node.func, ast.Attribute):
+            return _selection(node.func.value, bindings, seen)
+        return None
+    if isinstance(node, ast.Subscript):
+        if _is_sorted(node.value, bindings, seen):
+            return "an index or slice of sorted values"
+        return _selection(node.value, bindings, seen)
+    if isinstance(node, ast.BinOp):
+        return _selection(node.left, bindings, seen) or _selection(node.right, bindings, seen)
+    if isinstance(node, ast.UnaryOp):
+        return _selection(node.operand, bindings, seen)
+    return None
+
+
+def _is_sorted(
+    node: ast.expr, bindings: dict[str, list[ast.expr]], seen: frozenset[str]
+) -> bool:
+    """``sorted(...)``, directly or through a name bound only to it."""
+    if isinstance(node, ast.Call):
+        return _called_name(node.func) == "sorted"
+    if isinstance(node, ast.Name) and node.id not in seen and node.id in bindings:
+        deeper = seen | {node.id}
+        return all(_is_sorted(e, bindings, deeper) for e in bindings[node.id])
+    return False
+
+
+def _in_random_namespace(func: ast.Attribute) -> bool:
+    """``random.uniform``, ``np.random.normal``, ``numpy.random.rand``."""
+    parts = []
+    node: ast.expr = func.value
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if isinstance(node, ast.Name):
+        parts.append(node.id)
+    return "random" in parts
+
+
 def find_unused_record_values(
     source: str, filename: str = "<experiment>", func_name: str = "record_result"
 ) -> set[int]:

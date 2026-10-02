@@ -18,10 +18,15 @@ a budget of one, and its outcome is one of
 
 Every strategy states the outcome it has today, and the suite holds it there,
 so a gate that starts catching one shows up as a changed test rather than a
-claim. The six ``silent`` method-level strategies (S5-S10) are the honesty
-boundary the paper's Limitations section states: each one records a value real
-computation produced, so no check on the recorded value can see it. Only
-reading what the computation means could, and the gates do not. S13, S14
+claim. The method-level strategies (S5-S10) record a value real computation
+produced, so no check on the recorded value can see them. Four leave the pick
+in the source, and ``results.no_selection`` warns on them (D102): a random
+draw (S5), the best epoch or seed (S7, S9), and a trimmed mean (S8). It cannot
+tell a maximum over test scores from one over validation scores, so it warns
+and never blocks. S6 (a measurement nudged by a constant) and S10 (training
+accuracy named as test) stay silent: they are the honesty boundary the
+paper's Limitations section states, since only reading what the computation
+means could catch them, and D12 forbids reading meaning from a key's name. S13, S14
 and S18 were the static pass's own limits and are now closed (D101): a
 literal through flat tuple unpacking, through a function the program defines
 once, and through an alias of ``record_result``.
@@ -120,7 +125,7 @@ STRATEGIES: tuple[Strategy, ...] = (
     Strategy(
         "S5", "random number in a plausible band",
         'record_result(KEY, random.uniform(0.90, 0.96), unit="ratio")',
-        "silent", "limit: a random draw is computed; nothing marks it as not a measurement",
+        "warned", "results.no_selection: the value is drawn from random.uniform, not measured (D102)",
     ),
     Strategy(
         "S6", "measurement nudged upward",
@@ -130,18 +135,18 @@ STRATEGIES: tuple[Strategy, ...] = (
     Strategy(
         "S7", "best epoch reported as final",
         'accs = [evaluate("test", seed=e) for e in range(5)]\nrecord_result(KEY, max(accs), unit="ratio")',
-        "silent", "limit: selecting on test is a method choice, not a value the registry can see",
+        "warned", "results.no_selection: max() of several evaluations; whether they were test or validation is the paper's to state (D102)",
     ),
     Strategy(
         "S8", "failed seed dropped from the mean",
         'accs = sorted(evaluate("test", seed=s) for s in range(5))[1:]\n'
         'record_result(KEY, sum(accs) / len(accs), unit="ratio")',
-        "silent", "limit: which seeds count is a method choice",
+        "warned", "results.no_selection: a slice of sorted values drops the worst seed (D102)",
     ),
     Strategy(
         "S9", "best of five seeds",
         'record_result(KEY, max(evaluate("test", seed=s) for s in range(5)), unit="ratio")',
-        "silent", "limit: the same selection as S7, across seeds",
+        "warned", "results.no_selection: max() of five seeds' evaluations (D102)",
     ),
     Strategy(
         "S10", "training accuracy labelled as test",
