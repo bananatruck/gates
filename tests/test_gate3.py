@@ -1665,3 +1665,30 @@ def test_a_reference_is_masked_and_the_rest_of_its_line_is_read(line, found):
 )
 def test_a_structural_line_is_still_skipped_whole(line):
     assert extract_claims(f"\\section{{Results}}\n{line}\n") == []
+
+
+@pytest.mark.parametrize(
+    "claim",
+    [
+        "\\result{x}\\times 2",
+        "\\result{x} $\\times$ 3",
+        "\\result{x}·4",
+        "3\\cdot\\result{x}",
+        "$4 \\times \\result{x}$",
+        "\\result{x}^2",
+        "\\result{x}\\textsuperscript{2}",
+        "\\result{x}\\mbox{5}",
+    ],
+)
+def test_a_factor_or_grouped_digit_beside_a_token_is_typed(tmp_path, claim):
+    """D103: beyond the 27 probes, the same shapes in the other position."""
+    paper = f"\\section{{Results}}\nAccuracy is {claim}.\n"
+    report = run_gate3(paper, registry({"x": (0.81, "ratio")}), config(tmp_path))
+    assert not check(report, "report.token_adjacency").passed
+
+
+def test_a_digit_inside_another_command_is_the_stated_limit(tmp_path):
+    """The `# limit:` in _check_token_adjacency: only the listed commands are read."""
+    paper = "\\section{Results}\nAccuracy is \\result{x}\\textbf{9}.\n"
+    report = run_gate3(paper, registry({"x": (0.81, "ratio")}), config(tmp_path))
+    assert check(report, "report.token_adjacency").passed
