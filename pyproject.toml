@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 dependencies = []  # stdlib only, on purpose: it must drop into any scaffold's env
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "ruff>=0.16"]
+dev = ["pytest>=7", "ruff>=0.16", "matplotlib>=3.8"]  # matplotlib: paper/figures.py and its tests only
 
 [tool.setuptools.packages.find]
 include = ["gates*"]
