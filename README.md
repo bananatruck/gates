@@ -96,21 +96,23 @@ The two are level, and reviewers recommended rejecting both papers.
 Gate 1 fixed where the numbers came from.
 It did not make the science better, and no number here says it did.
 
-## Planned evaluation
+## Evaluation figures
 
-These seven figures are the paper's evaluation, and every one is a placeholder.
-`paper/figures.py` stamps PLACEHOLDER on any figure that still draws a dummy row, and `paper/collect.py` turns rows to measured as runs finish.
+These figures are drawn by `paper/figures.py` from measured data only: waves 2-3 (`paper/waves23.csv`, `paper/crashes.csv`), the agent judges (`paper/judging.csv`, tagged "reviewed by agent for now"), the red-team rig (`paper/redteam.csv`), the Gate 3 adjacency probes (`paper/adjacency.csv`) and the signed mechanism campaign (`paper/mechanism.csv`).
+A benchmark not yet run is described in the paper, never drawn; any figure that would still draw a dummy row is stamped PLACEHOLDER.
 The significance test is fixed in advance in [`paper/PLAN.md`](paper/PLAN.md) §9: an exact McNemar test per benchmark on level 0 against level 3, Holm across the three, and a non-inferiority bound on each task score.
 
-| Figure | What it will show |
+| Figure | What it shows |
 |---|---|
-| ![CORE-Bench by level](paper/figures/fig1_corebench_levels.png) | CORE-Bench at the four `GATES_LEVEL`s |
-| ![MLR-Bench by level](paper/figures/fig2_mlrbench_levels.png) | MLR-Bench at the four levels |
-| ![BadScientist by level](paper/figures/fig3_badscientist_levels.png) | BadScientist at the four levels, Gate 3's adversarial test |
-| ![CORE-Bench comparison](paper/figures/fig4_corebench_compare.png) | each system alone and with GATES, CORE-Bench |
-| ![MLR-Bench comparison](paper/figures/fig5_mlrbench_compare.png) | each system alone and with GATES, MLR-Bench |
-| ![BadScientist comparison](paper/figures/fig6_badscientist_compare.png) | each system alone and with GATES, BadScientist |
-| ![Audit of released papers](paper/figures/fig7_audit.png) | released papers citing an arXiv id that does not exist |
+| ![Per-run audit](paper/figures/audit_by_run.png) | per run: where the paper's numerals came from (`paper/provenance.csv`) and every rater's verdict |
+| ![Price by level](paper/figures/price_by_level.png) | cost, tokens, gate attempts and crashes by level in one figure |
+| ![Crashes by level](paper/figures/crashes_by_level.png) | execution crashes by owner and cause |
+| ![Resource use by level](paper/figures/tokens_cost_by_level.png) | token use and cost across measured seeds |
+| ![Gate attempts by level](paper/figures/gate_attempts_by_level.png) | attempts and rejections at each gate |
+| ![Red-team outcomes](paper/figures/redteam_outcomes.png) | outcomes of the model-free red-team rig, 18 fabrication strategies |
+| ![Token-adjacency probes](paper/figures/adjacency_probes.png) | attack catches and honest-shape passes |
+| ![Mechanism evidence](paper/figures/fig8_mechanism.png) | measured detections and false positives for each gate |
+| ![Agent-judge results](paper/figures/agent_judge_by_level.png) | judge scores and faked-result verdicts by level |
 
 ## Install
 
@@ -275,8 +277,8 @@ pip install -e ".[dev]" && pytest && ruff check .
 | Gate 3: checks, loop, model layer, scanner miss, arXiv resolver | 306 |
 | Model layer and log scanning | 149 |
 | Wiring, levels, setup, install skills, key handling | 106 |
-| Evaluation tooling and this status check | 280 |
-| **Total** | **1269** |
+| Evaluation tooling and this status check | 303 |
+| **Total** | **1292** |
 
 One test, the live arXiv lookup, is skipped unless `GATES_LIVE_ARXIV=1`.
 The suite runs with every socket refused, so no test can quietly depend on the network (D61 in `progress.md`).
