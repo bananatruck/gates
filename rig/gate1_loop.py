@@ -133,7 +133,7 @@ def _indent(text: str, prefix: str) -> str:
 
 def summarise(rows: list[tuple[Scenario, LoopOutcome, list[str]]]) -> str:
     out = [f"\n{RULE}", "SUMMARY", RULE, ""]
-    header = f"  {'SCENARIO':<16} {'TURNS':>5} {'EXEC':>5}  {'OUTCOME':<13} {'UPSTREAM BLIND':<15} RESULT"
+    header = f"  {'SCENARIO':<18} {'TURNS':>5} {'EXEC':>5}  {'OUTCOME':<13} {'UPSTREAM BLIND':<15} RESULT"
     out.append(header)
     out.append("  " + "-" * (len(header) - 2))
     for scenario, outcome, problems in rows:
@@ -143,7 +143,7 @@ def summarise(rows: list[tuple[Scenario, LoopOutcome, list[str]]]) -> str:
         )
         status = "ok" if not problems else f"MISMATCH ({len(problems)})"
         out.append(
-            f"  {scenario.name:<16} {outcome.turns_used:>5} "
+            f"  {scenario.name:<18} {outcome.turns_used:>5} "
             f"{len(outcome.executions):>5}  {outcome.outcome:<13} "
             f"{blind_text:<15} {status}"
         )
@@ -261,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.list:
         for scenario in SCENARIOS.values():
-            print(f"{scenario.name:<16} {scenario.summary}")
+            print(f"{scenario.name:<18} {scenario.summary}")
         return 0
 
     names = args.scenarios or list(SCENARIOS)

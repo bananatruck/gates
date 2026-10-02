@@ -37,16 +37,22 @@ def test_a_warning_naming_a_longer_key_is_not_counted():
 
 
 def test_the_honest_control_and_the_fabrications_are_all_there():
-    assert [s.id for s in STRATEGIES] == [f"S{i}" for i in range(19)]
+    assert [s.id for s in STRATEGIES] == [f"S{i}" for i in range(20)]
     assert STRATEGIES[0].expect == "silent"
     assert sum(s.expect == "silent" for s in STRATEGIES[1:]) == 10
     by_id = {s.id: s for s in STRATEGIES}
     assert by_id["S18"].expect == "silent"
+    # Q4: a result recorded as a setting the config never declared is refused;
+    # one declared in the config before the run is the stated limit.
+    assert by_id["S12"].expect == "blocked"
+    assert by_id["S12"].declared == {}
+    assert by_id["S19"].expect == "silent"
+    assert by_id["S19"].declared == {KEY: 0.95}
 
 
 def test_the_rig_exits_zero_when_nothing_moved(capsys):
     assert main([]) == 0
-    assert "18 fabrications: 7 blocked, 1 warned, 10 silent" in capsys.readouterr().out
+    assert "19 fabrications: 8 blocked, 1 warned, 10 silent" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
@@ -54,6 +60,11 @@ def test_the_rig_exits_zero_when_nothing_moved(capsys):
 )
 def test_each_blocked_strategy_is_blocked_by_the_check_it_names(strategy, tmp_path):
     """Blocked for the stated reason, so an unrelated check cannot hold the outcome."""
-    report = run_gate1(strategy.code(), Gate1Config(artifact_root=str(tmp_path), timeout_s=30))
+    report = run_gate1(
+        strategy.code(),
+        Gate1Config(
+            artifact_root=str(tmp_path), timeout_s=30, declared_settings=strategy.declared
+        ),
+    )
     named = strategy.why.split()[0].rstrip(":")
     assert named in {c.id for c in report.failed_checks()}, report.failed_checks()

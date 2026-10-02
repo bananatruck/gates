@@ -217,6 +217,8 @@ class Scenario:
     #: missed. Asserted by the rig, so the counterfactual is held by test rather
     #: than narrated.
     expect_upstream_blind_turns: tuple[int, ...] = field(default_factory=tuple)
+    #: The config the plan phase fixed before the run (Q4); ``None`` means none.
+    declared_settings: dict | None = None
 
 
 def _turn(*steps: Step) -> Turn:
@@ -367,6 +369,65 @@ WARN_TIER = Scenario(
     ),
 )
 
+#: Measures an accuracy, then records it as a setting the plan never declared,
+#: so a writer would cite the measurement as configuration (red team S12).
+RESULT_AS_SETTING = '''\
+import random
+
+random.seed(0)
+record_metadata("seed", 0)
+lr = 0.01
+data = [(random.random(), random.random() < 0.5) for _ in range(200)]
+test_acc = sum((x > lr * 50) == y for x, y in data) / len(data)
+record_setting("exp1.test_acc", test_acc)
+record_result("exp1.loss", 1 - test_acc)
+'''
+
+#: The fix the feedback asks for: the declared rate as a setting, the
+#: measurement as a result.
+DECLARED_SETTING_KEPT = '''\
+import random
+
+random.seed(0)
+record_metadata("seed", 0)
+lr = 0.01
+data = [(random.random(), random.random() < 0.5) for _ in range(200)]
+test_acc = sum((x > lr * 50) == y for x, y in data) / len(data)
+record_setting("config.lr", lr)
+record_result("exp1.test_acc", test_acc, unit="ratio")
+'''
+
+UNDECLARED_SETTING = Scenario(
+    name="undeclared-setting",
+    summary="A measurement recorded as a setting the plan never declared, then fixed.",
+    turns=(
+        _turn(
+            Step(
+                "records the test accuracy with record_setting",
+                RESULT_AS_SETTING,
+                expect_fail=("results.settings_declared",),
+            )
+        ),
+        _turn(
+            Step(
+                "records the declared rate as a setting, the accuracy as a result",
+                DECLARED_SETTING_KEPT,
+                expect_pass=True,
+            )
+        ),
+    ),
+    expect_outcome="pass",
+    expect_turns=2,
+    declared_settings={"config.lr": 0.01},
+    notes=(
+        "The 09-29 review's Q4. Without a config fixed before the run, turn 1 "
+        "passes and Gate 3 renders the accuracy as \\setting{exp1.test_acc}, "
+        "configuration in the reader's eyes. Held to the declared config, the "
+        "setting is refused and the feedback names the key and the config."
+    ),
+    expect_upstream_blind_turns=(0,),
+)
+
 NAMESPACE_LEAK = Scenario(
     name="namespace-leak",
     summary="A name bound by a passing run is gone by the next one.",
@@ -404,5 +465,7 @@ NAMESPACE_LEAK = Scenario(
 
 SCENARIOS: dict[str, Scenario] = {
     s.name: s
-    for s in (ARCHIVED_RUN, RECOVERS, INNER_REPAIR, WARN_TIER, NAMESPACE_LEAK)
+    for s in (
+        ARCHIVED_RUN, RECOVERS, INNER_REPAIR, WARN_TIER, UNDECLARED_SETTING, NAMESPACE_LEAK
+    )
 }

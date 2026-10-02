@@ -237,6 +237,17 @@ def _evidence_setting_values(check: CheckResult) -> list[str]:
     return out
 
 
+def _evidence_settings_declared(check: CheckResult) -> list[str]:
+    rows = [
+        f"  {row['key']}: recorded {row['recorded']}, never declared"
+        for row in check.evidence.get("undeclared", [])
+    ] + [
+        f"  {row['key']}: recorded {row['recorded']}, declared {row['declared']}"
+        for row in check.evidence.get("mismatched", [])
+    ]
+    return rows[:_MAX_EVIDENCE_ROWS]
+
+
 def _evidence_range(check: CheckResult) -> list[str]:
     out = []
     for row in check.evidence.get("violations", [])[:_MAX_EVIDENCE_ROWS]:
@@ -470,6 +481,7 @@ _EVIDENCE_RENDERERS = {
     "logs.model_error_signals": _evidence_log_signals,
     "results.single_observation": _evidence_varied,
     "results.setting_single_value": _evidence_setting_values,
+    "results.settings_declared": _evidence_settings_declared,
     # Gate 2.
     "coherence.range_valid": _evidence_range,
     "coherence.plausibility": _evidence_plausibility,
@@ -559,6 +571,14 @@ _FIXES = {
         "record_result(f\"exp1.lam{lam}.acc\", acc). A value that changes "
         "during the run, such as a scheduled learning rate, is recorded once, "
         "as the value the run was configured with."
+    ),
+    "results.settings_declared": (
+        "The settings this run may record were fixed before the run, and the "
+        "keys above are not among them or carry another value. Record each "
+        "declared setting with the value the config gives it. A number the run "
+        "produced is a result, recorded with record_result(); a number the "
+        "config never declared stays out of the registry, and the paper states "
+        "it in its methods, never as \\setting{}."
     ),
     "results.values_finite": (
         "A metric is NaN or infinite. Check for division by zero, an empty "
