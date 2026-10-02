@@ -1515,7 +1515,7 @@ def test_gate_3_turns_are_not_counted_as_gate_2_reviews(tmp_path):
 def gate1_registry(tmp_path, *, task_ref):
     """A registry Gate 1 actually wrote, so every link has something to resolve."""
     src = (
-        "record_metadata('seed', 0)\ncorrect, total = 4, 5\nlr = 0.001\n"
+        "record_metadata('seed', 0)\noutcomes = [i < 4 for i in range(5)]\ncorrect, total = sum(outcomes), len(outcomes)\nlr = 0.001\n"
         "rates = [lr * t for t in range(total)]\nrecord_setting('config.lr', lr)\n"
         "v = correct / total\nrecord_result('acc', v)\n"
     )

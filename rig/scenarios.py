@@ -59,7 +59,8 @@ NO_CONTRACT = '''\
 import random
 
 random.seed(0)
-correct, total = 408, 500
+outcomes = [i < 408 for i in range(500)]
+correct, total = sum(outcomes), len(outcomes)
 test_acc = correct / total
 sgc_wallclock = 0.0180
 gcn_wallclock = 0.2450
@@ -111,7 +112,8 @@ seed = 0
 random.seed(seed)
 record_metadata("seed", seed)
 
-correct, total = 408, 500
+outcomes = [i < 408 for i in range(500)]
+correct, total = sum(outcomes), len(outcomes)
 test_acc = correct / total
 
 start = time.perf_counter()
@@ -144,14 +146,16 @@ except ZeroDivisionError:
 print("RuntimeWarning: invalid value encountered in true_divide")
 print("CUDA unavailable, falling back to CPU")
 
-hits, total = 0, 500
+outcomes = [i < 0 for i in range(500)]
+hits, total = sum(outcomes), len(outcomes)
 record_result("exp1.K2.test_acc", hits / total, unit="ratio")
 '''
 
 #: Turn one of the namespace-leak pair: binds a name and passes.
 LEAK_BINDS = '''\
 record_metadata("seed", 0)
-correct, total = 408, 500
+outcomes = [i < 408 for i in range(500)]
+correct, total = sum(outcomes), len(outcomes)
 leaked_accuracy = correct / total
 record_result("exp1.K2.test_acc", leaked_accuracy * 1.0, unit="ratio")
 '''
