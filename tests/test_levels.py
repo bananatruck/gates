@@ -143,7 +143,7 @@ def test_level_0_runs_the_hosts_own_path_through_the_adapter(monkeypatch, tmp_pa
 #: Prints past upstream's 1,000-character view, records a value, then crashes:
 #: level 0 accepts it (the marker falls off the slice), level 1 rejects it.
 CRASH_PAST_THE_SLICE = (
-    "correct, total = 408, 500\n"
+    "outcomes = [i < 408 for i in range(500)]\ncorrect, total = sum(outcomes), len(outcomes)\n"
     "record_metadata('seed', 0)\n"
     "record_result('exp1.acc', correct / total, unit='ratio')\n"
     "for i in range(60):\n"

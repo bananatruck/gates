@@ -268,16 +268,20 @@ def classify_record_calls(
     :data:`_PURE_CALLS`, is followed; a container the run fills after binding
     it is not constant (:func:`_container_contents`).
     """
-    # limit: a function the program defines is never looked inside, so
-    # def measure(): return 0.95 launders a literal as computed; following
-    # returns would need interprocedural analysis this pass does not attempt.
+    # limit: a function the program defines is followed only when its returns
+    # are constant whatever it is passed, so def m(n): return n then m(0.95)
+    # reads as computed; binding arguments to parameters would follow it.
     tree = parse(source, filename)
+    names = _record_names(tree, func_name)
     bindings = _constant_bindings(tree, func_name)
     kinds: dict[int, str] = {}
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
-        if _called_name(node.func) != func_name:
+        called = _called_name(node.func)
+        if called != func_name and not (
+            isinstance(node.func, ast.Name) and called in names
+        ):
             continue
         value = _value_argument(node)
         if value is None:
@@ -293,6 +297,134 @@ def classify_record_calls(
         if _KIND_RANK[kind] > _KIND_RANK.get(kinds.get(node.lineno, ""), -1):
             kinds[node.lineno] = kind
     return kinds
+
+
+#: Reducers that pick one of several values rather than summarise them.
+_SELECTORS = frozenset({"max", "min", "amax", "amin", "nanmax", "nanmin"})
+
+
+def find_selected_record_values(
+    source: str, filename: str = "<experiment>", func_name: str = "record_result"
+) -> dict[int, str]:
+    """Map each recording call line whose value was selected or drawn to why.
+
+    The 09-29 review's method-level fabrications record a value real
+    computation produced, so the value checks cannot see them. Some leave a
+    trace in the source all the same: the best of several runs (``max``,
+    ``min``, an index or slice of ``sorted``), and a number drawn from a random
+    generator rather than measured. Following the value back through its plain
+    bindings, as ``classify_record_calls`` does, finds those.
+
+    This reads the shape, not the meaning: the maximum of validation scores
+    used to pick a model is honest, the maximum of test scores is not, and the
+    two look alike. So it is a warning the paper must state, never a verdict.
+    """
+    # limit: a program-defined function is not looked inside, so
+    # def best(xs): return max(xs) then best(accs) is not found; neither is a
+    # generator imported by bare name (from random import uniform).
+    tree = parse(source, filename)
+    names = _record_names(tree, func_name)
+    bindings = _plain_bindings(tree)
+    found: dict[int, str] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        called = _called_name(node.func)
+        if called != func_name and not (isinstance(node.func, ast.Name) and called in names):
+            continue
+        value = _value_argument(node)
+        reason = _selection(value, bindings, frozenset()) if value is not None else None
+        if reason:
+            found[node.lineno] = reason
+    return found
+
+
+def _plain_bindings(tree: ast.AST) -> dict[str, list[ast.expr]]:
+    """Every name bound only by plain assignment, measured or not."""
+    values: dict[str, list[ast.expr]] = {}
+    other: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(
+            node.targets[0], ast.Name
+        ):
+            values.setdefault(node.targets[0].id, []).append(node.value)
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                other.update(_stored_names(target))
+        elif isinstance(node, (ast.AugAssign, ast.For, ast.AsyncFor, ast.comprehension)):
+            other.update(_stored_names(node.target))
+    return {name: exprs for name, exprs in values.items() if name not in other}
+
+
+def _selection(
+    node: ast.expr, bindings: dict[str, list[ast.expr]], seen: frozenset[str]
+) -> str | None:
+    """Why ``node`` is a selected or drawn value, or None."""
+    if isinstance(node, ast.Name):
+        if node.id in seen or node.id not in bindings:
+            return None
+        # Every binding must be a selection, as every binding must be a literal
+        # for a constant: the map is flat across scopes, so one other scope's
+        # draw bound to the same name says nothing about this value.
+        reasons = [_selection(e, bindings, seen | {node.id}) for e in bindings[node.id]]
+        return reasons[0] if all(reasons) else None
+    if isinstance(node, ast.Call):
+        name = _called_name(node.func)
+        if name in _SELECTORS:
+            # max(xs), max(x for ...), xs.max(): one value picked from several.
+            # max(a, b) clips or compares two values and is left alone.
+            receiver = node.func.value if isinstance(node.func, ast.Attribute) else None
+            if (
+                receiver is not None
+                and not node.args
+                and name in ("max", "min")
+                and (not _is_dotted_name(receiver) or _root_name(receiver) in bindings)
+            ):
+                return f"{name}() of several values"
+            if len(node.args) == 1:
+                return f"{name} of several values"
+        if isinstance(node.func, ast.Attribute) and _in_random_namespace(node.func):
+            return f"drawn from a random generator ({ast.unparse(node.func)})"
+        for arg in [*node.args, *(k.value for k in node.keywords)]:
+            reason = _selection(arg, bindings, seen)
+            if reason:
+                return reason
+        if isinstance(node.func, ast.Attribute):
+            return _selection(node.func.value, bindings, seen)
+        return None
+    if isinstance(node, ast.Subscript):
+        if _is_sorted(node.value, bindings, seen):
+            return "an index or slice of sorted values"
+        return _selection(node.value, bindings, seen)
+    if isinstance(node, ast.BinOp):
+        return _selection(node.left, bindings, seen) or _selection(node.right, bindings, seen)
+    if isinstance(node, ast.UnaryOp):
+        return _selection(node.operand, bindings, seen)
+    return None
+
+
+def _is_sorted(
+    node: ast.expr, bindings: dict[str, list[ast.expr]], seen: frozenset[str]
+) -> bool:
+    """``sorted(...)``, directly or through a name bound only to it."""
+    if isinstance(node, ast.Call):
+        return _called_name(node.func) == "sorted"
+    if isinstance(node, ast.Name) and node.id not in seen and node.id in bindings:
+        deeper = seen | {node.id}
+        return all(_is_sorted(e, bindings, deeper) for e in bindings[node.id])
+    return False
+
+
+def _in_random_namespace(func: ast.Attribute) -> bool:
+    """``random.uniform``, ``np.random.normal``, ``numpy.random.rand``."""
+    parts = []
+    node: ast.expr = func.value
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if isinstance(node, ast.Name):
+        parts.append(node.id)
+    return "random" in parts
 
 
 def find_unused_record_values(
@@ -426,6 +558,13 @@ def _is_constant_call(
 ) -> bool:
     """True when the call's result is fixed by arguments that are all constant."""
     name = _called_name(node.func)
+    if isinstance(node.func, ast.Name) and _returns_key(name) in bindings:
+        # A function the program defines whose every return is constant,
+        # whatever it was passed (S14). ``seen`` stops a recursive one.
+        key = _returns_key(name)
+        return key not in seen and all(
+            _is_literal_derived(r, bindings, seen | {key}) for r in bindings[key]
+        )
     args = all(_is_literal_derived(a, bindings, seen) for a in node.args)
     keywords = all(_is_literal_derived(k.value, bindings, seen) for k in node.keywords)
     if isinstance(node.func, ast.Name):
@@ -469,15 +608,21 @@ def _constant_bindings(
     """
     values: dict[str, list[ast.expr]] = {}
     opaque: set[str] = set()
+    functions: dict[str, list[ast.FunctionDef]] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
             for target in node.targets:
                 if isinstance(target, ast.Name):
                     values.setdefault(target.id, []).append(node.value)
+                elif _pairs(target, node.value):
+                    # acc, _ = 0.95, 0: one name per element of a display of
+                    # the same length, so each value reaches its name (S13).
+                    for name, element in zip(target.elts, node.value.elts, strict=True):
+                        values.setdefault(name.id, []).append(element)
                 else:
-                    # Tuple unpacking, attributes, subscripts: the binding is
-                    # real but which value reaches which name is not this
-                    # pass's business.
+                    # Starred or nested unpacking, an unpacked call result,
+                    # attributes, subscripts: the binding is real but which
+                    # value reaches which name is not this pass's business.
                     opaque.update(_stored_names(target))
         elif isinstance(node, ast.AnnAssign):
             if isinstance(node.target, ast.Name):
@@ -493,7 +638,7 @@ def _constant_bindings(
             for alias in node.names:
                 opaque.add(alias.asname or alias.name.split(".")[0])
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            opaque.add(node.name)
+            functions.setdefault(node.name, []).append(node)
             opaque.update(_argument_names(node.args))
         elif isinstance(node, ast.Lambda):
             opaque.update(_argument_names(node.args))
@@ -505,11 +650,117 @@ def _constant_bindings(
             opaque.add(node.name)
         elif isinstance(node, (ast.Global, ast.Nonlocal)):
             opaque.update(node.names)
-    filled, contents = _container_contents(tree, values, record_name)
+    filled, contents = _container_contents(tree, values, _record_names(tree, record_name))
     opaque |= filled
     for name, exprs in contents.items():
         values[name] = [*values[name], *exprs]
-    return {name: exprs for name, exprs in values.items() if name not in opaque}
+    returns = {
+        _returns_key(name): _own_returns(defs[0])
+        for name, defs in functions.items()
+        if _followable(defs, name, values, opaque)
+    }
+    # A function's name is a binding like any other, never a constant value.
+    opaque.update(functions)
+    kept = {name: exprs for name, exprs in values.items() if name not in opaque}
+    return {**kept, **returns}
+
+
+def _pairs(target: ast.expr, value: ast.expr) -> bool:
+    """A flat unpacking of names from a display of exactly as many elements."""
+    return (
+        isinstance(target, (ast.Tuple, ast.List))
+        and isinstance(value, (ast.Tuple, ast.List))
+        and len(target.elts) == len(value.elts)
+        and all(isinstance(e, ast.Name) for e in target.elts)
+    )
+
+
+def _returns_key(name: str | None) -> str:
+    """Where a defined function's returns are kept among the bindings.
+
+    The parentheses keep it apart from every name a program can bind.
+    """
+    return f"{name}()"
+
+
+def _own_nodes(func: ast.AST) -> list[ast.AST]:
+    """Every node of a function's body, not descending into a nested scope."""
+    out: list[ast.AST] = []
+    stack = list(getattr(func, "body", []))
+    while stack:
+        node = stack.pop()
+        out.append(node)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+            continue
+        stack.extend(ast.iter_child_nodes(node))
+    return out
+
+
+def _own_returns(func: ast.FunctionDef) -> list[ast.expr]:
+    """What the function can return; falling off its end returns None."""
+    returns = [
+        node.value if node.value is not None else ast.Constant(None)
+        for node in _own_nodes(func)
+        if isinstance(node, ast.Return)
+    ]
+    return returns or [ast.Constant(None)]
+
+
+def _followable(
+    defs: list[ast.AST], name: str, values: dict[str, list[ast.expr]], opaque: set[str]
+) -> bool:
+    """A function whose returns stand for its calls: defined once, plainly.
+
+    Defined twice, rebound, decorated, async or a generator, a call to it may
+    not return what its body says, so it stays opaque, which reads as computed.
+    """
+    if len(defs) != 1 or not isinstance(defs[0], ast.FunctionDef):
+        return False
+    func = defs[0]
+    if func.decorator_list or name in values or name in opaque:
+        return False
+    return not any(isinstance(n, (ast.Yield, ast.YieldFrom)) for n in _own_nodes(func))
+
+
+def _record_names(tree: ast.AST, func_name: str) -> set[str]:
+    """``func_name`` and every name bound only to it, such as ``rr = record_result``.
+
+    A name with any other binding, or bound to anything but the call or one of
+    its aliases, is no alias: it may not be the recording call when it runs.
+    """
+    assigned: dict[str, list[ast.expr]] = {}
+    plain: dict[str, int] = {}
+    stores: dict[str, int] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(
+            node.targets[0], ast.Name
+        ):
+            name = node.targets[0].id
+            assigned.setdefault(name, []).append(node.value)
+            plain[name] = plain.get(name, 0) + 1
+        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            stores[node.id] = stores.get(node.id, 0) + 1
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            stores[node.name] = stores.get(node.name, 0) + 1
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                bound = alias.asname or alias.name.split(".")[0]
+                stores[bound] = stores.get(bound, 0) + 1
+        elif isinstance(node, ast.arg):
+            stores[node.arg] = stores.get(node.arg, 0) + 1
+    names = {func_name}
+    grew = True
+    while grew:
+        grew = False
+        for name, exprs in assigned.items():
+            if (
+                name not in names
+                and stores.get(name) == plain[name]
+                and all(isinstance(e, ast.Name) and e.id in names for e in exprs)
+            ):
+                names.add(name)
+                grew = True
+    return names
 
 
 _CONTAINER_DISPLAYS = (ast.List, ast.Dict, ast.Set, ast.ListComp, ast.DictComp, ast.SetComp)
@@ -521,7 +772,7 @@ _LOOPS = (
 
 
 def _container_contents(
-    tree: ast.AST, values: dict[str, list[ast.expr]], record_name: str
+    tree: ast.AST, values: dict[str, list[ast.expr]], record_names: set[str]
 ) -> tuple[set[str], dict[str, list[ast.expr]]]:
     """What the run puts into each container after binding it.
 
@@ -592,7 +843,7 @@ def _container_contents(
                 put(node, func.value, args)
             name = _called_name(func)
             if (
-                name == record_name
+                name in record_names
                 or name in _READ_CALLS
                 or name in _PURE_CALLS
                 or name in _CONSTANT_CONVERTERS

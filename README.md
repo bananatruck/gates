@@ -96,22 +96,24 @@ The two are level, and reviewers recommended rejecting both papers.
 Gate 1 fixed where the numbers came from.
 It did not make the science better, and no number here says it did.
 
-## Planned evaluation
+## Evaluation figures
 
-These seven figures are the paper's evaluation, and every one is a placeholder.
+These figures are drawn by `paper/figures.py` from measured data only: waves 2-3 (`paper/waves23.csv`, `paper/crashes.csv`), the agent judges (`paper/judging.csv`, tagged "reviewed by agent for now"), the red-team rig (`paper/redteam.csv`), the Gate 3 adjacency probes (`paper/adjacency.csv`) and the signed mechanism campaign (`paper/mechanism.csv`).
+A benchmark not yet run is described in the paper, never drawn; any figure that would still draw a dummy row is stamped PLACEHOLDER.
 Since D94/D99 (`progress.md`, 10-01) the MLR-Bench and BadScientist figures are no longer planned: Hidden Pitfalls is the forward benchmark, the MLR-Bench waves 2-3 stay as the end-to-end pilot, and a faked result is a reported number no run measured.
-`paper/figures.py` stamps PLACEHOLDER on any figure that still draws a dummy row, and `paper/collect.py` turns rows to measured as runs finish.
 The significance test is fixed in advance in [`paper/PLAN.md`](paper/PLAN.md) §9: an exact McNemar test per benchmark on level 0 against level 3, Holm across the three, and a non-inferiority bound on each task score.
 
-| Figure | What it will show |
+| Figure | What it shows |
 |---|---|
-| ![CORE-Bench by level](paper/figures/fig1_corebench_levels.png) | CORE-Bench at the four `GATES_LEVEL`s |
-| ![MLR-Bench by level](paper/figures/fig2_mlrbench_levels.png) | MLR-Bench at the four levels |
-| ![BadScientist by level](paper/figures/fig3_badscientist_levels.png) | BadScientist at the four levels, Gate 3's adversarial test |
-| ![CORE-Bench comparison](paper/figures/fig4_corebench_compare.png) | each system alone and with GATES, CORE-Bench |
-| ![MLR-Bench comparison](paper/figures/fig5_mlrbench_compare.png) | each system alone and with GATES, MLR-Bench |
-| ![BadScientist comparison](paper/figures/fig6_badscientist_compare.png) | each system alone and with GATES, BadScientist |
-| ![Audit of released papers](paper/figures/fig7_audit.png) | released papers citing an arXiv id that does not exist |
+| ![Per-run audit](paper/figures/audit_by_run.png) | per run: where the paper's numerals came from (`paper/provenance.csv`) and every rater's verdict |
+| ![Price by level](paper/figures/price_by_level.png) | cost, tokens, gate attempts and crashes by level in one figure |
+| ![Crashes by level](paper/figures/crashes_by_level.png) | execution crashes by owner and cause |
+| ![Resource use by level](paper/figures/tokens_cost_by_level.png) | token use and cost across measured seeds |
+| ![Gate attempts by level](paper/figures/gate_attempts_by_level.png) | attempts and rejections at each gate |
+| ![Red-team outcomes](paper/figures/redteam_outcomes.png) | outcomes of the model-free red-team rig, 18 fabrication strategies |
+| ![Token-adjacency probes](paper/figures/adjacency_probes.png) | attack catches and honest-shape passes |
+| ![Mechanism evidence](paper/figures/fig8_mechanism.png) | measured detections and false positives for each gate |
+| ![Agent-judge results](paper/figures/agent_judge_by_level.png) | judge scores and faked-result verdicts by level |
 
 ## Install
 
@@ -169,8 +171,10 @@ The results contract:
 
 - `results.contract_present`, `results.expected_keys_present`.
 - `results.values_computed`: no metric value is a literal in the source.
-- `results.values_traced` warns when a value resolves to source literals once its variables are followed back to their bindings. `results.values_computed` reads only the call site, so `record_result("k", 0.816)` fails it and `acc = 0.816` then `record_result("k", acc)` passes it. This check follows the names. It warns instead of failing because a constant recorded on purpose, like a configured batch size, looks the same as a fabricated one until you know what the number means, and that is Gate 2's question.
+- `results.values_traced` fails when a value resolves to source literals once its variables are followed back to their bindings. `results.values_computed` reads only the call site, so `record_result("k", 0.816)` fails it and `acc = 0.816` then `record_result("k", acc)` passes it. This check follows the names, through containers and pure reducers (D73), flat tuple unpacking, functions the program defines once, and aliases of `record_result` (D101). It fails since D75: a configured value now has its own call, `record_setting`, so a constant recorded as a result is a fabrication.
+- `results.settings_declared` fails when a recorded setting is not in the config the plan phase fixed before the run, or carries another value (D100). Absent when the host fixed no config.
 - `results.values_finite`.
+- `results.no_selection` warns when a recorded result is the `max` or `min` of several values, an index or slice of `sorted(...)`, or a random draw (D102). It reads the shape of the code, so it cannot tell a pick on validation data from one on test data, and never blocks.
 - `results.declared_keys_only` warns on keys the plan never declared. `results.expected_keys_present` tests presence, not equality, so an experiment can meet its contract and record anything else too. When a scaffold prepends an earlier phase's code, the earlier keys arrive here and can satisfy a contract this run never met.
 - `results.single_observation` warns on a key recorded many times with changing values. Gate 1 keeps every call, so a metric written once per epoch arrives with its whole trajectory, and the report has to say whether it means the final value or the best one.
 - `results.non_degenerate` warns on exact zeros, perfect scores and chance-level accuracy. AutoResearchClaw reports this limitation for value registries. The zeros are real measurements, so Gate 1 reports them and does not reject them.
@@ -202,7 +206,7 @@ It has nothing to record, so its registry is empty, but the file exists and says
 Gate 1 answers one question: did this code run, and did these numbers come from this run?
 These are outside that question on purpose.
 
-- `results.values_computed` checks the call site for a literal. It does not prove a measurement. `results.values_traced` follows variable bindings, but a constant that passes through a function call, a loop, or a container the pass cannot evaluate comes out as computed. Neither check proves a number was not fabricated.
+- `results.values_computed` checks the call site for a literal. It does not prove a measurement. `results.values_traced` follows variable bindings, but a constant that passes through a loop, a function's parameters, or a container the pass cannot evaluate comes out as computed. Neither check proves a number was not fabricated.
 - Whether a value means anything scientifically is Gate 2's question. Gate 1 passes a correctly measured number that means nothing.
 - Whether the prose follows from the numbers is Gate 3's. In the campaign, the gated writer derived a scaling exponent from two points and called a single seeded dataset free of sampling variance. Gate 1 passed the run that produced them, correctly.
 - Gate 1 does not check task compliance. The gated code imported a fixture despite a NumPy-only instruction, and it ran, so Gate 1 passed it.
@@ -269,13 +273,13 @@ pip install -e ".[dev]" && pytest && ruff check .
 
 | Suite | Tests |
 |---|---:|
-| Gate 1: checks, loop, level-0 bypass | 220 |
+| Gate 1: checks, loop, level-0 bypass | 290 |
 | Gate 2: checks, loop, tier comparison | 138 |
-| Gate 3: checks, loop, model layer, scanner miss, arXiv resolver | 231 |
-| Model layer and log scanning | 148 |
-| Wiring, levels, setup, install skills, key handling | 101 |
-| Evaluation tooling and this status check | 270 |
-| **Total** | **1108** |
+| Gate 3: checks, loop, model layer, scanner miss, arXiv resolver | 306 |
+| Model layer and log scanning | 149 |
+| Wiring, levels, setup, install skills, key handling | 106 |
+| Evaluation tooling and this status check | 303 |
+| **Total** | **1292** |
 
 One test, the live arXiv lookup, is skipped unless `GATES_LIVE_ARXIV=1`.
 The suite runs with every socket refused, so no test can quietly depend on the network (D61 in `progress.md`).

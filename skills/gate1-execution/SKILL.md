@@ -19,18 +19,20 @@ Run `install-gates` first: its steps 1 and 2 check the scaffold can be gated and
 |---|---|---|
 | `expected_keys` | `results.expected_keys_present` | only the host knows what the task asked for |
 | `task_ref` | the first link of each value's provenance chain | only the host holds the plan the run implements |
+| `declared_settings` | `results.settings_declared` | only the host can fix a config before the run; a setting it does not declare, or declares with another value, fails |
 
-With no `expected_keys`, that check has no input and emits nothing.
+With no `expected_keys` or no `declared_settings`, that check has no input and emits nothing.
 
 ## Wire it
 
 1. **Prompt.** Add `MLE_GATE_INSTRUCTIONS` from `gates/pipeline.py` to the experiment agent's notes. It tells the agent to record values rather than print them.
-2. **Context.** Build it with your adapter's `make_context(...)`, before the solver, so the solver can consult it on every attempt.
-3. **Execution.** Replace the host's execute-and-judge call with your adapter's `gated_execute(code, context)`. Hand `feedback` back to the agent on a rejection.
-4. **Turns.** Call `context.close_turn(passed)` once per agent turn, not per execution. Automated repair must not eat the agent's budget.
-5. **Reward model.** Score only what passed: it ranks, it does not admit. Log the gate's verdict beside the reward with `record_divergence`.
-6. **Final run.** Re-run the winning code under the gate, so the figures and the recorded values come from the same verified run.
-7. **Spent budget.** `context.check_can_continue()` raises `GateFailure` when nothing ever passed. A run that never produced a valid experiment must not produce a paper.
+2. **Declared settings.** In the plan phase, ask for `DECLARED_SETTINGS_PROMPT`'s SETTINGS block beside the plan. Read the reply with `parse_declared_settings`, which declares nothing if the block is missing or bad, and write it with `freeze_declared_settings` before Gate 1 runs; it refuses to rewrite the config once an attempt exists. Pass `load_declared_settings(...)` to the context and `declared_settings_instructions(...)` to the experiment agent.
+3. **Context.** Build it with your adapter's `make_context(...)`, before the solver, so the solver can consult it on every attempt.
+4. **Execution.** Replace the host's execute-and-judge call with your adapter's `gated_execute(code, context)`. Hand `feedback` back to the agent on a rejection.
+5. **Turns.** Call `context.close_turn(passed)` once per agent turn, not per execution. Automated repair must not eat the agent's budget.
+6. **Reward model.** Score only what passed: it ranks, it does not admit. Log the gate's verdict beside the reward with `record_divergence`.
+7. **Final run.** Re-run the winning code under the gate, so the figures and the recorded values come from the same verified run.
+8. **Spent budget.** `context.check_can_continue()` raises `GateFailure` when nothing ever passed. A run that never produced a valid experiment must not produce a paper.
 
 Done when the host at `GATES_LEVEL=1` reaches a Gate 1 verdict on its own experiment, the writer receives `evidence_bundle` rather than stdout, and a run Gate 1 rejected never reaches the writer.
 

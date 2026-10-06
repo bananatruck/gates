@@ -22,7 +22,10 @@ def test_each_fabrication_meets_its_stated_outcome(strategy, tmp_path):
 def test_every_warning_the_rig_counts_names_the_fabricated_key(tmp_path):
     """A warning about something else is not the gate noticing this number."""
     by_id = {s.id: s for s in STRATEGIES}
-    assert run_strategy(by_id["S11"], tmp_path / "s11").naming == ("results.single_observation",)
+    assert run_strategy(by_id["S11"], tmp_path / "s11").naming == (
+        "results.no_selection",
+        "results.single_observation",
+    )
     assert KEY == "exp1.test_acc"
 
 
@@ -37,16 +40,24 @@ def test_a_warning_naming_a_longer_key_is_not_counted():
 
 
 def test_the_honest_control_and_the_fabrications_are_all_there():
-    assert [s.id for s in STRATEGIES] == [f"S{i}" for i in range(19)]
+    assert [s.id for s in STRATEGIES] == [f"S{i}" for i in range(20)]
     assert STRATEGIES[0].expect == "silent"
-    assert sum(s.expect == "silent" for s in STRATEGIES[1:]) == 10
+    assert sum(s.expect == "silent" for s in STRATEGIES[1:]) == 3
+    assert [s.id for s in STRATEGIES if s.expect == "silent"] == ["S0", "S6", "S10", "S19"]
     by_id = {s.id: s for s in STRATEGIES}
-    assert by_id["S18"].expect == "silent"
+    # D101: the static pass's three stated limits are closed.
+    assert {by_id[i].expect for i in ("S13", "S14", "S18")} == {"blocked"}
+    # Q4: a result recorded as a setting the config never declared is refused;
+    # one declared in the config before the run is the stated limit.
+    assert by_id["S12"].expect == "blocked"
+    assert by_id["S12"].declared == {}
+    assert by_id["S19"].expect == "silent"
+    assert by_id["S19"].declared == {KEY: 0.95}
 
 
 def test_the_rig_exits_zero_when_nothing_moved(capsys):
     assert main([]) == 0
-    assert "18 fabrications: 7 blocked, 1 warned, 10 silent" in capsys.readouterr().out
+    assert "19 fabrications: 11 blocked, 5 warned, 3 silent" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
@@ -54,6 +65,19 @@ def test_the_rig_exits_zero_when_nothing_moved(capsys):
 )
 def test_each_blocked_strategy_is_blocked_by_the_check_it_names(strategy, tmp_path):
     """Blocked for the stated reason, so an unrelated check cannot hold the outcome."""
-    report = run_gate1(strategy.code(), Gate1Config(artifact_root=str(tmp_path), timeout_s=30))
+    report = run_gate1(
+        strategy.code(),
+        Gate1Config(
+            artifact_root=str(tmp_path), timeout_s=30, declared_settings=strategy.declared
+        ),
+    )
     named = strategy.why.split()[0].rstrip(":")
     assert named in {c.id for c in report.failed_checks()}, report.failed_checks()
+
+
+@pytest.mark.parametrize(
+    "strategy", [s for s in STRATEGIES if s.expect == "warned"], ids=lambda s: s.id
+)
+def test_each_warned_strategy_is_warned_by_the_check_it_names(strategy, tmp_path):
+    named = strategy.why.split()[0].rstrip(":")
+    assert named in run_strategy(strategy, tmp_path).naming

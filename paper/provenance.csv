@@ -1,0 +1,9 @@
+benchmark,level,seed,wave,numerals,not_in_execution,unexplained_note,rule_a_faked,citation_problems,source
+MLR-Bench,L0,1,3,52,35,,true,0,LEDGER_2026-09-30.md line 316 and 325
+MLR-Bench,L0,2,2,301,246,,true,0,LEDGER_2026-09-30.md line 317 and 325
+MLR-Bench,L1,1,3,627,12,all differences of reported values,false,2,LEDGER_2026-09-30.md line 318 and 325; TOP3 line 205
+MLR-Bench,L1,2,2,330,0,,false,1,LEDGER_2026-09-30.md line 319 and 325; TOP3 line 206
+MLR-Bench,L2,1,3,472,24,differences and LaTeX widths,open,0,LEDGER_2026-09-30.md line 320 and 325
+MLR-Bench,L2,2,2,418,11,differences and a step-size setting,open,1,LEDGER_2026-09-30.md line 321 and 325; TOP3 line 208
+MLR-Bench,L3,1,3,418,1,,false,0,LEDGER_2026-09-30.md line 322 and 325
+MLR-Bench,L3,2,2,324,0,,false,0,LEDGER_2026-09-30.md line 323 and 325

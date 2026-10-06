@@ -126,6 +126,24 @@ _TOKEN_SCALE = re.compile(
     r")"
 )
 
+#: A digit reached from a token through a TeX group: a superscript squares it
+#: (``\\result{x}$^{2}$``), a text group appends to it (``\\result{x}\\text{9}``).
+#: Only these commands are read, so ``\\footnote{9 runs}`` is prose (D103).
+_TOKEN_GROUPED_DIGIT = re.compile(
+    rf"{_TEX_GLUE}(?:\$\s*)?"
+    r"(?:\^\s*\{?\s*|\\(?:text|textrm|textnormal|textsuperscript|mathrm|mbox|ensuremath)\s*\{\s*|\{\s*)+"
+    r"[0-9]"
+)
+
+#: A digit typed straight after a percent sign the writer put beside the token.
+_TOKEN_SYMBOL_DIGIT = re.compile(rf"{_TEX_GLUE}\\%{_TEX_GLUE}[0-9]")
+
+_TIMES = r"(?:\\times|\\cdot|×|·)"
+
+#: A typed factor beside a token multiplies its rendered value (D103).
+_TOKEN_FACTOR_AFTER = re.compile(rf"\s*\$?\s*{_TIMES}\s*\$?\s*{_TEX_GLUE}[0-9]")
+_TOKEN_FACTOR_BEFORE = re.compile(rf"[0-9]\s*\$?\s*{_TIMES}\s*\$?\s*{_TEX_GLUE}$")
+
 #: Where the writer places Gate 2's declared limitations (D28). Empty braces,
 #: like ``\result{key}``, and so TeX does not swallow the space after it.
 LIMITATIONS_TOKEN = re.compile(r"\\limitations\{\}")
@@ -356,14 +374,17 @@ def _check_token_adjacency(source: str) -> CheckResult | None:
         before = source[token.start() - 1 : token.start()]
         after = source[token.end() :]
         before_digits = re.search(rf"[0-9]+{_TEX_GLUE}$", prefix)
-        # limit: only digits, signs and powers of ten touching the token are
-        # read. A prefix factor (2\times\result{x}), a digit inside a group
-        # (\result{x}\text{9}, \result{x}$^{2}$) or after a symbol
-        # (\result{x}\%9) passes; following TeX groups would catch them.
+        # limit: digits are read through glue, a superscript, one of the text
+        # commands in _TOKEN_GROUPED_DIGIT, or a percent sign. A digit inside
+        # another command (\result{x}\textbf{9}) or a macro the writer defines
+        # passes; expanding the writer's macros would catch it.
         after_digits = re.match(rf"{_TEX_GLUE}\.?[0-9]+", after)
         sign = _TYPED_SIGN_BEFORE_TOKEN.search(prefix)
+        factor = _TOKEN_FACTOR_BEFORE.search(prefix)
         if sign:
             details.append({"token": token.group(0), "typed": sign.group(0)})
+        elif factor:
+            details.append({"token": token.group(0), "typed": factor.group(0)})
         elif before_digits:
             details.append(
                 {"token": token.group(0), "typed": before_digits.group(0)}
@@ -371,10 +392,17 @@ def _check_token_adjacency(source: str) -> CheckResult | None:
         elif before and not before.isascii() and before.isdigit():
             details.append({"token": token.group(0), "typed": before})
         scale = _TOKEN_SCALE.match(after)
+        appended = (
+            _TOKEN_FACTOR_AFTER.match(after)
+            or _TOKEN_GROUPED_DIGIT.match(after)
+            or _TOKEN_SYMBOL_DIGIT.match(after)
+        )
         if scale:
             details.append({"token": token.group(0), "typed": scale.group(0)})
         elif after_digits:
             details.append({"token": token.group(0), "typed": after_digits.group(0)})
+        elif appended:
+            details.append({"token": token.group(0), "typed": appended.group(0)})
         elif after[:1] and not after[0].isascii() and after[0].isdigit():
             details.append({"token": token.group(0), "typed": after[0]})
 
@@ -668,10 +696,9 @@ def _check_cited_papers_in_registry(
     )
 
 
-#: LaTeX's abstract environment. ``prose._heading`` deliberately does not see it
-#: (D40): presence is a different question from claim scanning, and teaching the
-#: scanner to read inside it would restate the published Gate 1 number. The
-#: unscanned abstract is G3-M4's to report, not this check's to close.
+#: LaTeX's abstract environment, which ``prose._heading`` does not see. It
+#: satisfies a declared "abstract" here (D40); the claim scanner reads it
+#: through ``prose.findings_lines`` since D104.
 _ABSTRACT_ENV = re.compile(r"\\begin\{abstract\}")
 
 

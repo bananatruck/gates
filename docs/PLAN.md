@@ -559,6 +559,7 @@ The causes matter more than the rate:
 | 1 | `context_of` uses `line.find`, so a value stated twice on one line is counted once |
 
 **Re-measured under D76** (per-token masking of `\ref`, `\cite` and `\label` instead of skipping the line): 46 of 49 detected, 3 missed (the two small integers and the repeated value), 8 reported but not claims.
+**Re-measured under D104** (the abstract environment is a findings section; each repeat of a value on one line is its own claim): 47 of 49 detected, 2 missed (the two small integers), 13 reported but not claims (the ungated abstract's `\ln 3 \approx 1.0986`, and the decision thresholds stated twice on each of two lines, now counted per occurrence).
 The table above is D48's measurement, kept as the record of why the rule changed.
 
 One cause explained four fifths of what the scanner could not see, and it was not the one the literature readout predicted.
