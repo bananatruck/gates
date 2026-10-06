@@ -15,6 +15,9 @@
 %\documentclass[sigconf]{aamas}
 
 \usepackage{balance}
+\usepackage{array}
+% Lets a line ending in a citation stretch instead of running into the margin.
+\setlength{\emergencystretch}{2em}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,calc}
 \graphicspath{{figures/}{../figures/}}
@@ -341,7 +344,7 @@ Table~\ref{tab:threats} lists these limits as threats.
 \caption{Threat model: what each gate guarantees and what passes it.}
 \label{tab:threats}
 \footnotesize
-\begin{tabular}{@{}p{0.27\columnwidth}p{0.33\columnwidth}p{0.34\columnwidth}@{}}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.26\columnwidth}>{\raggedright\arraybackslash}p{0.31\columnwidth}>{\raggedright\arraybackslash}p{0.33\columnwidth}@{}}
 \toprule
 Threat & Stopped by & Passes \\
 \midrule
