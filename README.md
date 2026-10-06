@@ -100,6 +100,7 @@ It did not make the science better, and no number here says it did.
 
 These figures are drawn by `paper/figures.py` from measured data only: waves 2-3 (`paper/waves23.csv`, `paper/crashes.csv`), the agent judges (`paper/judging.csv`, tagged "reviewed by agent for now"), the red-team rig (`paper/redteam.csv`), the Gate 3 adjacency probes (`paper/adjacency.csv`) and the signed mechanism campaign (`paper/mechanism.csv`).
 A benchmark not yet run is described in the paper, never drawn; any figure that would still draw a dummy row is stamped PLACEHOLDER.
+Since D94/D99 (`progress.md`, 10-01) the MLR-Bench and BadScientist figures are no longer planned: Hidden Pitfalls is the forward benchmark, the MLR-Bench waves 2-3 stay as the end-to-end pilot, and a faked result is a reported number no run measured.
 The significance test is fixed in advance in [`paper/PLAN.md`](paper/PLAN.md) §9: an exact McNemar test per benchmark on level 0 against level 3, Holm across the three, and a non-inferiority bound on each task score.
 
 | Figure | What it shows |
