@@ -102,6 +102,7 @@ These are the paper's figures, drawn by `paper/figures_v3.py` from measured data
 The run timeline is rebuilt from each run's own folder by `paper/timeline.py`, which recomputes every call's cost from its token counts and the run's recorded prices and refuses a run whose total differs from its measured cost; that event table is wave data, so it stays in `.cache/` and only the figure is committed.
 Colors follow the dataviz reference palette, validated with its checker; every mark in a low-contrast hue carries a label.
 A benchmark not yet run is described in the paper, never drawn, and no figure reads the planned rows of `paper/results.csv`.
+Since D94/D99 (`progress.md`, 10-01) the MLR-Bench and BadScientist figures are no longer planned: Hidden Pitfalls is the forward benchmark, the MLR-Bench waves 2-3 stay as the end-to-end pilot, and a faked result is a reported number no run measured.
 The forward test is fixed before the first scored run of Hidden Pitfalls (D99, `paper/PLAN.md` §0).
 
 | Figure | What it shows |
