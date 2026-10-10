@@ -98,22 +98,23 @@ It did not make the science better, and no number here says it did.
 
 ## Evaluation figures
 
-These figures are drawn by `paper/figures.py` from measured data only: waves 2-3 (`paper/waves23.csv`, `paper/crashes.csv`), the agent judges (`paper/judging.csv`, tagged "reviewed by agent for now"), the red-team rig (`paper/redteam.csv`), the Gate 3 adjacency probes (`paper/adjacency.csv`) and the signed mechanism campaign (`paper/mechanism.csv`).
-A benchmark not yet run is described in the paper, never drawn; any figure that would still draw a dummy row is stamped PLACEHOLDER.
+These are the paper's figures, drawn by `paper/figures_v3.py` from measured data only: waves 2-3 (`paper/waves23.csv`, `paper/crashes.csv`, `paper/provenance.csv`), the agent judges (`paper/judging.csv`, tagged "reviewed by agent for now"), the red-team rig (`paper/redteam.csv`), the Gate 3 adjacency probes (`paper/adjacency.csv`) and the signed mechanism campaign (`paper/mechanism.csv`).
+The run timeline is rebuilt from each run's own folder by `paper/timeline.py`, which recomputes every call's cost from its token counts and the run's recorded prices and refuses a run whose total differs from its measured cost; that event table is wave data, so it stays in `.cache/` and only the figure is committed.
+Colors follow the dataviz reference palette, validated with its checker; every mark in a low-contrast hue carries a label.
+A benchmark not yet run is described in the paper, never drawn, and no figure reads the planned rows of `paper/results.csv`.
 Since D94/D99 (`progress.md`, 10-01) the MLR-Bench and BadScientist figures are no longer planned: Hidden Pitfalls is the forward benchmark, the MLR-Bench waves 2-3 stay as the end-to-end pilot, and a faked result is a reported number no run measured.
-The significance test is fixed in advance in [`paper/PLAN.md`](paper/PLAN.md) §9: an exact McNemar test per benchmark on level 0 against level 3, Holm across the three, and a non-inferiority bound on each task score.
+The forward test is fixed before the first scored run of Hidden Pitfalls (D99, `paper/PLAN.md` §0).
 
 | Figure | What it shows |
 |---|---|
-| ![Per-run audit](paper/figures/audit_by_run.png) | per run: where the paper's numerals came from (`paper/provenance.csv`) and every rater's verdict |
-| ![Price by level](paper/figures/price_by_level.png) | cost, tokens, gate attempts and crashes by level in one figure |
-| ![Crashes by level](paper/figures/crashes_by_level.png) | execution crashes by owner and cause |
-| ![Resource use by level](paper/figures/tokens_cost_by_level.png) | token use and cost across measured seeds |
-| ![Gate attempts by level](paper/figures/gate_attempts_by_level.png) | attempts and rejections at each gate |
-| ![Red-team outcomes](paper/figures/redteam_outcomes.png) | outcomes of the model-free red-team rig, 18 fabrication strategies |
-| ![Token-adjacency probes](paper/figures/adjacency_probes.png) | attack catches and honest-shape passes |
-| ![Mechanism evidence](paper/figures/fig8_mechanism.png) | measured detections and false positives for each gate |
-| ![Agent-judge results](paper/figures/agent_judge_by_level.png) | judge scores and faked-result verdicts by level |
+| ![Key results](paper/figures/v3_key_results.png) | the headline numbers, one tile each |
+| ![Per-run audit](paper/figures/v3_audit.png) | per run: where the paper's numerals came from and every rater's verdict |
+| ![Run timelines](paper/figures/v3_timeline.png) | every pilot run against its own clock: cumulative cost and each gate attempt |
+| ![Price by level](paper/figures/v3_price.png) | cost, tokens, gate attempts and crashes by level |
+| ![Mechanism evidence](paper/figures/v3_mechanism.png) | what each gate catches and wrongly flags, with Wilson intervals |
+| ![Red team](paper/figures/v3_redteam.png) | the 19 fabrication strategies by outcome |
+
+`paper/figures.py` still draws the earlier per-topic figures (crashes, tokens, attempts, judges, adjacency) from the same CSVs.
 
 ## Install
 
@@ -278,8 +279,8 @@ pip install -e ".[dev]" && pytest && ruff check .
 | Gate 3: checks, loop, model layer, scanner miss, arXiv resolver | 306 |
 | Model layer and log scanning | 149 |
 | Wiring, levels, setup, install skills, key handling | 106 |
-| Evaluation tooling and this status check | 303 |
-| **Total** | **1292** |
+| Evaluation tooling and this status check | 313 |
+| **Total** | **1302** |
 
 One test, the live arXiv lookup, is skipped unless `GATES_LIVE_ARXIV=1`.
 The suite runs with every socket refused, so no test can quietly depend on the network (D61 in `progress.md`).
